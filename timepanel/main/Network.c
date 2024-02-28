@@ -12,6 +12,12 @@
 #include "esp_event.h"
 #include "esp_flash.h"
 #include "nvs_flash.h"
+#include <esp_http_server.h>
+#include <esp_ota_ops.h>
+#include <esp_http_server.h>
+#include <string.h>
+#include <esp_system.h>
+#include "NetworkFault.h"
 
 #define min(x, y) (((x) < (y)) ? (x) : (y))
 
@@ -21,11 +27,20 @@
 #define STATION_TYPE 1
 #endif
 
+#define WIFI_SSID "Timepanel OTA Update"
+
+/*
+ * Serve OTA update portal (index.html)
+ */
+extern const uint8_t index_html_start[] asm("_binary_index_html_start");
+extern const uint8_t index_html_end[] asm("_binary_index_html_end");
+
 const char *NETWORK_TAG = "NETWORK";
 extern QueueHandle_t timerQueue;
 extern QueueHandle_t networkQueue;
 extern QueueHandle_t resetQueue;
 extern QueueHandle_t triggerQueue;
+extern QueueHandle_t networkFaultQueue;
 
 extern QueueSetHandle_t networkAndResetQueue;
 
@@ -63,17 +78,30 @@ void receiveCallback(const uint8_t *macAddr, const uint8_t *data, int dataLen)
 
     int cause = -1;
 
-    if (strncmp(buffer, "trigger", 7) == 0)
+    if (strncmp(buffer, "start", 5) == 0)
     {
-        cause = 1;
+        xQueueSend(timerQueue, &cause, 0);
     }
-    else if (strncmp(buffer, "reset", 5) == 0)
+    else if (strncmp(buffer, "ms", 2) == 0)
     {
-        cause = 2;
+        char time[strlen(buffer) - 1];
+        strcpy(time, buffer + 2);
+        cause = atoi(time);
+        xQueueSend(timerQueue, &cause, 0);
     }
-
-    if (cause != -1)
+    else if (strncmp(buffer, "alive-base", 11) == 0)
     {
+        int toSend = START_ALIVE;
+        xQueueSend(networkFaultQueue, &toSend, 0);
+    }
+    else if (strncmp(buffer, "alive-remote", 11) == 0)
+    {
+        int toSend = STOP_ALIVE;
+        xQueueSend(networkFaultQueue, &toSend, 0);
+    }
+    else if (strncmp(buffer, "reset-remote", 12) == 0)
+    {
+        cause = 0;
         xQueueSend(timerQueue, &cause, 0);
     }
 }
@@ -161,7 +189,7 @@ void Network_Task(void *params)
             if (queueToProcess == networkQueue)
             {
                 int receivedRuntime = -1;
-                xQueueReceive(networkQueue, &receivedRuntime, 0);
+                xQueueReceive(networkQueue, &receivedRuntime, pdMS_TO_TICKS(5000));
 
                 if (receivedRuntime != -1)
                 {
@@ -175,10 +203,10 @@ void Network_Task(void *params)
                     }
 
                     /*Create char array with that lenght*/
-                    char *message = malloc(sizeof(char) * (length + 3));
+                    char *message = malloc(sizeof(char) * (length + 1));
                     message[length] = 0x00;
-                    sprintf(message, "ms");
-                    sprintf(message + 2, "%i", receivedRuntime);
+                    sprintf(message, "%i", receivedRuntime);
+
                     broadcast(message);
 
                     free(message);
@@ -186,32 +214,14 @@ void Network_Task(void *params)
             }
             else if (queueToProcess == resetQueue)
             {
-                int receivedRuntime = -1;
-                xQueueReceive(resetQueue, &receivedRuntime, 0);
                 broadcast("reset-remote");
             }
             else if (queueToProcess == triggerQueue)
             {
-                int triggerReason = -1;
-                xQueueReceive(triggerQueue, &triggerReason, 0);
-
-                if (triggerReason == 0)
-                {
-                    broadcast("start");
-                }
-                else if (triggerReason == 1)
-                {
-                    broadcast("trigger");
-                }
+                broadcast("trigger");
             }
         }
-        if (STATION_TYPE == 0)
-        {
-            broadcast("alive-start");
-        }
-        else if (STATION_TYPE == 1)
-        {
-            broadcast("alive-stop");
-        }
+
+        broadcast("alive-timepanel");
     }
 }

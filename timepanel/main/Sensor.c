@@ -29,7 +29,7 @@ extern QueueHandle_t timerQueue;
 extern QueueHandle_t triggerQueue;
 
 char *TAG = "SENSOR";
-const int sensorPins[] = {25, 27};
+const int sensorPins[] = {20};
 const int sensorCooldown = 1000;
 
 static void IRAM_ATTR gpio_interrupt_handler(void *args)
@@ -81,15 +81,8 @@ void Sensor_Interrupt_Task(void *params)
                 int cause = 0;
                 lastTriggerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
                 ESP_LOGI(TAG, "Interrupt of Pin: %i", pinNumber);
-                if (STATION_TYPE == 0)
-                {
-                    xQueueSend(timerQueue, &cause, 0);
-                }
-                else if (STATION_TYPE == 1)
-                {
-                    cause = 1;
-                    xQueueSend(triggerQueue, &cause, 0);
-                }
+
+                xQueueSend(timerQueue, &cause, 0);
             }
         }
     }

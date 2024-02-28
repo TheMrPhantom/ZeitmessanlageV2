@@ -8,6 +8,7 @@
 extern QueueHandle_t timerQueue;
 extern QueueHandle_t networkQueue;
 extern QueueHandle_t resetQueue;
+extern QueueHandle_t triggerQueue;
 
 char *TIMER_TAG = "TIMER";
 int timerTriggerCause;
@@ -47,6 +48,8 @@ void Timer_Task(void *params)
                 {
                     startTimer();
                     ESP_LOGI(TIMER_TAG, "Started timer");
+                    int cause = 0;
+                    xQueueSend(triggerQueue, &cause, 0);
                 }
                 else
                 {
