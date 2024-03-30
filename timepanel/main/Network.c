@@ -36,11 +36,10 @@ extern const uint8_t index_html_start[] asm("_binary_index_html_start");
 extern const uint8_t index_html_end[] asm("_binary_index_html_end");
 
 const char *NETWORK_TAG = "NETWORK";
-extern QueueHandle_t timerQueue;
-extern QueueHandle_t networkQueue;
 extern QueueHandle_t resetQueue;
 extern QueueHandle_t triggerQueue;
 extern QueueHandle_t networkFaultQueue;
+extern QueueHandle_t timeQueue;
 
 extern QueueSetHandle_t networkAndResetQueue;
 
@@ -63,6 +62,9 @@ void init_wifi(void)
     ESP_LOGI(NETWORK_TAG, "Wifi configured and started");
 }
 
+int lastStartTriggerReceived = 0;
+int lastStopTriggerReceived = 0;
+
 void receiveCallback(const uint8_t *macAddr, const uint8_t *data, int dataLen)
 // Called when data is received
 {
@@ -76,33 +78,40 @@ void receiveCallback(const uint8_t *macAddr, const uint8_t *data, int dataLen)
 
     ESP_LOGI(NETWORK_TAG, "Received Package: %s", buffer);
 
-    int cause = -1;
-
-    if (strncmp(buffer, "start", 5) == 0)
+    if (strncmp(buffer, "trigger-start", 13) == 0)
     {
-        xQueueSend(timerQueue, &cause, 0);
+        // Protect against triggering 2 times when receiving forwarded message
+        if (pdTICKS_TO_MS(xTaskGetTickCount()) - lastStartTriggerReceived > 2000)
+        {
+            int cause = 0;
+            xQueueSend(triggerQueue, &cause, 0);
+        }
+        lastStartTriggerReceived = pdTICKS_TO_MS(xTaskGetTickCount());
     }
-    else if (strncmp(buffer, "ms", 2) == 0)
+    if (strncmp(buffer, "trigger-stop", 13) == 0)
     {
-        char time[strlen(buffer) - 1];
-        strcpy(time, buffer + 2);
-        cause = atoi(time);
-        xQueueSend(timerQueue, &cause, 0);
+        // Protect against triggering 2 times when receiving forwarded message
+        if (pdTICKS_TO_MS(xTaskGetTickCount()) - lastStopTriggerReceived > 2000)
+        {
+            int cause = 0;
+            xQueueSend(triggerQueue, &cause, 0);
+        }
+        lastStopTriggerReceived = pdTICKS_TO_MS(xTaskGetTickCount());
     }
-    else if (strncmp(buffer, "alive-base", 11) == 0)
+    else if (strncmp(buffer, "alive-start", 11) == 0)
     {
         int toSend = START_ALIVE;
         xQueueSend(networkFaultQueue, &toSend, 0);
     }
-    else if (strncmp(buffer, "alive-remote", 11) == 0)
+    else if (strncmp(buffer, "alive-stop", 10) == 0)
     {
         int toSend = STOP_ALIVE;
         xQueueSend(networkFaultQueue, &toSend, 0);
     }
-    else if (strncmp(buffer, "reset-remote", 12) == 0)
+    else if (strncmp(buffer, "reset", 5) == 0)
     {
-        cause = 0;
-        xQueueSend(timerQueue, &cause, 0);
+        int toSend = 0;
+        xQueueSend(resetQueue, &toSend, 0);
     }
 }
 
@@ -182,46 +191,25 @@ void Network_Task(void *params)
 
     while (true)
     {
-        QueueHandle_t queueToProcess = xQueueSelectFromSet(networkAndResetQueue, pdMS_TO_TICKS(5000));
-
-        if (queueToProcess != NULL)
+        int receivedTime = 0;
+        if (xQueueReceive(timeQueue, &receivedTime, portMAX_DELAY))
         {
-            if (queueToProcess == networkQueue)
+            if (receivedTime == -1)
             {
-                int receivedRuntime = -1;
-                xQueueReceive(networkQueue, &receivedRuntime, pdMS_TO_TICKS(5000));
-
-                if (receivedRuntime != -1)
-                {
-                    /*Determine string lenght of measured time*/
-                    int length = 0;
-                    long temp = 1;
-                    while (temp <= receivedRuntime)
-                    {
-                        length++;
-                        temp *= 10;
-                    }
-
-                    /*Create char array with that lenght*/
-                    char *message = malloc(sizeof(char) * (length + 1));
-                    message[length] = 0x00;
-                    sprintf(message, "%i", receivedRuntime);
-
-                    broadcast(message);
-
-                    free(message);
-                }
+                broadcast("timer-start");
             }
-            else if (queueToProcess == resetQueue)
+            else if (receivedTime == -2)
             {
-                broadcast("reset-remote");
+                broadcast("timer-reset");
             }
-            else if (queueToProcess == triggerQueue)
+            else
             {
-                broadcast("trigger");
+                int length = snprintf(NULL, 0, "%d", receivedTime);
+                char *str = malloc(10 + length + 1);
+                snprintf(str, 10 + length + 1, "timer-time%d", receivedTime);
+                broadcast(str);
+                free(str);
             }
         }
-
-        broadcast("alive-timepanel");
     }
 }

@@ -34,14 +34,13 @@
 #include "soc/rtc_cntl_reg.h"
 
 QueueHandle_t sensorInterputQueue;
-QueueHandle_t timerQueue;
-QueueHandle_t networkQueue;
 QueueHandle_t resetQueue;
 QueueHandle_t triggerQueue;
 QueueHandle_t sevenSegmentQueue;
 QueueHandle_t networkFaultQueue;
+QueueHandle_t timeQueue;
 
-QueueSetHandle_t networkAndResetQueue;
+QueueSetHandle_t triggerAndResetQueue;
 
 void app_main(void)
 {
@@ -50,17 +49,15 @@ void app_main(void)
     ESP_LOGI(TAG, "Starting...");
 
     sensorInterputQueue = xQueueCreate(1, sizeof(int));
-    timerQueue = xQueueCreate(1, sizeof(int));
-    networkQueue = xQueueCreate(1, sizeof(int));
     resetQueue = xQueueCreate(1, sizeof(int));
     triggerQueue = xQueueCreate(1, sizeof(int));
     networkFaultQueue = xQueueCreate(2, sizeof(int));
     sevenSegmentQueue = xQueueCreate(10, sizeof(SevenSegmentDisplay));
+    timeQueue = xQueueCreate(1, sizeof(int));
 
-    networkAndResetQueue = xQueueCreateSet(2);
-    xQueueAddToSet(networkQueue, networkAndResetQueue);
-    xQueueAddToSet(resetQueue, networkAndResetQueue);
-    xQueueAddToSet(triggerQueue, networkAndResetQueue);
+    triggerAndResetQueue = xQueueCreateSet(2);
+    xQueueAddToSet(triggerQueue, triggerAndResetQueue);
+    xQueueAddToSet(resetQueue, triggerAndResetQueue);
 
     xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 2048, NULL, 1, NULL);
     xTaskCreate(Timer_Task, "Timer_Task", 2048, NULL, 1, NULL);

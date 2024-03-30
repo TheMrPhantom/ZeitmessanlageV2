@@ -11,6 +11,7 @@
 
 extern QueueHandle_t networkFaultQueue;
 extern QueueHandle_t sevenSegmentQueue;
+
 const char *NETWORK_FAUT_TAG = "NETWORK_FAULT";
 
 void sendFaultInformation(bool start, bool stop)

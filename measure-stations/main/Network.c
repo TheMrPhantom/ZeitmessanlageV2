@@ -22,12 +22,9 @@
 #endif
 
 const char *NETWORK_TAG = "NETWORK";
-extern QueueHandle_t timerQueue;
 extern QueueHandle_t networkQueue;
 extern QueueHandle_t resetQueue;
 extern QueueHandle_t triggerQueue;
-
-extern QueueSetHandle_t networkAndResetQueue;
 
 void init_wifi(void)
 {
@@ -61,20 +58,30 @@ void receiveCallback(const uint8_t *macAddr, const uint8_t *data, int dataLen)
 
     ESP_LOGI(NETWORK_TAG, "Received Package: %s", buffer);
 
-    int cause = -1;
-
-    if (strncmp(buffer, "trigger", 7) == 0)
+    if (STATION_TYPE == 0)
     {
-        cause = 1;
+        // Is start
+        if (strncmp(buffer, "trigger-stop", 12) == 0)
+        {
+            broadcast("trigger-stop");
+        }
+        if (strncmp(buffer, "alive-stop", 13) == 0)
+        {
+            broadcast("alive-stop");
+        }
     }
-    else if (strncmp(buffer, "reset", 5) == 0)
+    else if (STATION_TYPE == 1)
     {
-        cause = 2;
-    }
+        // Is stop
+        if (strncmp(buffer, "trigger-start", 13) == 0)
+        {
+            broadcast("trigger-start");
+        }
 
-    if (cause != -1)
-    {
-        xQueueSend(timerQueue, &cause, 0);
+        if (strncmp(buffer, "alive-start", 11) == 0)
+        {
+            broadcast("alive-start");
+        }
     }
 }
 
@@ -154,55 +161,16 @@ void Network_Task(void *params)
 
     while (true)
     {
-        QueueHandle_t queueToProcess = xQueueSelectFromSet(networkAndResetQueue, pdMS_TO_TICKS(5000));
-
-        if (queueToProcess != NULL)
+        int trigger = 0;
+        if (xQueueReceive(triggerQueue, &trigger, pdMS_TO_TICKS(5000)))
         {
-            if (queueToProcess == networkQueue)
+            if (STATION_TYPE == 0)
             {
-                int receivedRuntime = -1;
-                xQueueReceive(networkQueue, &receivedRuntime, 0);
-
-                if (receivedRuntime != -1)
-                {
-                    /*Determine string lenght of measured time*/
-                    int length = 0;
-                    long temp = 1;
-                    while (temp <= receivedRuntime)
-                    {
-                        length++;
-                        temp *= 10;
-                    }
-
-                    /*Create char array with that lenght*/
-                    char *message = malloc(sizeof(char) * (length + 3));
-                    message[length] = 0x00;
-                    sprintf(message, "ms");
-                    sprintf(message + 2, "%i", receivedRuntime);
-                    broadcast(message);
-
-                    free(message);
-                }
+                broadcast("trigger-start");
             }
-            else if (queueToProcess == resetQueue)
+            else if (STATION_TYPE == 1)
             {
-                int receivedRuntime = -1;
-                xQueueReceive(resetQueue, &receivedRuntime, 0);
-                broadcast("reset-remote");
-            }
-            else if (queueToProcess == triggerQueue)
-            {
-                int triggerReason = -1;
-                xQueueReceive(triggerQueue, &triggerReason, 0);
-
-                if (triggerReason == 0)
-                {
-                    broadcast("start");
-                }
-                else if (triggerReason == 1)
-                {
-                    broadcast("trigger");
-                }
+                broadcast("trigger-stop");
             }
         }
         if (STATION_TYPE == 0)

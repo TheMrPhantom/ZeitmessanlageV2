@@ -23,15 +23,14 @@
 #include "freertos/queue.h"
 #include "driver/gpio.h"
 #include "Sensor.h"
-#include "Timer.h"
 #include "Network.h"
+#include "Buzzer.h"
 
 QueueHandle_t sensorInterputQueue;
-QueueHandle_t timerQueue;
 QueueHandle_t networkQueue;
 QueueHandle_t resetQueue;
 QueueHandle_t triggerQueue;
-
+QueueHandle_t buzzerQueue;
 QueueSetHandle_t networkAndResetQueue;
 
 void app_main(void)
@@ -40,17 +39,13 @@ void app_main(void)
     ESP_LOGI(TAG, "Starting...");
 
     sensorInterputQueue = xQueueCreate(1, sizeof(int));
-    timerQueue = xQueueCreate(1, sizeof(int));
-    networkQueue = xQueueCreate(1, sizeof(int));
-    resetQueue = xQueueCreate(1, sizeof(int));
     triggerQueue = xQueueCreate(1, sizeof(int));
+    buzzerQueue = xQueueCreate(5, sizeof(int));
 
-    networkAndResetQueue = xQueueCreateSet(2);
-    xQueueAddToSet(networkQueue, networkAndResetQueue);
-    xQueueAddToSet(resetQueue, networkAndResetQueue);
-    xQueueAddToSet(triggerQueue, networkAndResetQueue);
-
+    xTaskCreate(Buzzer_Task, "Buzzer_Task", 2048, NULL, 1, NULL);
     xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 2048, NULL, 1, NULL);
-    xTaskCreate(Timer_Task, "Timer_Task", 2048, NULL, 1, NULL);
     xTaskCreate(Network_Task, "Network_Task", 8192, NULL, 2, NULL);
+
+    int buzzerType = BUZZER_STARTUP;
+    xQueueSend(buzzerQueue, &buzzerType, 0);
 }

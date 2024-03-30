@@ -17,6 +17,7 @@
 #include "freertos/queue.h"
 #include "driver/gpio.h"
 #include "Sensor.h"
+#include "Buzzer.h"
 
 #if CONFIG_START
 #define STATION_TYPE 0
@@ -25,12 +26,16 @@
 #endif
 
 extern QueueHandle_t sensorInterputQueue;
-extern QueueHandle_t timerQueue;
 extern QueueHandle_t triggerQueue;
+extern QueueHandle_t buzzerQueue;
 
 char *TAG = "SENSOR";
-const int sensorPins[] = {25, 27};
-const int sensorCooldown = 1000;
+const int sensorPins[] = {16, 17, 18, 19, 21};
+const int sensorCooldown = 2000;
+
+int faultTime = 0;
+bool faultWarning = false;
+bool fault = false;
 
 static void IRAM_ATTR gpio_interrupt_handler(void *args)
 {
@@ -73,23 +78,78 @@ void Sensor_Interrupt_Task(void *params)
 
     while (true)
     {
-        if (xQueueReceive(sensorInterputQueue, &pinNumber, portMAX_DELAY))
+        if (xQueueReceive(sensorInterputQueue, &pinNumber, pdMS_TO_TICKS(500)))
         {
+            ESP_LOGI(TAG, "Interrupt of Pin: %i", pinNumber);
 
             if (lastTriggerTime < (int)pdTICKS_TO_MS(xTaskGetTickCount()) - sensorCooldown)
             {
-                int cause = 0;
-                lastTriggerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
-                ESP_LOGI(TAG, "Interrupt of Pin: %i", pinNumber);
-                if (STATION_TYPE == 0)
+                if (!fault)
                 {
-                    xQueueSend(timerQueue, &cause, 0);
-                }
-                else if (STATION_TYPE == 1)
-                {
-                    cause = 1;
+                    int cause = 0;
+                    lastTriggerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
+                    ESP_LOGI(TAG, "Interrupt of Pin: %i", pinNumber);
+
                     xQueueSend(triggerQueue, &cause, 0);
+
+                    cause = Buzzer_TRIGGER;
+                    xQueueSend(buzzerQueue, &cause, 0);
                 }
+                else
+                {
+                    ESP_LOGI(TAG, "Triggered but fault was detected so no signal will be sent");
+                }
+            }
+        }
+
+        // Check for faults only 4 seconds after startup
+        if (pdTICKS_TO_MS(xTaskGetTickCount()) > 4000)
+        {
+            bool isCurrentlyGood = true;
+            int currentFaults = 0;
+            for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
+            {
+                int level = gpio_get_level(sensorPins[i]);
+                currentFaults += level;
+            }
+
+            if (currentFaults > 0)
+            {
+                isCurrentlyGood = false;
+            }
+
+            if (!faultWarning && !isCurrentlyGood)
+            {
+                // Currently disconnected but not in warning state -> aktivate warning state
+                faultTime = xTaskGetTickCount();
+                faultWarning = true;
+            }
+
+            if (faultWarning)
+            {
+                if (pdTICKS_TO_MS(xTaskGetTickCount()) - pdTICKS_TO_MS(faultTime) > 3000 && !fault)
+                {
+                    // Currently in warning state, timout reached but no fault activated yet -> go into fault state
+                    fault = true;
+
+                    int cause = Buzzer_INDICATE_ERROR;
+                    xQueueSend(buzzerQueue, &cause, 0);
+
+                    ESP_LOGI(TAG, "Sensor connection is lost");
+                }
+            }
+
+            if (isCurrentlyGood)
+            {
+                if (fault)
+                {
+                    // No more fault
+                    int cause = Buzzer_INDICATE_ERROR;
+                    xQueueSend(buzzerQueue, &cause, 0);
+                    ESP_LOGI(TAG, "Sensor connection restored");
+                }
+                faultWarning = false;
+                fault = false;
             }
         }
     }
