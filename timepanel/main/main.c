@@ -32,6 +32,7 @@
 #include <esp_system.h>
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
+#include "KeyValue.h"
 
 QueueHandle_t sensorInterputQueue;
 QueueHandle_t resetQueue;
@@ -48,6 +49,8 @@ void app_main(void)
     const char *TAG = "MAIN";
     ESP_LOGI(TAG, "Starting...");
 
+    nvs_flash_init();
+
     sensorInterputQueue = xQueueCreate(1, sizeof(int));
     resetQueue = xQueueCreate(1, sizeof(int));
     triggerQueue = xQueueCreate(1, sizeof(int));
@@ -58,6 +61,8 @@ void app_main(void)
     triggerAndResetQueue = xQueueCreateSet(2);
     xQueueAddToSet(triggerQueue, triggerAndResetQueue);
     xQueueAddToSet(resetQueue, triggerAndResetQueue);
+
+    increaseKey("startups");
 
     xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 2048, NULL, 1, NULL);
     xTaskCreate(Timer_Task, "Timer_Task", 2048, NULL, 1, NULL);

@@ -5,6 +5,7 @@
 #include "freertos/queue.h"
 #include "esp_log.h"
 #include "SevenSegment.h"
+#include "KeyValue.h"
 
 extern QueueHandle_t sevenSegmentQueue;
 
@@ -23,6 +24,7 @@ void startTimer()
 {
     timerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
     timerIsRunning = true;
+    increaseKey("triggers");
 }
 
 void stopTimer()

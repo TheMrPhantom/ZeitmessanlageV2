@@ -29,7 +29,7 @@ extern QueueHandle_t resetQueue;
 extern QueueHandle_t triggerQueue;
 
 char *TAG = "SENSOR";
-const int sensorPins[] = {25};
+const int sensorPins[] = {17};
 const int sensorCooldown = 1000;
 
 static void IRAM_ATTR gpio_interrupt_handler(void *args)
@@ -45,8 +45,8 @@ void init_Pins()
         ESP_LOGI(TAG, "Configuring IO Pin %i", sensorPins[i]);
         esp_rom_gpio_pad_select_gpio(sensorPins[i]);
         gpio_set_direction(sensorPins[i], GPIO_MODE_INPUT);
-        gpio_pulldown_en(sensorPins[i]);
-        gpio_pullup_dis(sensorPins[i]);
+        gpio_pullup_en(sensorPins[i]);
+        gpio_pulldown_dis(sensorPins[i]);
         gpio_set_intr_type(sensorPins[i], GPIO_INTR_POSEDGE);
     }
 

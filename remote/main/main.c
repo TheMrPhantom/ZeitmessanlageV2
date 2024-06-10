@@ -106,38 +106,51 @@ void broadcast(char *message)
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "Initialising WiFi");
-    wifi_init_config_t wifi_config = WIFI_INIT_CONFIG_DEFAULT();
-    esp_netif_init();
-    esp_event_loop_create_default();
-
-    nvs_flash_init();
-
-    esp_wifi_init(&wifi_config);
-    esp_wifi_set_mode(WIFI_MODE_STA);
-    esp_wifi_set_storage(WIFI_STORAGE_RAM);
-    esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_LR);
-    esp_wifi_start();
-
-    ESP_LOGI(TAG, "Initialising ESP NOW");
-    if (esp_now_init() == ESP_OK)
+    while (true)
     {
-        ESP_LOGI(TAG, "ESP-NOW Init Success");
-        esp_now_register_recv_cb(receiveCallback);
-        esp_now_register_send_cb(sentCallback);
+        esp_rom_gpio_pad_select_gpio(GPIO_NUM_33);
+        gpio_set_direction(GPIO_NUM_33, GPIO_MODE_INPUT);
+        gpio_pulldown_dis(GPIO_NUM_33);
+        gpio_pullup_en(GPIO_NUM_33);
+
+        ESP_LOGI(TAG, "Initialising WiFi");
+        wifi_init_config_t wifi_config = WIFI_INIT_CONFIG_DEFAULT();
+        esp_netif_init();
+        esp_event_loop_create_default();
+
+        nvs_flash_init();
+
+        esp_wifi_init(&wifi_config);
+        esp_wifi_set_mode(WIFI_MODE_STA);
+        esp_wifi_set_storage(WIFI_STORAGE_RAM);
+        esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_LR);
+        esp_wifi_start();
+
+        ESP_LOGI(TAG, "Initialising ESP NOW");
+        if (esp_now_init() == ESP_OK)
+        {
+            ESP_LOGI(TAG, "ESP-NOW Init Success");
+            esp_now_register_recv_cb(receiveCallback);
+            esp_now_register_send_cb(sentCallback);
+        }
+        else
+        {
+            ESP_LOGE(TAG, "ESP-NOW Init Failed");
+            vTaskDelay(pdTICKS_TO_MS(3000));
+            esp_restart();
+        }
+
+        broadcast("reset");
+
+        esp_wifi_stop();
+
+        while (gpio_get_level(GPIO_NUM_33) == 0)
+        {
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+
+        rtc_gpio_pullup_en(GPIO_NUM_33);
+        esp_sleep_enable_ext0_wakeup(GPIO_NUM_33, 0);
+        esp_light_sleep_start();
     }
-    else
-    {
-        ESP_LOGE(TAG, "ESP-NOW Init Failed");
-        vTaskDelay(pdTICKS_TO_MS(3000));
-        esp_restart();
-    }
-
-    broadcast("reset");
-
-    esp_wifi_stop();
-
-    rtc_gpio_pullup_en(GPIO_NUM_33);
-    esp_sleep_enable_ext0_wakeup(GPIO_NUM_33, 0);
-    esp_light_sleep_start();
 }

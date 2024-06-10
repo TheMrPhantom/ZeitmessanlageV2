@@ -51,8 +51,6 @@ void init_wifi(void)
     esp_netif_init();
     esp_event_loop_create_default();
 
-    nvs_flash_init();
-
     esp_wifi_init(&wifi_config);
     esp_wifi_set_mode(WIFI_MODE_STA);
     esp_wifi_set_storage(WIFI_STORAGE_RAM);

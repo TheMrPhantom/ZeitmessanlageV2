@@ -7,6 +7,7 @@
 #include "esp_log.h"
 #include <stdio.h>
 #include <string.h>
+#include "KeyValue.h"
 
 const int sevenSegmentPins[] = {26, 27, 14, 12, 19};
 const char *SEVEN_SEGMENT_TAG = "SevenSegment";
@@ -18,6 +19,17 @@ void Seven_Segment_Task(void *params)
     setupSevenSegment();
 
     bool networkFault = false;
+
+    if (gpio_get_level(17) == 0)
+    {
+        ESP_LOGI("7Segment", "Reset pressed on startup");
+        setMilliseconds(8888);
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        setMilliseconds(getValue("startups"));
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        setMilliseconds(getValue("triggers"));
+        vTaskDelay(pdMS_TO_TICKS(5000));
+    }
 
     while (true)
     {
