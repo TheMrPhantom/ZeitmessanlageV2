@@ -31,6 +31,7 @@ QueueHandle_t networkQueue;
 QueueHandle_t resetQueue;
 QueueHandle_t triggerQueue;
 QueueHandle_t buzzerQueue;
+QueueHandle_t faultQueue;
 QueueSetHandle_t networkAndResetQueue;
 
 void app_main(void)
@@ -41,6 +42,7 @@ void app_main(void)
     sensorInterputQueue = xQueueCreate(1, sizeof(int));
     triggerQueue = xQueueCreate(1, sizeof(int));
     buzzerQueue = xQueueCreate(5, sizeof(int));
+    faultQueue = xQueueCreate(5, sizeof(int));
 
     xTaskCreate(Buzzer_Task, "Buzzer_Task", 2048, NULL, 1, NULL);
     xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 2048, NULL, 1, NULL);

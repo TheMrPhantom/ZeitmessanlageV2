@@ -12,6 +12,7 @@
 #include "esp_event.h"
 #include "esp_flash.h"
 #include "nvs_flash.h"
+#include "Buzzer.h"
 
 #define min(x, y) (((x) < (y)) ? (x) : (y))
 
@@ -25,6 +26,7 @@ const char *NETWORK_TAG = "NETWORK";
 extern QueueHandle_t networkQueue;
 extern QueueHandle_t resetQueue;
 extern QueueHandle_t triggerQueue;
+extern QueueHandle_t faultQueue;
 
 void init_wifi(void)
 {
@@ -159,6 +161,8 @@ void Network_Task(void *params)
         esp_restart();
     }
 
+    bool sensorFault = false;
+
     while (true)
     {
         int trigger = 0;
@@ -173,13 +177,25 @@ void Network_Task(void *params)
                 broadcast("trigger-stop");
             }
         }
-        if (STATION_TYPE == 0)
+        trigger = 0;
+        BaseType_t faultMessage = xQueueReceive(faultQueue, &trigger, 0);
+        if (faultMessage)
         {
-            broadcast("alive-start");
+            if (trigger == Buzzer_INDICATE_ERROR)
+            {
+                sensorFault = !sensorFault;
+            }
         }
-        else if (STATION_TYPE == 1)
+        if (!sensorFault)
         {
-            broadcast("alive-stop");
+            if (STATION_TYPE == 0)
+            {
+                broadcast("alive-start");
+            }
+            else if (STATION_TYPE == 1)
+            {
+                broadcast("alive-stop");
+            }
         }
     }
 }

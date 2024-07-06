@@ -28,6 +28,7 @@
 extern QueueHandle_t sensorInterputQueue;
 extern QueueHandle_t triggerQueue;
 extern QueueHandle_t buzzerQueue;
+extern QueueHandle_t faultQueue;
 
 char *TAG = "SENSOR";
 const int sensorPins[] = {16, 17, 18, 19, 21};
@@ -134,6 +135,7 @@ void Sensor_Interrupt_Task(void *params)
 
                     int cause = Buzzer_INDICATE_ERROR;
                     xQueueSend(buzzerQueue, &cause, 0);
+                    xQueueSend(faultQueue, &cause, 0);
 
                     ESP_LOGI(TAG, "Sensor connection is lost");
                 }
@@ -146,6 +148,7 @@ void Sensor_Interrupt_Task(void *params)
                     // No more fault
                     int cause = Buzzer_INDICATE_ERROR;
                     xQueueSend(buzzerQueue, &cause, 0);
+                    xQueueSend(faultQueue, &cause, 0);
                     ESP_LOGI(TAG, "Sensor connection restored");
                 }
                 faultWarning = false;
