@@ -1,0 +1,17 @@
+@import "../../Common/variables.module.scss";
+
+.title {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: $flex-gap;
+}
+
+.actions {
+    display: flex !important;
+    flex-direction: row-reverse;
+    flex-wrap: wrap;
+    justify-content: space-between !important;
+    gap: $flex-gap;
+}

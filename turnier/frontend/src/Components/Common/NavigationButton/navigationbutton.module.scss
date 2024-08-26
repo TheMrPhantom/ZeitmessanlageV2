@@ -1,0 +1,15 @@
+@import "../../Common/variables.module.scss";
+
+.footer {
+    position: fixed;
+    bottom: 0;
+    display: flex;
+    justify-content: space-around;
+    width: 100%;
+    padding: $padding;
+    z-index: 20000000;
+}
+
+.footerButton {
+    width: 100%;
+}

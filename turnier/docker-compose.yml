@@ -1,0 +1,47 @@
+services:
+  frontend:
+    image: fius/drinklistv4-frontend
+    ports:
+      - 3000:80
+    restart: always
+    volumes:
+      - ./frontend/public/environment:/app/build/environment:ro
+
+  api:
+    image: fius/drinklistv4-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - 5000:5000
+    restart: always
+    environment:
+      - DOMAIN=127.0.0.1:5000
+      - COOKIE_EXPIRE_TIME=4368
+      - DB_CONNECTION=postgresql+psycopg2://drinklist:example@db:5432/drinklist
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=unsafe
+      - MOD_USERNAME=mod
+      - MOD_PASSWORD=unsafe
+      - USER_PASSWORD=unsafe
+      - UNDO_TIMELIMIT=5
+      - AUTO_HIDE_DAYS=210
+      #- USE_ALIAS=true
+      #- MAIL_SERVER=
+      #- MAIL_EMAIL=
+      #- MAIL_USERNAME=
+      #- MAIL_PASSWORD=
+      #- MAIL_POSTFIX=
+  
+  db:
+    image: postgres
+    environment:
+      POSTGRES_USER: drinklist
+      POSTGRES_PASSWORD: example
+    volumes:
+      - ./data/backend:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U drinklist"]
+      interval: 5s
+      timeout: 5s
+      retries: 5

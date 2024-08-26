@@ -32,7 +32,8 @@ extern QueueHandle_t faultQueue;
 
 char *TAG = "SENSOR";
 const int sensorPins[] = {16, 17, 18, 19, 21};
-const int sensorCooldown = 2000;
+const int sensorCooldown = 3500;
+const int faultCooldown = 3000;
 
 int faultTime = 0;
 bool faultWarning = false;
@@ -81,24 +82,30 @@ void Sensor_Interrupt_Task(void *params)
     {
         if (xQueueReceive(sensorInterputQueue, &pinNumber, pdMS_TO_TICKS(500)))
         {
-            ESP_LOGI(TAG, "Interrupt of Pin: %i", pinNumber);
+            ESP_LOGI(TAG, "Checking interrupt of Pin: %i", pinNumber);
 
-            if (lastTriggerTime < (int)pdTICKS_TO_MS(xTaskGetTickCount()) - sensorCooldown)
+            vTaskDelay(pdMS_TO_TICKS(3));
+
+            if (gpio_get_level(pinNumber) == 1)
             {
-                if (!fault)
+                ESP_LOGI(TAG, "Confirmed interrupt of Pin: %i", pinNumber);
+                if (lastTriggerTime < (int)pdTICKS_TO_MS(xTaskGetTickCount()) - sensorCooldown)
                 {
-                    int cause = 0;
-                    lastTriggerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
-                    ESP_LOGI(TAG, "Interrupt of Pin: %i", pinNumber);
+                    if (!fault)
+                    {
+                        int cause = 0;
+                        lastTriggerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
+                        ESP_LOGI(TAG, "Interrupt of Pin: %i", pinNumber);
 
-                    xQueueSend(triggerQueue, &cause, 0);
+                        xQueueSend(triggerQueue, &cause, 0);
 
-                    cause = Buzzer_TRIGGER;
-                    xQueueSend(buzzerQueue, &cause, 0);
-                }
-                else
-                {
-                    ESP_LOGI(TAG, "Triggered but fault was detected so no signal will be sent");
+                        cause = Buzzer_TRIGGER;
+                        xQueueSend(buzzerQueue, &cause, 0);
+                    }
+                    else
+                    {
+                        ESP_LOGI(TAG, "Triggered but fault was detected so no signal will be sent");
+                    }
                 }
             }
         }
@@ -128,7 +135,7 @@ void Sensor_Interrupt_Task(void *params)
 
             if (faultWarning)
             {
-                if (pdTICKS_TO_MS(xTaskGetTickCount()) - pdTICKS_TO_MS(faultTime) > 3000 && !fault)
+                if (pdTICKS_TO_MS(xTaskGetTickCount()) - pdTICKS_TO_MS(faultTime) > faultCooldown && !fault)
                 {
                     // Currently in warning state, timout reached but no fault activated yet -> go into fault state
                     fault = true;

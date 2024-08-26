@@ -1,0 +1,18 @@
+@import "../../Common/variables.module.scss";
+
+.aboutDialogRow {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: flex-start;
+    gap: $flex-gap;
+}
+
+.aboutDialogContainer {
+    display: flex;
+    flex-direction: column;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: calc(1.5 * $flex-gap);
+}

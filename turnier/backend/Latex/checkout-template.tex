@@ -1,0 +1,78 @@
+\documentclass{article}
+\usepackage[ngerman]{babel}
+\usepackage{geometry}
+ \geometry{
+ a4paper,
+ left=20mm,
+ top=35mm,
+ }
+\usepackage[utf8]{inputenc}
+\usepackage{fontspec}
+\usepackage{tikz}
+\usepackage{booktabs}
+\usepackage{xcolor,colortbl}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{fancyhdr}
+\setmainfont{text-font.ttf}
+
+\setlength{\headsep}{2cm}
+
+\pagestyle{fancyplain}
+\renewcommand{\headrulewidth}{0pt}
+\fancyhf{} % clear all header and footer fields
+\fancyhead[L]{
+\tikz[remember picture,overlay] \node[anchor=north, opacity=1,inner sep=0pt] at (current page.north){\includegraphics[width=\paperwidth]{Banner.pdf}};
+{\fontsize{40}{60}\selectfont\setmainfont{headline-font.ttf}FIUS Getränkeliste}\\
+} 
+
+\begin{document}
+
+\noindent\Huge Abrechnung\\\\
+\noindent\Large Für ??name??\\
+\noindent\Large Bis zum \today\\
+
+\vspace{0.5cm}
+\noindent\huge Aktuelles Guthaben: ??current-balance??€\\
+
+\noindent\Large Einnahmen: ??income-sum??€\\
+\noindent\Large Ausgaben: ??paid-sum??€\\
+
+\vspace{0.5cm}
+\begin{center}
+% Einnahmen
+
+{\setmainfont{headline-font.ttf}\Huge Einnahmen}
+
+\rule{2.5cm}{0.25pt}
+
+\vspace{0.5cm}
+
+\begin{longtable}{>{\raggedright}p{8cm}>{\raggedright}p{3cm}>{\raggedright}p{2.5cm}}
+\toprule
+Item & Datum & Preis\tabularnewline\midrule
+??income-table??
+Summe & & ??income-sum??€\tabularnewline
+\bottomrule
+\end{longtable}
+
+\vspace{2cm}
+
+% Ausgaben
+
+{\setmainfont{headline-font.ttf}\Huge Ausgaben}
+
+\rule{2.5cm}{0.25pt}
+
+\vspace{0.5cm}
+
+\begin{longtable}{>{\raggedright}p{8cm}>{\raggedright}p{3cm}>{\raggedright}p{2.5cm}}
+\toprule
+Item & Datum & Preis\tabularnewline\midrule
+??paid-table??
+Summe & & ??paid-sum??€\tabularnewline
+\bottomrule
+\end{longtable}
+
+\end{center}
+\end{document}

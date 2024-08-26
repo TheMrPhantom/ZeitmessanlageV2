@@ -1,0 +1,23 @@
+@import "../../Common/variables.module.scss";
+
+.tableContainer{
+    padding: $padding;
+    
+}
+
+.table{
+    width: max-content !important;
+}
+
+.statisticBox{
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: $flex-gap;
+}
+
+.tableContainerNoPadding{
+    padding: 0px;
+}

@@ -1,0 +1,39 @@
+@import "./variables.module.scss";
+
+.flexMiddle {
+    display: flex;
+    justify-content: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+}
+
+.daypicker {
+    width: 200px;
+}
+
+.errorButton {
+    color: white !important;
+    background-color: $error-color !important;
+}
+
+.successButton {
+    color: white !important;
+    background-color: $success-color !important;
+}
+
+.errorText {
+    color: $error-color;
+}
+
+.paperHeadline {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: $flex-gap;
+}
+
+.pickerDay {
+    background-color: $success-color !important;
+}

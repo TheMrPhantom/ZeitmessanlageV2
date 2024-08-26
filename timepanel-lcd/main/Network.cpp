@@ -12,7 +12,12 @@
 #include "esp_event.h"
 #include "esp_flash.h"
 #include "nvs_flash.h"
-#include "Buzzer.h"
+#include <esp_http_server.h>
+#include <esp_ota_ops.h>
+#include <esp_http_server.h>
+#include <string.h>
+#include <esp_system.h>
+#include "NetworkFault.h"
 
 #define min(x, y) (((x) < (y)) ? (x) : (y))
 
@@ -22,11 +27,21 @@
 #define STATION_TYPE 1
 #endif
 
+#define WIFI_SSID "Timepanel OTA Update"
+
+/*
+ * Serve OTA update portal (index.html)
+ */
+extern const uint8_t index_html_start[] asm("_binary_index_html_start");
+extern const uint8_t index_html_end[] asm("_binary_index_html_end");
+
 const char *NETWORK_TAG = "NETWORK";
-extern QueueHandle_t networkQueue;
 extern QueueHandle_t resetQueue;
 extern QueueHandle_t triggerQueue;
-extern QueueHandle_t faultQueue;
+extern QueueHandle_t networkFaultQueue;
+extern QueueHandle_t timeQueue;
+
+extern QueueSetHandle_t networkAndResetQueue;
 
 void init_wifi(void)
 {
@@ -35,8 +50,6 @@ void init_wifi(void)
     wifi_init_config_t wifi_config = WIFI_INIT_CONFIG_DEFAULT();
     esp_netif_init();
     esp_event_loop_create_default();
-
-    nvs_flash_init();
 
     esp_wifi_init(&wifi_config);
     esp_wifi_set_mode(WIFI_MODE_STA);
@@ -47,7 +60,10 @@ void init_wifi(void)
     ESP_LOGI(NETWORK_TAG, "Wifi configured and started");
 }
 
-void receiveCallback(const uint8_t *macAddr, const uint8_t *data, int dataLen)
+int lastStartTriggerReceived = 0;
+int lastStopTriggerReceived = 0;
+
+void receiveCallback(const esp_now_recv_info *macAddr, const unsigned char *data, int dataLen)
 // Called when data is received
 {
     // Only allow a maximum of 250 characters in the message + a null terminating byte
@@ -60,30 +76,40 @@ void receiveCallback(const uint8_t *macAddr, const uint8_t *data, int dataLen)
 
     ESP_LOGI(NETWORK_TAG, "Received Package: %s", buffer);
 
-    if (STATION_TYPE == 0)
+    if (strncmp(buffer, "trigger-start", 13) == 0)
     {
-        // Is start
-        if (strncmp(buffer, "trigger-stop", 12) == 0)
+        // Protect against triggering 2 times when receiving forwarded message
+        if (pdTICKS_TO_MS(xTaskGetTickCount()) - lastStartTriggerReceived > 2000)
         {
-            broadcast("trigger-stop");
+            int cause = 0;
+            xQueueSend(triggerQueue, &cause, 0);
         }
-        if (strncmp(buffer, "alive-stop", 13) == 0)
-        {
-            broadcast("alive-stop");
-        }
+        lastStartTriggerReceived = pdTICKS_TO_MS(xTaskGetTickCount());
     }
-    else if (STATION_TYPE == 1)
+    if (strncmp(buffer, "trigger-stop", 13) == 0)
     {
-        // Is stop
-        if (strncmp(buffer, "trigger-start", 13) == 0)
+        // Protect against triggering 2 times when receiving forwarded message
+        if (pdTICKS_TO_MS(xTaskGetTickCount()) - lastStopTriggerReceived > 2000)
         {
-            broadcast("trigger-start");
+            int cause = 0;
+            xQueueSend(triggerQueue, &cause, 0);
         }
-
-        if (strncmp(buffer, "alive-start", 11) == 0)
-        {
-            broadcast("alive-start");
-        }
+        lastStopTriggerReceived = pdTICKS_TO_MS(xTaskGetTickCount());
+    }
+    else if (strncmp(buffer, "alive-start", 11) == 0)
+    {
+        int toSend = START_ALIVE;
+        xQueueSend(networkFaultQueue, &toSend, 0);
+    }
+    else if (strncmp(buffer, "alive-stop", 10) == 0)
+    {
+        int toSend = STOP_ALIVE;
+        xQueueSend(networkFaultQueue, &toSend, 0);
+    }
+    else if (strncmp(buffer, "reset", 5) == 0)
+    {
+        int toSend = 0;
+        xQueueSend(resetQueue, &toSend, 0);
     }
 }
 
@@ -151,50 +177,36 @@ void Network_Task(void *params)
     if (esp_now_init() == ESP_OK)
     {
         ESP_LOGI(NETWORK_TAG, "ESP-NOW Init Success");
-        esp_now_register_recv_cb(receiveCallback);
+        esp_now_register_recv_cb((esp_now_recv_cb_t)receiveCallback);
         esp_now_register_send_cb(sentCallback);
     }
     else
     {
         ESP_LOGE(NETWORK_TAG, "ESP-NOW Init Failed");
-        vTaskDelay(pdMS_TO_TICKS(3000));
+        vTaskDelay(pdTICKS_TO_MS(3000));
         esp_restart();
     }
 
-    bool sensorFault = false;
-
     while (true)
     {
-        int trigger = 0;
-        if (xQueueReceive(triggerQueue, &trigger, pdMS_TO_TICKS(5000)))
+        int receivedTime = 0;
+        if (xQueueReceive(timeQueue, &receivedTime, portMAX_DELAY))
         {
-            if (STATION_TYPE == 0)
+            if (receivedTime == -1)
             {
-                broadcast("trigger-start");
+                broadcast("timer-start");
             }
-            else if (STATION_TYPE == 1)
+            else if (receivedTime == -2)
             {
-                broadcast("trigger-stop");
+                broadcast("timer-reset");
             }
-        }
-        trigger = 0;
-        BaseType_t faultMessage = xQueueReceive(faultQueue, &trigger, 0);
-        if (faultMessage)
-        {
-            if (trigger == Buzzer_INDICATE_ERROR)
+            else
             {
-                sensorFault = !sensorFault;
-            }
-        }
-        if (!sensorFault)
-        {
-            if (STATION_TYPE == 0)
-            {
-                broadcast("alive-start");
-            }
-            else if (STATION_TYPE == 1)
-            {
-                broadcast("alive-stop");
+                int length = snprintf(NULL, 0, "%d", receivedTime);
+                char *str = (char *)malloc(10 + length + 1);
+                snprintf(str, 10 + length + 1, "timer-time%d", receivedTime);
+                broadcast(str);
+                free(str);
             }
         }
     }
