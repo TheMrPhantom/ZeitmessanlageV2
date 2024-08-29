@@ -1,5 +1,5 @@
 import { Button, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
-import React from 'react'
+import React, { useState } from 'react'
 import style from './turnament.module.scss'
 import { Organization, Run, Size } from '../../../types/ResponseTypes'
 import { classToString, getNumberOfParticipantsForRun, getNumberOfParticipantsForRunWithResult, sizeToString } from '../../Common/StaticFunctionsTyped'
@@ -14,6 +14,7 @@ import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider/L
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'
 import { de } from 'date-fns/locale'
+import PrintingDialog from './PrintingDialog'
 
 type Props = {}
 
@@ -53,146 +54,160 @@ const Turnament = (props: Props) => {
     const turnamentName = turnament?.name
     const allParticipants = turnament?.participants
 
-    console.log(turnamentDate)
+    const [printDialogOpen, setprintDialogOpen] = useState(true)
+
     return (
-        <Stack className={style.container} gap={2}>
-            <Stack direction="row" flexWrap="wrap" gap={2}>
-                <Stack className={style.infoBox} gap={2}>
-                    <Typography variant='h5'>Datum</Typography>
-                    <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={de}>
-                        <DatePicker
-                            label="Turnier Datum"
-                            value={new Date(turnamentDate ? turnamentDate : date)}
-                            onChange={(value) => {
-                                if (value) {
-                                    dispatch(changeDate(date, new Date(value)))
+        <>
+            <Stack className={style.container} gap={2}>
+                <Stack direction="column" gap={1}>
+                    <Stack direction="row" flexWrap="wrap">
+                        <Stack className={style.infoBox} gap={2}>
+                            <Typography variant='h5'>Datum</Typography>
+                            <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={de}>
+                                <DatePicker
+                                    label="Turnier Datum"
+                                    value={new Date(turnamentDate ? turnamentDate : date)}
+                                    onChange={(value) => {
+                                        if (value) {
+                                            dispatch(changeDate(date, new Date(value)))
+                                            const t_organization = params.organization ? params.organization : ""
+                                            if (item !== null) {
+                                                window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
+                                            }
+                                            navigate(`/o/${params.organization}/${dateToURLString(new Date(value))}`)
+                                        }
+
+
+                                    }} />
+                            </LocalizationProvider>
+                        </Stack>
+
+                        <Stack className={style.infoBox} gap={2}>
+                            <Typography variant='h5'>Turniername</Typography>
+                            <TextField
+                                value={turnamentName}
+                                label="Turniername"
+                                fullWidth
+                                onChange={(value) => {
+                                    dispatch(changeTurnamentName(new Date(turnamentDate ? turnamentDate : date), value.target.value))
                                     const t_organization = params.organization ? params.organization : ""
                                     if (item !== null) {
                                         window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
                                     }
-                                    navigate(`/o/${params.organization}/${dateToURLString(new Date(value))}`)
-                                }
-
-
-                            }} />
-                    </LocalizationProvider>
+                                }}
+                            />
+                        </Stack>
+                        <Stack className={style.infoBox} gap={2}>
+                            <Typography variant='h5'>Richter</Typography>
+                            <TextField
+                                value={judgeName}
+                                label="Richter Name"
+                                fullWidth
+                                onChange={(value) => {
+                                    dispatch(changeJudge(new Date(turnamentDate ? turnamentDate : date), value.target.value))
+                                    const t_organization = params.organization ? params.organization : ""
+                                    if (item !== null) {
+                                        window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
+                                    }
+                                }}
+                            />
+                        </Stack>
+                    </Stack>
+                    <Stack direction="row" flexWrap="wrap">
+                        <Stack className={style.infoBox} gap={2}>
+                            <Typography variant='h5'>Teilnehmer</Typography>
+                            <Button variant='outlined'
+                                onClick={() => navigate(`/o/${params.organization}/${params.date}/participants`)}
+                            >Teilnehmer bearbeiten</Button>
+                        </Stack>
+                        <Stack className={style.infoBox} gap={2}>
+                            <Typography variant='h5'>Listen Drucken</Typography>
+                            <Button variant='outlined'
+                                onClick={() => navigate(`/o/${params.organization}/${params.date}/participants`)}
+                            >Auswählen</Button>
+                        </Stack>
+                    </Stack>
                 </Stack>
-
-                <Stack className={style.infoBox} gap={2}>
-                    <Typography variant='h5'>Turniername</Typography>
-                    <TextField
-                        value={turnamentName}
-                        label="Turniername"
-                        fullWidth
-                        onChange={(value) => {
-                            dispatch(changeTurnamentName(new Date(turnamentDate ? turnamentDate : date), value.target.value))
-                            const t_organization = params.organization ? params.organization : ""
-                            if (item !== null) {
-                                window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
-                            }
-                        }}
-                    />
-                </Stack>
-                <Stack className={style.infoBox} gap={2}>
-                    <Typography variant='h5'>Richter</Typography>
-                    <TextField
-                        value={judgeName}
-                        label="Richter Name"
-                        fullWidth
-                        onChange={(value) => {
-                            dispatch(changeJudge(new Date(turnamentDate ? turnamentDate : date), value.target.value))
-                            const t_organization = params.organization ? params.organization : ""
-                            if (item !== null) {
-                                window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
-                            }
-                        }}
-                    />
-                </Stack>
-                <Stack className={style.infoBox} gap={2}>
-                    <Typography variant='h5'>Teilnehmer</Typography>
-                    <Button variant='outlined'
-                        onClick={() => navigate(`/o/${params.organization}/${params.date}/participants`)}
-                    >Teilnehmer bearbeiten</Button>
-                </Stack>
-            </Stack>
-            <Stack>
-                <Typography variant='h5'>Läufe</Typography>
-                <Stack className={style.runTable}>
-                    <TableContainer component={Paper}>
-                        <Table>
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell>Lauf</TableCell>
-                                    <TableCell>Länge</TableCell>
-                                    <TableCell>Geschwindigkeit</TableCell>
-                                    <TableCell>Zum Lauf</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {runs.map((run, index) => {
-                                    return (
-                                        <TableRow key={index}>
-                                            <TableCell>{classToString(run)}</TableCell>
-                                            <TableCell>
-                                                <TextField value={common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === run)?.length}
-                                                    type="number"
-                                                    className={style.runStats}
-                                                    InputProps={{
-                                                        endAdornment: <InputAdornment position="end">m</InputAdornment>,
-                                                    }}
-                                                    onChange={(value) => {
-                                                        const date = params.date ? new Date(params.date) : new Date()
-                                                        dispatch(changeLength(date, run, Number(value.target.value)))
-                                                        const t_organization = params.organization ? params.organization : ""
-                                                        if (item !== null) {
-                                                            window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
-                                                        }
-                                                    }}
-                                                />
-                                            </TableCell>
-                                            {((run !== Run.A3) && (run !== Run.J3)) ?
+                <Stack>
+                    <Typography variant='h5'>Läufe</Typography>
+                    <Stack className={style.runTable}>
+                        <TableContainer component={Paper}>
+                            <Table>
+                                <TableHead>
+                                    <TableRow>
+                                        <TableCell>Lauf</TableCell>
+                                        <TableCell>Länge</TableCell>
+                                        <TableCell>Geschwindigkeit</TableCell>
+                                        <TableCell>Zum Lauf</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {runs.map((run, index) => {
+                                        return (
+                                            <TableRow key={index}>
+                                                <TableCell>{classToString(run)}</TableCell>
                                                 <TableCell>
-                                                    <TextField value={common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === run)?.speed}
+                                                    <TextField value={common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === run)?.length}
                                                         type="number"
                                                         className={style.runStats}
                                                         InputProps={{
-                                                            endAdornment: <InputAdornment position="end">m/s</InputAdornment>,
+                                                            endAdornment: <InputAdornment position="end">m</InputAdornment>,
                                                         }}
                                                         onChange={(value) => {
                                                             const date = params.date ? new Date(params.date) : new Date()
-                                                            dispatch(changeSpeed(date, run, Number(value.target.value)))
+                                                            dispatch(changeLength(date, run, Number(value.target.value)))
                                                             const t_organization = params.organization ? params.organization : ""
                                                             if (item !== null) {
                                                                 window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
                                                             }
                                                         }}
                                                     />
-                                                </TableCell> : <TableCell></TableCell>}
+                                                </TableCell>
+                                                {((run !== Run.A3) && (run !== Run.J3)) ?
+                                                    <TableCell>
+                                                        <TextField value={common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === run)?.speed}
+                                                            type="number"
+                                                            className={style.runStats}
+                                                            InputProps={{
+                                                                endAdornment: <InputAdornment position="end">m/s</InputAdornment>,
+                                                            }}
+                                                            onChange={(value) => {
+                                                                const date = params.date ? new Date(params.date) : new Date()
+                                                                dispatch(changeSpeed(date, run, Number(value.target.value)))
+                                                                const t_organization = params.organization ? params.organization : ""
+                                                                if (item !== null) {
+                                                                    window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
+                                                                }
+                                                            }}
+                                                        />
+                                                    </TableCell> : <TableCell></TableCell>}
 
-                                            <TableCell>
-                                                <Stack gap={2} direction="row" flexWrap="wrap">
-                                                    {heights.map((height, index) => {
-                                                        const countParticipants = getNumberOfParticipantsForRun(allParticipants ? allParticipants : [], run / 2, height)
-                                                        const countParticipantsWithResult = getNumberOfParticipantsForRunWithResult(allParticipants ? allParticipants : [], run, height)
-                                                        return <Button key={index}
-                                                            variant='outlined'
-                                                            color={countParticipants !== countParticipantsWithResult ? 'error' : 'primary'}
-                                                            onClick={() => navigate(`/o/${params.organization}/${params.date}/${run}/${height}`)}
-                                                            disabled={countParticipants === 0}
-                                                        >{sizeToString(height)}</Button>
-                                                    })}
-                                                </Stack>
-                                            </TableCell>
-                                        </TableRow>
-                                    )
-                                })
-                                }
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
+                                                <TableCell>
+                                                    <Stack gap={2} direction="row" flexWrap="wrap">
+                                                        {heights.map((height, index) => {
+                                                            const countParticipants = getNumberOfParticipantsForRun(allParticipants ? allParticipants : [], run / 2, height)
+                                                            const countParticipantsWithResult = getNumberOfParticipantsForRunWithResult(allParticipants ? allParticipants : [], run, height)
+                                                            return <Button key={index}
+                                                                variant='outlined'
+                                                                color={countParticipants !== countParticipantsWithResult ? 'error' : 'primary'}
+                                                                onClick={() => navigate(`/o/${params.organization}/${params.date}/${run}/${height}`)}
+                                                                disabled={countParticipants === 0}
+                                                            >{sizeToString(height)}</Button>
+                                                        })}
+                                                    </Stack>
+                                                </TableCell>
+                                            </TableRow>
+                                        )
+                                    })
+                                    }
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    </Stack>
                 </Stack>
             </Stack>
-        </Stack>
+            <PrintingDialog isOpen={printDialogOpen} close={() => { setprintDialogOpen(false) }} />
+        </>
     )
 }
 
