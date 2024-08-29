@@ -150,23 +150,25 @@ const Turnament = (props: Props) => {
                                                     }}
                                                 />
                                             </TableCell>
-                                            <TableCell>
-                                                <TextField value={common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === run)?.speed}
-                                                    type="number"
-                                                    className={style.runStats}
-                                                    InputProps={{
-                                                        endAdornment: <InputAdornment position="end">m/s</InputAdornment>,
-                                                    }}
-                                                    onChange={(value) => {
-                                                        const date = params.date ? new Date(params.date) : new Date()
-                                                        dispatch(changeSpeed(date, run, Number(value.target.value)))
-                                                        const t_organization = params.organization ? params.organization : ""
-                                                        if (item !== null) {
-                                                            window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
-                                                        }
-                                                    }}
-                                                />
-                                            </TableCell>
+                                            {((run !== Run.A3) && (run !== Run.J3)) ?
+                                                <TableCell>
+                                                    <TextField value={common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === run)?.speed}
+                                                        type="number"
+                                                        className={style.runStats}
+                                                        InputProps={{
+                                                            endAdornment: <InputAdornment position="end">m/s</InputAdornment>,
+                                                        }}
+                                                        onChange={(value) => {
+                                                            const date = params.date ? new Date(params.date) : new Date()
+                                                            dispatch(changeSpeed(date, run, Number(value.target.value)))
+                                                            const t_organization = params.organization ? params.organization : ""
+                                                            if (item !== null) {
+                                                                window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
+                                                            }
+                                                        }}
+                                                    />
+                                                </TableCell> : <TableCell></TableCell>}
+
                                             <TableCell>
                                                 <Stack gap={2} direction="row" flexWrap="wrap">
                                                     {heights.map((height, index) => {
