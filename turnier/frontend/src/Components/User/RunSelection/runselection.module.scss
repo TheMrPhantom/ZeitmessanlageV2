@@ -1,0 +1,16 @@
+@import "../../Common/variables.module.scss";
+
+.container {
+    padding: $padding;
+}
+
+.runButton {
+    min-width: 130px !important;
+    max-width: 300px;
+    width: 30%;
+}
+
+.padding {
+    padding: $padding;
+    width: max-content;
+}

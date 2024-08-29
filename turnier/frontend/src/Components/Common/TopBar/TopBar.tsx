@@ -1,8 +1,8 @@
 import { Person, SettingsOutlined } from '@mui/icons-material'
-import { AppBar, Button, IconButton, Slide, Toolbar } from '@mui/material'
+import { AppBar, Button, IconButton, Slide, Stack, Toolbar, Typography } from '@mui/material'
 import React, { useEffect, useState } from 'react'
 import Spacer from '../Spacer'
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { doPostRequest } from '../StaticFunctions';
@@ -22,11 +22,12 @@ import MenuIcon from '@mui/icons-material/Menu';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import { RootState } from '../../../Reducer/reducerCombiner';
 import InfoIcon from '@mui/icons-material/Info';
-import About from './About';
 import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
 import { ABRECHNUNGEN, EINSTELLUNGEN, GELD_ANFORDERN, GETRAENKE, MITGLIEDER, NUTZER_DASHBOARD, TRANSAKTIONEN, UEBERWEISEN } from '../Internationalization/i18n';
 import Cookies from 'js-cookie';
 import { setRequestDialogOpen, setTransferDialogOpen } from '../../../Actions/CommonAction';
+import { classToString, sizeToString } from '../StaticFunctionsTyped';
+import About from './About';
 
 type Props = {}
 
@@ -40,6 +41,7 @@ const TopBar = (props: Props) => {
     const [drawerOpen, setdrawerOpen] = useState(true)
     const [drawerVisible, setdrawerVisible] = useState(true)
     const [aboutDialogOpen, setaboutDialogOpen] = useState(false)
+    const params = useParams()
 
     const showDrawerButton = () => {
         if (location.pathname.startsWith("/admin")) {
@@ -217,9 +219,11 @@ const TopBar = (props: Props) => {
         }
         return <></>
     }
+
+    const runRegex = new RegExp("/o/.*/\\d{4}-\\d{2}-\\d{2}/\\d/\\d");
     return (
         <>
-            <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
+            <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, maxHeight: "77px" }}>
                 <Toolbar sx={{ justifyContent: "space-between" }}>
                     <div style={{ display: "flex" }}>
                         {getIcon()}
@@ -229,11 +233,29 @@ const TopBar = (props: Props) => {
                             onClick={() =>
                                 navigate(isUser() !== 1 && isUser() !== 2 ? "/user/" + isUser() : "/")
                             }
-                            sx={{ display: "inline-flex" }}
+                            sx={{ display: "inline-flex", maxHeight: "77px" }}
                             variant="text">
-                            {window.globalTS.HOME_BUTTON}
+                            <Stack direction="row" alignItems="center" gap={3}>
+                                <img
+                                    src={`/Logo-Simple.svg`}
+                                    height={50}
+
+                                    loading="lazy"
+                                />
+                                {window.globalTS.HOME_BUTTON}
+                            </Stack>
                         </Button>
                     </div>
+                    {/*Show run and size for current run if on run page*/
+                        runRegex.test(location.pathname) ?
+                            <>
+                                <Stack direction="row" gap={1}>
+                                    <Typography variant='h5'>{classToString(Number(location.pathname.split("/")[4]))}</Typography>
+                                    <Typography variant='h5'>-</Typography>
+                                    <Typography variant='h5'>{sizeToString(Number(location.pathname.split("/")[5]))}</Typography>
+                                </Stack>
+                            </> : <></>
+                    }
                     <div style={{ display: "flex" }}>
                         {shouldDisplayAbout() ? <IconButton
                             color="inherit"
@@ -269,6 +291,8 @@ const TopBar = (props: Props) => {
                     {displayDrawer()}
                 </Drawer>
             </Slide>
+
+
         </>
     )
 }

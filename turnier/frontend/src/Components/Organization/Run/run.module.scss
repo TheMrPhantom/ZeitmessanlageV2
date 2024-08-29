@@ -1,0 +1,45 @@
+@import "../../Common/variables.module.scss";
+
+.runContainer {
+    width: 100%;
+    padding: $padding;
+}
+
+.timeContainer {
+    padding: $padding;
+}
+
+.btn {
+    width: 45%;
+}
+
+.runStats {
+    width: 200px;
+}
+
+.runnerListEntryContainter {
+    padding: $padding;
+    height: fit-content;
+}
+
+.markedTable {
+    background-color: lightgray;
+}
+
+.selected {
+    background-color: lightsteelblue;
+}
+
+.button {
+    width: 60px;
+    height: 60px;
+}
+
+.timeBoxLeft {
+    width: 80%;
+    min-width: 300px;
+}
+
+.timeBoxRight {
+    width: min-content;
+}

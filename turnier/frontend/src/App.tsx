@@ -13,7 +13,6 @@ import TopBar from './Components/Common/TopBar/TopBar';
 import Routing from './Components/Routing/Routing';
 import LoginChecker from './Components/Common/LoginChecker/LoginChecker';
 import Toast from './Components/Common/Toast/Toast';
-import NewMessagesPopup from './Components/User/NewMessagesPopup/NewMessagesPopup';
 
 declare global {
   interface Window {
@@ -47,14 +46,12 @@ function App() {
   return (
     <ThemeProvider theme={themes[themeCookie]}>
       <Router>
-
         <ScopedCssBaseline>
           <div className="App">
             <CssBaseline />
             <Provider store={store}>
               <LoginChecker />
               <Toast />
-              <NewMessagesPopup />
               <Box sx={{ display: 'flex' }}>
                 <TopBar />
                 <Box component="main" sx={{ flexGrow: 1, p: 3, padding: 0 }}>

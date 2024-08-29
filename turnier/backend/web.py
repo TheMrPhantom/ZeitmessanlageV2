@@ -10,6 +10,6 @@ os.makedirs("instance/db", exist_ok=True)
 if os.environ.get("DB_CONNECTION"):
     app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DB_CONNECTION")
 else:
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///db/database.db'
+    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///instance/db/database.db'
 
 sql_database = SQLAlchemy(app)

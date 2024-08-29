@@ -1,0 +1,22 @@
+@import "../../Common/variables.module.scss";
+
+.runContainer {
+    padding: $padding;
+}
+
+.timeContainer {
+    padding: $padding;
+}
+
+.runnerListEntryContainter {
+    padding: $padding;
+    height: fit-content;
+}
+
+.markedTable {
+    background-color: lightgray;
+}
+
+.selected {
+    background-color: lightsteelblue;
+}

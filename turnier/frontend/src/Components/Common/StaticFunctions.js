@@ -1,4 +1,5 @@
 import Cookies from "js-cookie";
+import { Size } from "../../types/ResponseTypes";
 
 export const doPostRequest = async (path, data) => {
     const resp = await fetch(window.globalTS.DOMAIN + path,
@@ -156,7 +157,11 @@ export const secureRandomNumber = () => {
 }
 
 export const dateToString = (date) => {
-    return date.getDate().toString() + "." + (date.getMonth() + 1).toString() + "." + date.getFullYear().toString()
+    return date.getDate().toString().padStart(2, '0') + "." + (date.getMonth() + 1).toString().padStart(2, '0') + "." + date.getFullYear().toString()
+}
+
+export const dateToURLString = (date) => {
+    return (date.getFullYear().toString() + "-" + (date.getMonth() + 1).toString().padStart(2, '0') + "-" + date.getDate().toString().padStart(2, '0'))
 }
 
 export const timeToString = (date) => {
@@ -183,3 +188,5 @@ export const getmemberIDCookie = () => {
 
     return rawMemberID ? parseInt(rawMemberID) : null
 }
+
+

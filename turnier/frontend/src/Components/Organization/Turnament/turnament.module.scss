@@ -1,0 +1,18 @@
+@import "../../Common/variables.module.scss";
+
+.runStats {
+    width: 120px;
+}
+
+.runTable {
+    width: max-content;
+}
+
+.infoBox {
+    padding: $padding;
+    width: 250px;
+}
+
+.container {
+    padding: $padding;
+}

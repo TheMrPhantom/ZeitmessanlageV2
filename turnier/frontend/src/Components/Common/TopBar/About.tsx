@@ -19,19 +19,6 @@ type Props = {
 }
 
 const About = (props: Props) => {
-    const [openIssues, setopenIssues] = useState(null)
-    const [releaseTag, setreleaseTag] = useState(null)
-    const [releaseName, setreleaseName] = useState(null)
-
-    useEffect(() => {
-        doGetRequest("webhooks/releases").then(value => {
-            if (value.code === 200) {
-                setreleaseTag(value.content.releaseTag)
-                setreleaseName(value.content.releaseMessage)
-                setopenIssues(value.content.openIssues)
-            }
-        })
-    }, [props.isOpen])
 
     return (
         <Dialog open={props.isOpen} onClose={props.close}>
@@ -50,12 +37,7 @@ const About = (props: Props) => {
                         {window.globalTS.ADDITIONAL_INFORMATION !== "" ? <Typography>
                             {window.globalTS.ADDITIONAL_INFORMATION}
                         </Typography> : <></>}
-                        {releaseName !== null && releaseTag !== null ? <Typography variant="overline">
-                            {format(AKTUELLES_RELEASE, releaseTag, releaseName)}
-                        </Typography> : <></>}
-                        {openIssues !== null ? <Typography variant="overline">
-                            {format(OFFENE_ISSUES, openIssues)}
-                        </Typography> : <></>}
+
                         {window.globalTS.ADDITIONAL_INFORMATION !== "" ? <Typography variant="overline">
                             {format(BUILD_NUMBER, Buildnumber)}
                         </Typography> : <></>}
