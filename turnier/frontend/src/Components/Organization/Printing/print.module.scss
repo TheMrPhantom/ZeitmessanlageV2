@@ -1,7 +1,59 @@
 @import "../../Common/variables.module.scss";
 
+$width: 210mm;
+
+.sticker {
+    width: 190mm;
+    height: 15mm;
+}
+
+.turnamentInfo {
+    //transform: scale(0.6);
+    //transform-origin: top left;
+    white-space: nowrap;
+    overflow: hidden;
+    width: 40mm;
+}
+
+.turnamentText {
+    transform: scale(0.58);
+    transform-origin: top left;
+}
+
+.tableContainer {
+    width: 124mm;
+    position: relative;
+}
+
+.judgeContainer {
+    width: calc(190mm - 124mm - 40mm - 4mm);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.stickerTable {
+    transform: scale(0.6);
+    transform-origin: top left;
+    white-space: nowrap;
+    height: 12mm;
+}
+
+.tableRow {
+    line-height: 0.8 !important ;
+}
+
+.starterText {
+    padding-left: 3.5mm;
+    width: 150mm;
+    transform: scale(0.58);
+    transform-origin: bottom left;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+}
+
 .a4Page {
-    width: 210mm;
+    width: $width;
     height: 297mm;
     margin: 0;
     padding: $padding;
@@ -21,4 +73,16 @@
     -webkit-print-color-adjust: exact !important; /* Chrome, Safari 6 – 15.3, Edge */
     color-adjust: exact !important; /* Firefox 48 – 96 */
     print-color-adjust: exact !important; /* Firefox 97+, Safari 15.4+ */
+}
+
+.printInvisibleHeader {
+    padding: $padding;
+    margin: $padding;
+    width: $width;
+}
+
+@media print {
+    .printInvisibleHeader {
+        display: none;
+    }
 }

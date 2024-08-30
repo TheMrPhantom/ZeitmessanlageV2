@@ -1,7 +1,7 @@
 import { Button, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
 import React, { useState } from 'react'
 import style from './turnament.module.scss'
-import { Organization, Participant, Run, Size } from '../../../types/ResponseTypes'
+import { Organization, Run, Size } from '../../../types/ResponseTypes'
 import { classToString, getNumberOfParticipantsForRun, getNumberOfParticipantsForRunWithResult, getRanking, sizeToString, standardTime } from '../../Common/StaticFunctionsTyped'
 
 import { RootState } from '../../../Reducer/reducerCombiner'
@@ -9,7 +9,7 @@ import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useParams } from 'react-router-dom'
 import { dateToURLString } from '../../Common/StaticFunctions'
-import { changeDate, changeJudge, changeLength, changeSpeed, changeTurnamentName, createOrganization, loadOrganization } from '../../../Actions/SampleAction'
+import { changeDate, changeJudge, changeLength, changeSpeed, changeTurnamentName, clearPrints, createOrganization, loadOrganization } from '../../../Actions/SampleAction'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider/LocalizationProvider'
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'
@@ -76,7 +76,6 @@ const Turnament = (props: Props) => {
             })
         }
     })
-    console.log(rankings)
 
     return (
         <>
@@ -145,7 +144,7 @@ const Turnament = (props: Props) => {
                         <Stack className={style.infoBox} gap={2}>
                             <Typography variant='h5'>Listen Drucken</Typography>
                             <Button variant='outlined'
-                                onClick={() => setprintDialogOpen(true)}
+                                onClick={() => { dispatch(clearPrints()); setprintDialogOpen(true) }}
                             >Auswählen</Button>
                         </Stack>
                     </Stack>
@@ -207,7 +206,7 @@ const Turnament = (props: Props) => {
                                                 <TableCell>
                                                     <Stack gap={2} direction="row" flexWrap="wrap">
                                                         {heights.map((height, index) => {
-                                                            const countParticipants = getNumberOfParticipantsForRun(allParticipants ? allParticipants : [], run / 2, height)
+                                                            const countParticipants = getNumberOfParticipantsForRun(allParticipants ? allParticipants : [], Math.floor(run / 2), height)
                                                             const countParticipantsWithResult = getNumberOfParticipantsForRunWithResult(allParticipants ? allParticipants : [], run, height)
                                                             return <Button key={index}
                                                                 variant='outlined'
@@ -228,7 +227,14 @@ const Turnament = (props: Props) => {
                     </Stack>
                 </Stack>
             </Stack>
-            <PrintingDialog rankings={rankings} isOpen={printDialogOpen} close={() => { setprintDialogOpen(false) }} />
+            {turnament ? <PrintingDialog participants={allParticipants ? allParticipants : []}
+                rankings={rankings}
+                isOpen={printDialogOpen}
+                organization={common.organization}
+                turnament={turnament}
+                close={() => { setprintDialogOpen(false) }}
+            /> : <></>}
+
         </>
     )
 }

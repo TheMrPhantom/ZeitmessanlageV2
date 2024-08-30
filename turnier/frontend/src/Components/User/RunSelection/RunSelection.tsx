@@ -1,4 +1,4 @@
-import { Button, ButtonGroup, Divider, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
+import { Button, Divider, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
 import React, { useState } from 'react'
 import style from './runselection.module.scss'
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
@@ -39,12 +39,12 @@ const RunSelection = (props: Props) => {
                     <Typography variant="overline">Deine Hunde</Typography>
                     {/*<Typography variant="caption">Noch keine Hunde favorisiert</Typography>*/}
                     <Dog dogname="Fluffy McFluff"
-                        resultA={{ time: 37.58, faults: 1, refusals: 0, eliminated: false, class: Run.A0 }}
-                        resultJ={{ time: -2, faults: 0, refusals: 0, eliminated: false, class: Run.A0 }}
+                        resultA={{ time: 37.58, faults: 1, refusals: 0, class: Run.A0 }}
+                        resultJ={{ time: -2, faults: 0, refusals: 0, class: Run.A0 }}
                         dogsLeft={null} />
                     <Dog dogname="Speedy Super Fast"
-                        resultA={{ time: 37.58, faults: 1, refusals: 0, eliminated: false, class: Run.A0 }}
-                        resultJ={{ time: -2, faults: 0, refusals: 0, eliminated: false, class: Run.A0 }}
+                        resultA={{ time: 37.58, faults: 1, refusals: 0, class: Run.A0 }}
+                        resultJ={{ time: -2, faults: 0, refusals: 0, class: Run.A0 }}
                         dogsLeft={5} />
                 </Stack>
 

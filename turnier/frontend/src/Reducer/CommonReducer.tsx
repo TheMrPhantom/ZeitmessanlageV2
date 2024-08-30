@@ -1,5 +1,5 @@
 import { AlertColor } from "@mui/material"
-import { Organization, Participant, Result, Run, Size } from "../types/ResponseTypes"
+import { Organization, Participant, Result, Run, Size, StickerInfo } from "../types/ResponseTypes"
 import { dateToURLString } from "../Components/Common/StaticFunctions"
 
 const defaultAlertType: AlertColor = "success"
@@ -18,7 +18,9 @@ const initialState: CommonReducerType = {
         message: "",
         type: defaultAlertType
     },
-    resultsToPrint: []
+    resultsToPrint: [],
+    participantspToPrint: [],
+    stickersToPrint: []
 }
 
 export type CommonReducerType = {
@@ -31,7 +33,9 @@ export type CommonReducerType = {
         message: string,
         type: AlertColor
     }
-    resultsToPrint: ResultToPrint
+    resultsToPrint: ResultToPrint,
+    participantspToPrint: ParticipantToPrint,
+    stickersToPrint: StickerInfo[]
 }
 
 export type ResultToPrint = Array<{
@@ -40,6 +44,12 @@ export type ResultToPrint = Array<{
     length: number,
     standardTime: number
     results: Array<{ participant: Participant, result: Result, timeFaults: number }>
+}>
+
+export type ParticipantToPrint = Array<{
+    run: Run,
+    size: Size,
+    participants: Participant[]
 }>
 
 const reducer = (state = initialState, { type, payload }: any) => {
@@ -136,6 +146,17 @@ const reducer = (state = initialState, { type, payload }: any) => {
             return newState
         case "ADD_PRINT_RESULT":
             newState.resultsToPrint = payload
+            return newState
+        case "ADD_PRINT_PARTICIPANT":
+            newState.participantspToPrint = payload
+            return newState
+        case "ADD_PRINT_STICKER":
+            newState.stickersToPrint = payload
+            return newState
+        case "CLEAR_PRINTS":
+            newState.resultsToPrint = []
+            newState.participantspToPrint = []
+            newState.stickersToPrint = []
             return newState
         default:
             return state

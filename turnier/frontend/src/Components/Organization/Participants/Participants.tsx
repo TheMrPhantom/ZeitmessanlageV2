@@ -47,14 +47,12 @@ const Participants = (props: Props) => {
                 time: -2,
                 faults: 0,
                 refusals: 0,
-                eliminated: false,
                 class: runclass * 2
             },
             resultJ: {
                 time: -2,
                 faults: 0,
                 refusals: 0,
-                eliminated: false,
                 class: runclass * 2 + 1
             }
         }
