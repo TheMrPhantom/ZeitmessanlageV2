@@ -109,7 +109,7 @@ const PrintingDialog = (props: Props) => {
             runAndHeight.heights.forEach((height) => {
                 if (height.selected) {
                     /*Get all participants for this run and height*/
-                    const participants = props.participants.filter((participant) => participant.class === runAndHeight.run / 2 && participant.size === height.height).sort((a, b) => a.sorting - b.sorting)
+                    const participants = props.participants.filter((participant) => participant.class === Math.floor(runAndHeight.run / 2) && participant.size === height.height).sort((a, b) => a.sorting - b.sorting)
                     toPrint.push({
                         run: runAndHeight.run,
                         size: height.height,
@@ -130,8 +130,8 @@ const PrintingDialog = (props: Props) => {
         selectedRuns.forEach((runAndHeight) => {
             runAndHeight.heights.forEach((height) => {
                 if (height.selected) {
-                    if (!selectedClasses.includes(runAndHeight.run / 2)) {
-                        selectedClasses.push(runAndHeight.run / 2)
+                    if (!selectedClasses.includes(Math.floor(runAndHeight.run / 2))) {
+                        selectedClasses.push(Math.floor(runAndHeight.run / 2))
                     }
                     if (!selectedSizes.includes(height.height)) {
                         selectedSizes.push(height.height)
@@ -204,7 +204,7 @@ const PrintingDialog = (props: Props) => {
                 participant: participant,
                 finalResult: {
                     resultA: {
-                        time: resultA?.result.time ? resultA?.result.time : 0,
+                        time: resultA?.result.time ? resultA?.result.time : -2,
                         faults: resultA?.result.faults ? resultA?.result.faults : 0,
                         refusals: resultA?.result.refusals ? resultA?.result.refusals : 0,
                         class: participant.class * 2,
@@ -215,7 +215,7 @@ const PrintingDialog = (props: Props) => {
                         numberofparticipants: numberOfParticipantsA ? numberOfParticipantsA : 0
                     },
                     resultJ: {
-                        time: resultJ?.result.time ? resultJ?.result.time : 0,
+                        time: resultJ?.result.time ? resultJ?.result.time : -2,
                         faults: resultJ?.result.faults ? resultJ?.result.faults : 0,
                         refusals: resultJ?.result.refusals ? resultJ?.result.refusals : 0,
                         class: participant.class * 2 + 1,

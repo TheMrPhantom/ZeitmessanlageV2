@@ -206,7 +206,7 @@ const Turnament = (props: Props) => {
                                                 <TableCell>
                                                     <Stack gap={2} direction="row" flexWrap="wrap">
                                                         {heights.map((height, index) => {
-                                                            const countParticipants = getNumberOfParticipantsForRun(allParticipants ? allParticipants : [], run / 2, height)
+                                                            const countParticipants = getNumberOfParticipantsForRun(allParticipants ? allParticipants : [], Math.floor(run / 2), height)
                                                             const countParticipantsWithResult = getNumberOfParticipantsForRunWithResult(allParticipants ? allParticipants : [], run, height)
                                                             return <Button key={index}
                                                                 variant='outlined'

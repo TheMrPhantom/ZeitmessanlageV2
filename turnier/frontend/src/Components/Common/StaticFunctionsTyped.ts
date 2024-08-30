@@ -143,7 +143,7 @@ export const getNumberOfParticipantsForRun = (participants: Participant[], run: 
 }
 
 export const getNumberOfParticipantsForRunWithResult = (participants: Participant[], run: Run, size: Size) => {
-    const filteredParticipants = getParticipantsForRun(participants, run / 2, size)
+    const filteredParticipants = getParticipantsForRun(participants, Math.floor(run / 2), size)
     return filteredParticipants.filter(p => getResultFromParticipant(run, p).time > -2).length
 }
 
@@ -305,6 +305,11 @@ export const getKombiRanking: (participants: Participant[], skill: SkillLevel, s
 
         /* Assign ranks to participants */
         combiResults.forEach((c, index) => {
+            /* If participant is not in filteredParticipants, set rank to -1 */
+            if (!filteredParticipants.includes(c.participant)) {
+                c.kombi = -1
+                return
+            }
             c.kombi = index + 1
         })
 
@@ -314,6 +319,9 @@ export const getKombiRanking: (participants: Participant[], skill: SkillLevel, s
 export const getRating = (time: number, totalFaults: number) => {
     /* V SG G OB DIS */
     //https://www.vdh.de/fileadmin/media/hundesport/agility/2018/Ordnung/VDH_TEil_FCI-PO_Agility_2018_2018-05-17_V-6_HP.pdf
+    if (time === -2) {
+        return "-"
+    }
 
     if (time === -1) {
         return "DIS"
