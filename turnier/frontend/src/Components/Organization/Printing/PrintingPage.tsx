@@ -97,7 +97,7 @@ const PrintingPage = (props: Props) => {
                                             <TableCell>{getEmojis(element, row.place, row.timeFaults)}</TableCell>
                                         </TableRow>
                                     }
-                                    return <>   </>
+                                    return <></>
                                 })}
 
                             </Table>
