@@ -63,29 +63,29 @@ const Sticker = (props: Props) => {
                         </TableRow>
                     </TableHead>
                     <TableRow className={style.tableRow}>
-                        <TableCell>FCI A3 Intermediate</TableCell>
-                        <TableCell>{runTimeToString(props.infos.finalResult.resultA.time)}</TableCell>
-                        <TableCell>{checkDis(timeA, props.infos.finalResult.resultA.speed.toFixed(2))}</TableCell>
-                        <TableCell>{checkDis(timeA, props.infos.finalResult.resultA.faults)}</TableCell>
-                        <TableCell>{checkDis(timeA, props.infos.finalResult.resultA.refusals)}</TableCell>
-                        <TableCell>{checkDis(timeA, props.infos.finalResult.resultA.timefaults.toFixed(2))}</TableCell>
-                        <TableCell>{checkDis(timeA, totalFaultsA)}</TableCell>
-                        <TableCell>{getRating(props.infos.finalResult.resultA.time, totalFaultsA)}</TableCell>
-                        <TableCell>{checkDis(timeA, `${props.infos.finalResult.resultA.place}/${props.infos.finalResult.resultA.numberofparticipants}`)}</TableCell>
-                        <TableCell rowSpan={2} align="center">
+                        <TableCell className={style.tableRow}>FCI A3 Intermediate</TableCell>
+                        <TableCell className={style.tableRow}>{runTimeToString(props.infos.finalResult.resultA.time)}</TableCell>
+                        <TableCell className={style.tableRow}>{checkDis(timeA, props.infos.finalResult.resultA.speed.toFixed(2))}</TableCell>
+                        <TableCell className={style.tableRow}>{checkDis(timeA, props.infos.finalResult.resultA.faults)}</TableCell>
+                        <TableCell className={style.tableRow}>{checkDis(timeA, props.infos.finalResult.resultA.refusals)}</TableCell>
+                        <TableCell className={style.tableRow}>{checkDis(timeA, props.infos.finalResult.resultA.timefaults.toFixed(2))}</TableCell>
+                        <TableCell className={style.tableRow}>{checkDis(timeA, totalFaultsA)}</TableCell>
+                        <TableCell className={style.tableRow}>{getRating(props.infos.finalResult.resultA.time, totalFaultsA)}</TableCell>
+                        <TableCell className={style.tableRow}>{checkDis(timeA, `${props.infos.finalResult.resultA.place}/${props.infos.finalResult.resultA.numberofparticipants}`)}</TableCell>
+                        <TableCell className={style.tableRow} rowSpan={2} align="center">
                             {props.infos.finalResult.kombi.kombi > 0 ? `${props.infos.finalResult.kombi.kombi}/${props.infos.finalResult.resultA.numberofparticipants}` : <CancelIcon />}
                         </TableCell>
                     </TableRow>
                     <TableRow className={style.tableRow}>
-                        <TableCell>FCI J3 Intermediate</TableCell>
-                        <TableCell>{runTimeToString(props.infos.finalResult.resultJ.time)}</TableCell>
-                        <TableCell>{checkDis(timeJ, props.infos.finalResult.resultJ.speed.toFixed(2))}</TableCell>
-                        <TableCell>{checkDis(timeJ, props.infos.finalResult.resultJ.faults)}</TableCell>
-                        <TableCell>{checkDis(timeJ, props.infos.finalResult.resultJ.refusals)}</TableCell>
-                        <TableCell>{checkDis(timeJ, props.infos.finalResult.resultJ.timefaults.toFixed(2))}</TableCell>
-                        <TableCell>{checkDis(timeJ, totalFaultsJ)}</TableCell>
-                        <TableCell>{getRating(props.infos.finalResult.resultJ.time, totalFaultsA)}</TableCell>
-                        <TableCell>{checkDis(timeJ, `${props.infos.finalResult.resultJ.place}/${props.infos.finalResult.resultJ.numberofparticipants}`)}</TableCell>
+                        <TableCell className={style.tableRow}>FCI J3 Intermediate</TableCell>
+                        <TableCell className={style.tableRow}>{runTimeToString(props.infos.finalResult.resultJ.time)}</TableCell>
+                        <TableCell className={style.tableRow}>{checkDis(timeJ, props.infos.finalResult.resultJ.speed.toFixed(2))}</TableCell>
+                        <TableCell className={style.tableRow}>{checkDis(timeJ, props.infos.finalResult.resultJ.faults)}</TableCell>
+                        <TableCell className={style.tableRow}>{checkDis(timeJ, props.infos.finalResult.resultJ.refusals)}</TableCell>
+                        <TableCell className={style.tableRow}>{checkDis(timeJ, props.infos.finalResult.resultJ.timefaults.toFixed(2))}</TableCell>
+                        <TableCell className={style.tableRow}>{checkDis(timeJ, totalFaultsJ)}</TableCell>
+                        <TableCell className={style.tableRow}>{getRating(props.infos.finalResult.resultJ.time, totalFaultsA)}</TableCell>
+                        <TableCell className={style.tableRow}>{checkDis(timeJ, `${props.infos.finalResult.resultJ.place}/${props.infos.finalResult.resultJ.numberofparticipants}`)}</TableCell>
                     </TableRow>
 
                 </Table>

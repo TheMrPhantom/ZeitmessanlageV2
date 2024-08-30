@@ -1,5 +1,5 @@
 import { Button, Checkbox, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControl, FormControlLabel, FormLabel, Grow, Paper, Radio, RadioGroup, Stack } from '@mui/material'
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import { classToString, getKombiRanking, getRunCategory, sizeToString } from '../../Common/StaticFunctionsTyped'
 import { ExtendedResult, Organization, Participant, Run, RunCategory, Size, SkillLevel, StickerInfo, Turnament } from '../../../types/ResponseTypes'
 import Spacer from '../../Common/Spacer'
@@ -65,8 +65,7 @@ const PrintingDialog = (props: Props) => {
 
     const [listType, setlistType] = useState(ListType.participant)
 
-    useEffect(() => {
-        /*Unselect all */
+    const unselectAll = () => {
         const newRuns = selectedRuns.map((runAndHeight) => {
             const newHeights = runAndHeight.heights.map((heights) => {
                 return { height: heights.height, selected: false }
@@ -74,7 +73,7 @@ const PrintingDialog = (props: Props) => {
             return { run: runAndHeight.run, heights: newHeights }
         })
         setselectedRuns(newRuns)
-    }, [listType, selectedRuns])
+    }
 
     const isRunInterChecked = (run: Run) => {
         const check = selectedRuns.find((runAndHeight) => runAndHeight.run === run)?.heights.find((heights) => heights.selected === true)
@@ -268,7 +267,7 @@ const PrintingDialog = (props: Props) => {
                         <RadioGroup
                             row
                             value={listType}
-                            onChange={(e) => { setlistType(parseInt(e.target.value)) }}
+                            onChange={(e) => { unselectAll(); setlistType(parseInt(e.target.value)) }}
                         >
                             <FormControlLabel value={ListType.participant} control={<Radio />} label={listTypeToString(ListType.participant)} />
                             <FormControlLabel value={ListType.result} control={<Radio />} label={listTypeToString(ListType.result)} />
