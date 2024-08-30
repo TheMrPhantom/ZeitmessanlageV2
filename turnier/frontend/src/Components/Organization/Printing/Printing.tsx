@@ -1,10 +1,9 @@
 import React from 'react'
 import PrintingPage from './PrintingPage'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
-import { useDispatch, useSelector } from 'react-redux';
+import { useSelector } from 'react-redux';
 import { RootState } from '../../../Reducer/reducerCombiner'
 import { Participant, Result, Run, Size, StickerInfo } from '../../../types/ResponseTypes';
-import { clearPrints } from '../../../Actions/SampleAction';
 import { ListType } from '../Turnament/PrintingDialog';
 import Spacer from '../../Common/Spacer';
 import { Button, Paper, Stack, Typography } from '@mui/material';
@@ -29,9 +28,9 @@ const Printing = (props: Props) => {
     const stickerHeight = 15;
 
     const common: CommonReducerType = useSelector((state: RootState) => state.common);
-    const dispatch = useDispatch()
+    //const dispatch = useDispatch()
 
-    const pages = []
+
 
     const createPages = () => {
         let currentPageSize = pageHeader;

@@ -1,5 +1,5 @@
 import { ParticipantToPrint, ResultToPrint } from "../Reducer/CommonReducer"
-import { Organization, Participant, Result, Run, Size, StickerInfo, Turnament } from "../types/ResponseTypes"
+import { Organization, Participant, Run, StickerInfo, Turnament } from "../types/ResponseTypes"
 
 export const createOrganization = (org: Organization) => {
     return {

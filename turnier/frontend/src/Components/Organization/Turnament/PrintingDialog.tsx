@@ -1,15 +1,13 @@
-import { Button, Checkbox, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControl, FormControlLabel, FormLabel, Grow, InputLabel, MenuItem, Paper, Radio, RadioGroup, Select, Stack } from '@mui/material'
+import { Button, Checkbox, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControl, FormControlLabel, FormLabel, Grow, Paper, Radio, RadioGroup, Stack } from '@mui/material'
 import React, { useEffect, useState } from 'react'
-import { classToString, getKombiRanking, getRunCategory, runClassToString, sizeToString } from '../../Common/StaticFunctionsTyped'
-import { ExtendedResult, FinalResult, KombiResult, Organization, Participant, Result, Run, RunCategory, Size, SkillLevel, StickerInfo, Turnament } from '../../../types/ResponseTypes'
+import { classToString, getKombiRanking, getRunCategory, sizeToString } from '../../Common/StaticFunctionsTyped'
+import { ExtendedResult, Organization, Participant, Run, RunCategory, Size, SkillLevel, StickerInfo, Turnament } from '../../../types/ResponseTypes'
 import Spacer from '../../Common/Spacer'
 import style from './turnament.module.scss'
 import { useDispatch } from 'react-redux'
 import { addPrintParticipant, addPrintResult, addPrintSticker } from '../../../Actions/SampleAction'
 import { useNavigate } from 'react-router-dom'
 import { ParticipantToPrint, ResultToPrint } from '../../../Reducer/CommonReducer'
-import { el } from 'date-fns/locale'
-import { assert } from 'console'
 import { minSpeedA3, minSpeedJ3 } from '../../Common/AgilityPO'
 
 export enum ListType {
@@ -76,7 +74,7 @@ const PrintingDialog = (props: Props) => {
             return { run: runAndHeight.run, heights: newHeights }
         })
         setselectedRuns(newRuns)
-    }, [listType])
+    }, [listType, selectedRuns])
 
     const isRunInterChecked = (run: Run) => {
         const check = selectedRuns.find((runAndHeight) => runAndHeight.run === run)?.heights.find((heights) => heights.selected === true)
@@ -166,7 +164,6 @@ const PrintingDialog = (props: Props) => {
         participants.forEach((participant) => {
             const organization = props.organization
             const turnament = props.turnament
-            const particpant = participant
 
             /*Get the rankings of the two runs*/
             const runA = rankings.find((rank) => rank.run === participant.class * 2)?.heights.find((height) => height.height === participant.size)?.results
@@ -302,7 +299,7 @@ const PrintingDialog = (props: Props) => {
                     <Stack direction="row" gap={2} flexWrap="wrap" >
                         {runs.map((run) => {
                             return (
-                                <Grow in={listType !== ListType.sticker || getRunCategory(run) == RunCategory.A} unmountOnExit >
+                                <Grow in={listType !== ListType.sticker || getRunCategory(run) === RunCategory.A} unmountOnExit >
                                     <Paper className={style.padding} elevation={5}>
                                         <Stack direction="column">
                                             <FormControlLabel

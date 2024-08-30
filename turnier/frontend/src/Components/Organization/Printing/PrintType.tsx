@@ -2,7 +2,7 @@ import { Stack, Typography } from '@mui/material'
 import React from 'react'
 import style from './print.module.scss'
 import { Run, Size } from '../../../types/ResponseTypes'
-import { classToString, runClassToString, sizeToString } from '../../Common/StaticFunctionsTyped'
+import { classToString, sizeToString } from '../../Common/StaticFunctionsTyped'
 import { ListType, listTypeToString } from '../Turnament/PrintingDialog'
 
 type Props = {

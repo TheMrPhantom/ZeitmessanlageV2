@@ -1,13 +1,12 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import style from './print.module.scss'
 import PageHeader from './PageHeader'
 import PageType from './PrintType'
-import { Stack, Table, TableCell, TableHead, TableRow, Typography } from '@mui/material'
+import { Stack, Table, TableCell, TableHead, TableRow } from '@mui/material'
 import ParcoursInfo from './ParcoursInfo'
 import { Table as TableType } from './Printing'
 import { maximumTime, runTimeToString } from '../../Common/StaticFunctionsTyped'
-import { ta } from 'date-fns/locale'
-import { ListType, listTypeToString } from '../Turnament/PrintingDialog'
+import { ListType } from '../Turnament/PrintingDialog'
 import { StickerInfo } from '../../../types/ResponseTypes'
 import Sticker from './Sticker'
 
@@ -33,7 +32,7 @@ const PrintingPage = (props: Props) => {
         /*Get fastest time */
         let fastestTime = table.rows[0].result !== undefined ? table.rows[0].result.time : 0
         table.rows.forEach((row) => {
-            const r = row.result
+
             if (row.result !== undefined && row.result.time < fastestTime && row.result.time > 0) {
                 fastestTime = row.result.time
             }
@@ -98,6 +97,7 @@ const PrintingPage = (props: Props) => {
                                             <TableCell>{getEmojis(element, row.place, row.timeFaults)}</TableCell>
                                         </TableRow>
                                     }
+                                    return <>   </>
                                 })}
 
                             </Table>

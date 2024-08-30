@@ -1,7 +1,7 @@
 import { Button, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
 import React, { useState } from 'react'
 import style from './turnament.module.scss'
-import { Organization, Participant, Run, Size } from '../../../types/ResponseTypes'
+import { Organization, Run, Size } from '../../../types/ResponseTypes'
 import { classToString, getNumberOfParticipantsForRun, getNumberOfParticipantsForRunWithResult, getRanking, sizeToString, standardTime } from '../../Common/StaticFunctionsTyped'
 
 import { RootState } from '../../../Reducer/reducerCombiner'

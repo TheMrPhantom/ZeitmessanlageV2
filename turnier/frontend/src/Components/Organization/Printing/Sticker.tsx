@@ -3,7 +3,7 @@ import React from 'react'
 import style from './print.module.scss'
 import CancelIcon from '@mui/icons-material/Cancel';
 import { StickerInfo } from '../../../types/ResponseTypes';
-import { dateToString, timeToString } from '../../Common/StaticFunctions';
+import { dateToString } from '../../Common/StaticFunctions';
 import { getRating, runTimeToString } from '../../Common/StaticFunctionsTyped';
 
 type Props = {
