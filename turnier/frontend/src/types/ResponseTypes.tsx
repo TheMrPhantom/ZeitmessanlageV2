@@ -53,7 +53,6 @@ export type Result = {
     time: number,
     faults: number,
     refusals: number,
-    eliminated: boolean,
     class: Run,
 }
 
@@ -87,6 +86,20 @@ export const defaultParticipant: Participant = {
     dog: "",
     class: SkillLevel.A0,
     size: Size.Small,
-    resultA: { time: 0, faults: 0, refusals: 0, eliminated: false, class: Run.A0 },
-    resultJ: { time: 0, faults: 0, refusals: 0, eliminated: false, class: Run.J0 }
+    resultA: { time: 0, faults: 0, refusals: 0, class: Run.A0 },
+    resultJ: { time: 0, faults: 0, refusals: 0, class: Run.J0 }
+}
+
+export type StickerInfo = {
+    organization: Organization,
+    turnament: Turnament,
+    participant: Participant,
+    finalResult: FinalResult
+}
+
+
+export type FinalResult = {
+    resultA: Result & { place: number, size: Size, speed: number, timefaults: number, numberofparticipants: number },
+    resultJ: Result & { place: number, size: Size, speed: number, timefaults: number, numberofparticipants: number },
+    kombi: number
 }
