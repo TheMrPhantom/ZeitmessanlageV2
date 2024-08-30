@@ -1,5 +1,5 @@
 import { AlertColor } from "@mui/material"
-import { Organization } from "../types/ResponseTypes"
+import { Organization, Participant, Result, Run, Size } from "../types/ResponseTypes"
 import { dateToURLString } from "../Components/Common/StaticFunctions"
 
 const defaultAlertType: AlertColor = "success"
@@ -17,7 +17,8 @@ const initialState: CommonReducerType = {
         headline: undefined,
         message: "",
         type: defaultAlertType
-    }
+    },
+    resultsToPrint: []
 }
 
 export type CommonReducerType = {
@@ -30,7 +31,16 @@ export type CommonReducerType = {
         message: string,
         type: AlertColor
     }
+    resultsToPrint: ResultToPrint
 }
+
+export type ResultToPrint = Array<{
+    run: Run,
+    size: Size,
+    length: number,
+    standardTime: number
+    results: Array<{ participant: Participant, result: Result, timeFaults: number }>
+}>
 
 const reducer = (state = initialState, { type, payload }: any) => {
 
@@ -123,6 +133,9 @@ const reducer = (state = initialState, { type, payload }: any) => {
             if (turnament) {
                 turnament.participants = payload.participants
             }
+            return newState
+        case "ADD_PRINT_RESULT":
+            newState.resultsToPrint = payload
             return newState
         default:
             return state

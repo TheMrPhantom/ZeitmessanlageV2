@@ -236,9 +236,15 @@ export const maximumTime: (run: Run, standardTime: number) => number = (run: Run
     }
 }
 
-export const getRanking = (participants: Participant[] | undefined, run: Run, calculatedStandardTime: number) => {
+export const getRanking = (participants: Participant[] | undefined, run: Run, calculatedStandardTime: number, size?: Size) => {
     if (!participants) { return [] }
-    return participants?.sort((a, b) => {
+    //Filter out participants without result
+    const filteredParticipants = participants.filter(p => {
+        const result = getResultFromParticipant(run, p);
+        return result.time !== -2 && p.class === runToRunClass(run) && (p.size === size || size === undefined);
+    });
+
+    return filteredParticipants?.sort((a, b) => {
         const resultA = getResultFromParticipant(run, a)
         const resultB = getResultFromParticipant(run, b)
         const totalFaultsA = getTotalFaults(resultA, calculatedStandardTime)
@@ -254,6 +260,7 @@ export const getRanking = (participants: Participant[] | undefined, run: Run, ca
         return totalFaultsA - totalFaultsB
     }).map((p, index) => {
         const result = getResultFromParticipant(run, p)
-        return { result: result, participant: p, rank: index + 1 }
+
+        return { result: result, participant: p, rank: index + 1, timefaults: getTimeFaults(result, calculatedStandardTime) }
     })
 }

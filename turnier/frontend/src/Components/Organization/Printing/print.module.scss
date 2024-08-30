@@ -1,0 +1,24 @@
+@import "../../Common/variables.module.scss";
+
+.a4Page {
+    width: 210mm;
+    height: 297mm;
+    margin: 0;
+    padding: $padding;
+    font-family: Arial, sans-serif;
+}
+
+.logo {
+    width: 3.5cm;
+}
+
+.text {
+    font-size: 12px;
+    font-weight: bold;
+}
+
+* {
+    -webkit-print-color-adjust: exact !important; /* Chrome, Safari 6 – 15.3, Edge */
+    color-adjust: exact !important; /* Firefox 48 – 96 */
+    print-color-adjust: exact !important; /* Firefox 97+, Safari 15.4+ */
+}

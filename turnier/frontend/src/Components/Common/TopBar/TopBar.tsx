@@ -221,6 +221,11 @@ const TopBar = (props: Props) => {
     }
 
     const runRegex = new RegExp("/o/.*/\\d{4}-\\d{2}-\\d{2}/\\d/\\d");
+
+    if (location.pathname.includes("/print")) {
+        return <></>
+    }
+
     return (
         <>
             <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, maxHeight: "77px" }}>
@@ -292,7 +297,7 @@ const TopBar = (props: Props) => {
                 </Drawer>
             </Slide>
 
-
+            <Toolbar />
         </>
     )
 }

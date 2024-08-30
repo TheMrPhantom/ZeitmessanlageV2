@@ -1,11 +1,29 @@
 import { Button, Checkbox, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControl, FormControlLabel, FormLabel, InputLabel, MenuItem, Paper, Radio, RadioGroup, Select, Stack } from '@mui/material'
 import React, { useState } from 'react'
 import { classToString, runClassToString, sizeToString } from '../../Common/StaticFunctionsTyped'
-import { Run, Size, SkillLevel } from '../../../types/ResponseTypes'
+import { Participant, Result, Run, Size, SkillLevel } from '../../../types/ResponseTypes'
 import Spacer from '../../Common/Spacer'
 import style from './turnament.module.scss'
+import { useDispatch } from 'react-redux'
+import { addPrintResult } from '../../../Actions/SampleAction'
+import { useNavigate } from 'react-router-dom'
+import { ResultToPrint } from '../../../Reducer/CommonReducer'
 
 type Props = {
+    rankings: {
+        run: Run;
+        length: number | undefined;
+        heights: {
+            height: Size;
+            stdTime: number;
+            results: {
+                result: Result;
+                participant: Participant;
+                rank: number;
+                timefaults: number;
+            }[];
+        }[];
+    }[],
     isOpen: boolean,
     close: () => void
 }
@@ -13,6 +31,8 @@ type Props = {
 const PrintingDialog = (props: Props) => {
     const runs = [Run.A3, Run.J3, Run.A2, Run.J2, Run.A1, Run.J1, Run.A0, Run.J0]
     const heights = [Size.Small, Size.Medium, Size.Intermediate, Size.Large]
+    const dispatch = useDispatch()
+    const navigate = useNavigate()
 
     const runsAndHeights = runs.map((run) => {
         return {
@@ -152,7 +172,37 @@ const PrintingDialog = (props: Props) => {
             <DialogActions>
                 <Stack direction="row" justifyContent="space-between" className={style.dialogButtons}>
                     <Button onClick={props.close} variant='outlined'>Abbrechen</Button>
-                    <Button onClick={props.close} variant='contained'>Generieren</Button>
+                    <Button onClick={() => {
+                        const toPrint: ResultToPrint = []
+                        selectedRuns.forEach((runAndHeight) => {
+                            runAndHeight.heights.forEach((height) => {
+                                if (height.selected) {
+                                    const run = props.rankings.find((rank) => rank.run === runAndHeight.run)
+                                    if (run) {
+                                        const heightResults = run.heights.find((heights) => heights.height === height.height)
+                                        if (heightResults) {
+                                            toPrint.push({
+                                                run: run.run,
+                                                size: height.height,
+                                                results: heightResults.results.map((result) => {
+                                                    return {
+                                                        participant: result.participant,
+                                                        result: result.result,
+                                                        timeFaults: result.timefaults
+                                                    }
+                                                }),
+                                                length: run.length ? run.length : 0,
+                                                standardTime: heightResults.stdTime
+                                            })
+                                        }
+                                    }
+                                }
+                            })
+                        })
+                        dispatch(addPrintResult(toPrint))
+                        navigate("/o/hsf/2024-08-13/print")
+                        props.close()
+                    }} variant='contained'>Generieren</Button>
                 </Stack>
             </DialogActions>
         </Dialog >

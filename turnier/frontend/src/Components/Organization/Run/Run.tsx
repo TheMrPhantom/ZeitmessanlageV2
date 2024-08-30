@@ -45,7 +45,6 @@ const Run = (props: Props) => {
     const [selectedParticipantIndex, setselectedParticipantIndex] = useState(0)
     const selectedParticipant: Participant = participants && participants.length > 0 ? participants[selectedParticipantIndex] : defaultParticipant
 
-    console.log(selectedParticipant + "->" + currentRun)
     const currentResult = getResultFromParticipant(currentRun, selectedParticipant)
 
     const [newFaults, setnewFaults] = useState(-1)
@@ -71,9 +70,9 @@ const Run = (props: Props) => {
 
     const changeFaults = (value: number) => {
 
-        if (participants) {
+        if (allParticipants) {
             if (!started) {
-                const newParticipants = participants.map(p => {
+                const newParticipants = allParticipants.map(p => {
                     if (p.startNumber === selectedParticipant.startNumber) {
                         if (getRunCategory(currentRun) === RunCategory.A) {
                             return { ...p, resultA: { ...p.resultA, faults: value } }
@@ -94,9 +93,9 @@ const Run = (props: Props) => {
     }
 
     const changeRefusals = (value: number) => {
-        if (participants) {
+        if (allParticipants) {
             if (!started) {
-                const newParticipants = participants.map(p => {
+                const newParticipants = allParticipants.map(p => {
                     if (p.startNumber === selectedParticipant.startNumber) {
                         if (getRunCategory(currentRun) === RunCategory.A) {
                             return { ...p, resultA: { ...p.resultA, refusals: value } }
@@ -118,8 +117,8 @@ const Run = (props: Props) => {
     }
 
     const changeAll = useCallback((time: number, faults: number, refusals: number) => {
-        if (participants) {
-            const newParticipants = participants.map(p => {
+        if (allParticipants) {
+            const newParticipants = allParticipants.map(p => {
                 if (p.startNumber === selectedParticipant.startNumber) {
                     if (getRunCategory(currentRun) === RunCategory.A) {
                         return { ...p, resultA: { ...p.resultA, time: time, faults: faults, refusals: refusals } }
@@ -137,10 +136,10 @@ const Run = (props: Props) => {
 
     const changeTime = useCallback(
         (value: number) => {
-            if (participants) {
+            if (allParticipants) {
 
                 if (newFaults === -1 && newRefusals === -1) {
-                    const newParticipants = participants.map(p => {
+                    const newParticipants = allParticipants.map(p => {
                         if (p.startNumber === selectedParticipant.startNumber) {
                             //  check if a or j
                             if (getRunCategory(currentRun) === RunCategory.A) {

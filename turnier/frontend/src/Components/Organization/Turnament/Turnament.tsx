@@ -1,8 +1,8 @@
 import { Button, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
 import React, { useState } from 'react'
 import style from './turnament.module.scss'
-import { Organization, Run, Size } from '../../../types/ResponseTypes'
-import { classToString, getNumberOfParticipantsForRun, getNumberOfParticipantsForRunWithResult, sizeToString } from '../../Common/StaticFunctionsTyped'
+import { Organization, Participant, Run, Size } from '../../../types/ResponseTypes'
+import { classToString, getNumberOfParticipantsForRun, getNumberOfParticipantsForRunWithResult, getRanking, sizeToString, standardTime } from '../../Common/StaticFunctionsTyped'
 
 import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
@@ -15,6 +15,7 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'
 import { de } from 'date-fns/locale'
 import PrintingDialog from './PrintingDialog'
+import { minSpeedA3 } from '../../Common/AgilityPO'
 
 type Props = {}
 
@@ -54,7 +55,28 @@ const Turnament = (props: Props) => {
     const turnamentName = turnament?.name
     const allParticipants = turnament?.participants
 
-    const [printDialogOpen, setprintDialogOpen] = useState(true)
+    const [printDialogOpen, setprintDialogOpen] = useState(false)
+
+    const runsDialog = [Run.A3, Run.J3, Run.A2, Run.J2, Run.A1, Run.J1, Run.A0, Run.J0]
+    const heightsDialog = [Size.Small, Size.Medium, Size.Intermediate, Size.Large]
+
+    const rankings = runsDialog.map((run) => {
+        const length = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === run)?.length
+        const speed = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === run)?.speed
+        return {
+            run: run,
+            length: length,
+            heights: heightsDialog.map((height) => {
+                const stdTime = standardTime(run, height, allParticipants ? allParticipants : [], length ? length : 0, speed ? speed : minSpeedA3)
+                return {
+                    height: height,
+                    stdTime: stdTime,
+                    results: getRanking(allParticipants ? allParticipants : [], run, stdTime, height)
+                }
+            })
+        }
+    })
+    console.log(rankings)
 
     return (
         <>
@@ -123,7 +145,7 @@ const Turnament = (props: Props) => {
                         <Stack className={style.infoBox} gap={2}>
                             <Typography variant='h5'>Listen Drucken</Typography>
                             <Button variant='outlined'
-                                onClick={() => navigate(`/o/${params.organization}/${params.date}/participants`)}
+                                onClick={() => setprintDialogOpen(true)}
                             >Auswählen</Button>
                         </Stack>
                     </Stack>
@@ -206,7 +228,7 @@ const Turnament = (props: Props) => {
                     </Stack>
                 </Stack>
             </Stack>
-            <PrintingDialog isOpen={printDialogOpen} close={() => { setprintDialogOpen(false) }} />
+            <PrintingDialog rankings={rankings} isOpen={printDialogOpen} close={() => { setprintDialogOpen(false) }} />
         </>
     )
 }
