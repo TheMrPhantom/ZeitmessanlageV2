@@ -12,7 +12,7 @@ $width: 210mm;
     //transform-origin: top left;
     white-space: nowrap;
     overflow: hidden;
-    width: 47mm;
+    width: 40mm;
 }
 
 .turnamentText {
@@ -21,21 +21,25 @@ $width: 210mm;
 }
 
 .tableContainer {
-    width: 110mm;
+    width: 124mm;
     position: relative;
 }
 
 .judgeContainer {
-    width: calc(190mm - 110mm - 47mm - 4mm);
+    width: calc(190mm - 124mm - 40mm - 4mm);
     white-space: nowrap;
     overflow: hidden;
 }
 
 .stickerTable {
-    transform: scale(0.49);
+    transform: scale(0.6);
     transform-origin: top left;
     white-space: nowrap;
     height: 12mm;
+}
+
+td {
+    line-height: 0.8 !important ;
 }
 
 .starterText {

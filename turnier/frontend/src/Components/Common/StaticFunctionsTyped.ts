@@ -326,8 +326,9 @@ export const getRating = (time: number, totalFaults: number) => {
     if (time === -1) {
         return "DIS"
     }
-
-    if (totalFaults < 6) {
+    if (totalFaults === 0) {
+        return "V0"
+    } else if (totalFaults < 6) {
         return "V"
     } else if (totalFaults < 16) {
         return "SG"

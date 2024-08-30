@@ -1,7 +1,7 @@
-import { Button, Checkbox, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControl, FormControlLabel, FormLabel, InputLabel, MenuItem, Paper, Radio, RadioGroup, Select, Stack } from '@mui/material'
-import React, { useState } from 'react'
-import { classToString, getKombiRanking, runClassToString, sizeToString } from '../../Common/StaticFunctionsTyped'
-import { ExtendedResult, FinalResult, KombiResult, Organization, Participant, Result, Run, Size, SkillLevel, StickerInfo, Turnament } from '../../../types/ResponseTypes'
+import { Button, Checkbox, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControl, FormControlLabel, FormLabel, Grow, InputLabel, MenuItem, Paper, Radio, RadioGroup, Select, Stack } from '@mui/material'
+import React, { useEffect, useState } from 'react'
+import { classToString, getKombiRanking, getRunCategory, runClassToString, sizeToString } from '../../Common/StaticFunctionsTyped'
+import { ExtendedResult, FinalResult, KombiResult, Organization, Participant, Result, Run, RunCategory, Size, SkillLevel, StickerInfo, Turnament } from '../../../types/ResponseTypes'
 import Spacer from '../../Common/Spacer'
 import style from './turnament.module.scss'
 import { useDispatch } from 'react-redux'
@@ -60,9 +60,23 @@ const PrintingDialog = (props: Props) => {
         }
     })
 
+
+
+
     const [selectedRuns, setselectedRuns] = useState(runsAndHeights)
 
     const [listType, setlistType] = useState(ListType.participant)
+
+    useEffect(() => {
+        /*Unselect all */
+        const newRuns = selectedRuns.map((runAndHeight) => {
+            const newHeights = runAndHeight.heights.map((heights) => {
+                return { height: heights.height, selected: false }
+            })
+            return { run: runAndHeight.run, heights: newHeights }
+        })
+        setselectedRuns(newRuns)
+    }, [listType])
 
     const isRunInterChecked = (run: Run) => {
         const check = selectedRuns.find((runAndHeight) => runAndHeight.run === run)?.heights.find((heights) => heights.selected === true)
@@ -288,68 +302,70 @@ const PrintingDialog = (props: Props) => {
                     <Stack direction="row" gap={2} flexWrap="wrap" >
                         {runs.map((run) => {
                             return (
-                                <Paper className={style.padding} elevation={5}>
-                                    <Stack direction="column">
-                                        <FormControlLabel
-                                            label={classToString(run)}
-                                            control={
-                                                <Checkbox
-                                                    checked={isRunChecked(run)}
-                                                    indeterminate={isRunInterChecked(run) && !isRunChecked(run)}
-                                                    onChange={() => {
-                                                        /*If not checked check all, if inter checked check all, if all checked uncheck all*/
-                                                        const newRuns = selectedRuns.map((runAndHeight) => {
-                                                            if (runAndHeight.run === run) {
-                                                                const newHeights = runAndHeight.heights.map((heights) => {
-                                                                    if (isRunChecked(run)) {
-                                                                        return { height: heights.height, selected: false }
-                                                                    } else {
-                                                                        return { height: heights.height, selected: true }
-                                                                    }
-                                                                })
-                                                                return { run: run, heights: newHeights }
-                                                            } else {
-                                                                return runAndHeight
-                                                            }
-                                                        })
-                                                        setselectedRuns(newRuns)
-                                                    }}
-                                                />
-                                            }
-                                        />
-                                        {heights.map((height) => {
-                                            return (
-                                                <Stack direction="row">
-                                                    <Spacer horizontal={20} />
-                                                    <FormControlLabel
-                                                        label={sizeToString(height)}
-                                                        control={<Checkbox checked={
-                                                            selectedRuns.find((runAndHeight) => runAndHeight.run === run)?.heights.find((heights) => heights.height === height)?.selected
-                                                        }
-                                                            onChange={(value) => {
-                                                                const newRuns = selectedRuns.map((runAndHeight) => {
-                                                                    if (runAndHeight.run === run) {
-                                                                        const newHeights = runAndHeight.heights.map((heights) => {
-                                                                            if (heights.height === height) {
-                                                                                return { height: heights.height, selected: value.target.checked }
-                                                                            } else {
-                                                                                return heights
-                                                                            }
-                                                                        })
-                                                                        return { run: run, heights: newHeights }
-                                                                    } else {
-                                                                        return runAndHeight
-                                                                    }
-                                                                })
-                                                                setselectedRuns(newRuns)
-                                                            }}
-                                                        />}
+                                <Grow in={listType !== ListType.sticker || getRunCategory(run) == RunCategory.A} unmountOnExit >
+                                    <Paper className={style.padding} elevation={5}>
+                                        <Stack direction="column">
+                                            <FormControlLabel
+                                                label={classToString(run)}
+                                                control={
+                                                    <Checkbox
+                                                        checked={isRunChecked(run)}
+                                                        indeterminate={isRunInterChecked(run) && !isRunChecked(run)}
+                                                        onChange={() => {
+                                                            /*If not checked check all, if inter checked check all, if all checked uncheck all*/
+                                                            const newRuns = selectedRuns.map((runAndHeight) => {
+                                                                if (runAndHeight.run === run) {
+                                                                    const newHeights = runAndHeight.heights.map((heights) => {
+                                                                        if (isRunChecked(run)) {
+                                                                            return { height: heights.height, selected: false }
+                                                                        } else {
+                                                                            return { height: heights.height, selected: true }
+                                                                        }
+                                                                    })
+                                                                    return { run: run, heights: newHeights }
+                                                                } else {
+                                                                    return runAndHeight
+                                                                }
+                                                            })
+                                                            setselectedRuns(newRuns)
+                                                        }}
                                                     />
-                                                </Stack>
-                                            )
-                                        })}
-                                    </Stack >
-                                </Paper>
+                                                }
+                                            />
+                                            {heights.map((height) => {
+                                                return (
+                                                    <Stack direction="row">
+                                                        <Spacer horizontal={20} />
+                                                        <FormControlLabel
+                                                            label={sizeToString(height)}
+                                                            control={<Checkbox checked={
+                                                                selectedRuns.find((runAndHeight) => runAndHeight.run === run)?.heights.find((heights) => heights.height === height)?.selected
+                                                            }
+                                                                onChange={(value) => {
+                                                                    const newRuns = selectedRuns.map((runAndHeight) => {
+                                                                        if (runAndHeight.run === run) {
+                                                                            const newHeights = runAndHeight.heights.map((heights) => {
+                                                                                if (heights.height === height) {
+                                                                                    return { height: heights.height, selected: value.target.checked }
+                                                                                } else {
+                                                                                    return heights
+                                                                                }
+                                                                            })
+                                                                            return { run: run, heights: newHeights }
+                                                                        } else {
+                                                                            return runAndHeight
+                                                                        }
+                                                                    })
+                                                                    setselectedRuns(newRuns)
+                                                                }}
+                                                            />}
+                                                        />
+                                                    </Stack>
+                                                )
+                                            })}
+                                        </Stack >
+                                    </Paper>
+                                </Grow>
                             )
                         }
 

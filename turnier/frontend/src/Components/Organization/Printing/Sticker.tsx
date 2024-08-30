@@ -48,12 +48,12 @@ const Sticker = (props: Props) => {
 
             <Stack className={style.tableContainer} >
                 <Table size="small" className={style.stickerTable} sx={{ '& .MuiTableCell-root': { fontSize: '4mm' } }}>
-                    <TableHead>
-                        <TableRow style={{ backgroundColor: '#dddddd' }}>
+                    <TableHead className={style.tableRow}>
+                        <TableRow style={{ backgroundColor: '#dddddd' }} className={style.tableRow}>
                             <TableCell>Prüfung</TableCell>
                             <TableCell>Zeit</TableCell>
                             <TableCell>m/s</TableCell>
-                            <TableCell>Fehler</TableCell>
+                            <TableCell>PF</TableCell>
                             <TableCell>V</TableCell>
                             <TableCell>ZF</TableCell>
                             <TableCell>GF</TableCell>
@@ -62,7 +62,7 @@ const Sticker = (props: Props) => {
                             <TableCell>Kombi</TableCell>
                         </TableRow>
                     </TableHead>
-                    <TableRow >
+                    <TableRow className={style.tableRow}>
                         <TableCell>FCI A3 Intermediate</TableCell>
                         <TableCell>{runTimeToString(props.infos.finalResult.resultA.time)}</TableCell>
                         <TableCell>{checkDis(timeA, props.infos.finalResult.resultA.speed.toFixed(2))}</TableCell>
@@ -76,7 +76,7 @@ const Sticker = (props: Props) => {
                             {props.infos.finalResult.kombi.kombi > 0 ? `${props.infos.finalResult.kombi.kombi}/${props.infos.finalResult.resultA.numberofparticipants}` : <CancelIcon />}
                         </TableCell>
                     </TableRow>
-                    <TableRow >
+                    <TableRow className={style.tableRow}>
                         <TableCell>FCI J3 Intermediate</TableCell>
                         <TableCell>{runTimeToString(props.infos.finalResult.resultJ.time)}</TableCell>
                         <TableCell>{checkDis(timeJ, props.infos.finalResult.resultJ.speed.toFixed(2))}</TableCell>

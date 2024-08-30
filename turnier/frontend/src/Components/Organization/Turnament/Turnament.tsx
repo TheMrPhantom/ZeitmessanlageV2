@@ -9,7 +9,7 @@ import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useParams } from 'react-router-dom'
 import { dateToURLString } from '../../Common/StaticFunctions'
-import { changeDate, changeJudge, changeLength, changeSpeed, changeTurnamentName, createOrganization, loadOrganization } from '../../../Actions/SampleAction'
+import { changeDate, changeJudge, changeLength, changeSpeed, changeTurnamentName, clearPrints, createOrganization, loadOrganization } from '../../../Actions/SampleAction'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider/LocalizationProvider'
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'
@@ -144,7 +144,7 @@ const Turnament = (props: Props) => {
                         <Stack className={style.infoBox} gap={2}>
                             <Typography variant='h5'>Listen Drucken</Typography>
                             <Button variant='outlined'
-                                onClick={() => setprintDialogOpen(true)}
+                                onClick={() => { dispatch(clearPrints()); setprintDialogOpen(true) }}
                             >Auswählen</Button>
                         </Stack>
                     </Stack>
