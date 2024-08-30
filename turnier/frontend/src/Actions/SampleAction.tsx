@@ -1,4 +1,4 @@
-import { ResultToPrint } from "../Reducer/CommonReducer"
+import { ParticipantToPrint, ResultToPrint } from "../Reducer/CommonReducer"
 import { Organization, Participant, Result, Run, Size, Turnament } from "../types/ResponseTypes"
 
 export const createOrganization = (org: Organization) => {
@@ -89,5 +89,18 @@ export const addPrintResult = (results: ResultToPrint) => {
     return {
         type: "ADD_PRINT_RESULT",
         payload: results
+    }
+}
+
+export const addPrintParticipant = (participants: ParticipantToPrint) => {
+    return {
+        type: "ADD_PRINT_PARTICIPANT",
+        payload: participants
+    }
+}
+
+export const clearPrints = () => {
+    return {
+        type: "CLEAR_PRINTS"
     }
 }

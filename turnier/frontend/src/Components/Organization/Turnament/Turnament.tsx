@@ -76,7 +76,6 @@ const Turnament = (props: Props) => {
             })
         }
     })
-    console.log(rankings)
 
     return (
         <>

@@ -18,7 +18,8 @@ const initialState: CommonReducerType = {
         message: "",
         type: defaultAlertType
     },
-    resultsToPrint: []
+    resultsToPrint: [],
+    participantspToPrint: []
 }
 
 export type CommonReducerType = {
@@ -32,6 +33,7 @@ export type CommonReducerType = {
         type: AlertColor
     }
     resultsToPrint: ResultToPrint
+    participantspToPrint: ParticipantToPrint
 }
 
 export type ResultToPrint = Array<{
@@ -40,6 +42,12 @@ export type ResultToPrint = Array<{
     length: number,
     standardTime: number
     results: Array<{ participant: Participant, result: Result, timeFaults: number }>
+}>
+
+export type ParticipantToPrint = Array<{
+    run: Run,
+    size: Size,
+    participants: Participant[]
 }>
 
 const reducer = (state = initialState, { type, payload }: any) => {
@@ -136,6 +144,13 @@ const reducer = (state = initialState, { type, payload }: any) => {
             return newState
         case "ADD_PRINT_RESULT":
             newState.resultsToPrint = payload
+            return newState
+        case "ADD_PRINT_PARTICIPANT":
+            newState.participantspToPrint = payload
+            return newState
+        case "CLEAR_PRINTS":
+            newState.resultsToPrint = []
+            newState.participantspToPrint = []
             return newState
         default:
             return state

@@ -3,9 +3,10 @@ import React from 'react'
 import style from './print.module.scss'
 import { Run, Size } from '../../../types/ResponseTypes'
 import { classToString, runClassToString, sizeToString } from '../../Common/StaticFunctionsTyped'
+import { ListType, listTypeToString } from '../Turnament/PrintingDialog'
 
 type Props = {
-    type: "Ergebnisliste" | "Startliste",
+    type: ListType,
     run: Run,
     size: Size
 }
@@ -13,7 +14,7 @@ type Props = {
 const PageType = (props: Props) => {
     return (
         <Stack className={style.pagetypeContainer} justifyContent="center" alignItems="center">
-            <Typography variant='h5'> {props.type} {classToString(props.run)} - {sizeToString(props.size)}</Typography>
+            <Typography variant='h5'> {listTypeToString(props.type)} {classToString(props.run)} - {sizeToString(props.size)}</Typography>
         </Stack>
     )
 }

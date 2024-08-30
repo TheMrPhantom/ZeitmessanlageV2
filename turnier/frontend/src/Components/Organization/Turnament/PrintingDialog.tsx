@@ -5,15 +5,26 @@ import { Participant, Result, Run, Size, SkillLevel } from '../../../types/Respo
 import Spacer from '../../Common/Spacer'
 import style from './turnament.module.scss'
 import { useDispatch } from 'react-redux'
-import { addPrintResult } from '../../../Actions/SampleAction'
+import { addPrintParticipant, addPrintResult } from '../../../Actions/SampleAction'
 import { useNavigate } from 'react-router-dom'
-import { ResultToPrint } from '../../../Reducer/CommonReducer'
+import { ParticipantToPrint, ResultToPrint } from '../../../Reducer/CommonReducer'
 import { el } from 'date-fns/locale'
 
 export enum ListType {
     result,
     participant,
     sticker
+}
+
+export const listTypeToString = (type: ListType) => {
+    switch (type) {
+        case ListType.participant:
+            return "Starterliste"
+        case ListType.result:
+            return "Ergebnisliste"
+        case ListType.sticker:
+            return "Klebeliste"
+    }
 }
 
 type Props = {
@@ -93,6 +104,24 @@ const PrintingDialog = (props: Props) => {
         return toPrint
     }
 
+    const participantsList = () => {
+        const toPrint: ParticipantToPrint = []
+        selectedRuns.forEach((runAndHeight) => {
+            runAndHeight.heights.forEach((height) => {
+                if (height.selected) {
+                    /*Get all participants for this run and height*/
+                    const participants = props.participants.filter((participant) => participant.class === runAndHeight.run / 2 && participant.size === height.height).sort((a, b) => a.sorting - b.sorting)
+                    toPrint.push({
+                        run: runAndHeight.run,
+                        size: height.height,
+                        participants: participants
+                    })
+                }
+            })
+        })
+        return toPrint
+    }
+
     return (
         <Dialog open={props.isOpen} onClose={props.close} sx={{ zIndex: 20000000 }} >
             <DialogTitle>Listen drucken</DialogTitle>
@@ -109,9 +138,9 @@ const PrintingDialog = (props: Props) => {
                             value={listType}
                             onChange={(e) => { setlistType(parseInt(e.target.value)) }}
                         >
-                            <FormControlLabel value={ListType.participant} control={<Radio />} label="Starterliste(n)" />
-                            <FormControlLabel value={ListType.result} control={<Radio />} label="Ergebnisliste(n)" />
-                            <FormControlLabel value={ListType.sticker} control={<Radio />} label="Klebeliste(n)" />
+                            <FormControlLabel value={ListType.participant} control={<Radio />} label={listTypeToString(ListType.participant)} />
+                            <FormControlLabel value={ListType.result} control={<Radio />} label={listTypeToString(ListType.result)} />
+                            <FormControlLabel value={ListType.sticker} control={<Radio />} label={listTypeToString(ListType.sticker)} />
 
                         </RadioGroup>
                     </FormControl>
@@ -212,7 +241,9 @@ const PrintingDialog = (props: Props) => {
                     <Button onClick={props.close} variant='outlined'>Abbrechen</Button>
                     <Button onClick={() => {
                         if (listType === ListType.participant) {
-
+                            const toPrint = participantsList()
+                            dispatch(addPrintParticipant(toPrint))
+                            navigate("/o/hsf/2024-08-13/print")
                         } else if (listType === ListType.result) {
                             const toPrint = resultLists()
                             dispatch(addPrintResult(toPrint))

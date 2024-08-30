@@ -1,7 +1,9 @@
 @import "../../Common/variables.module.scss";
 
+$width: 210mm;
+
 .a4Page {
-    width: 210mm;
+    width: $width;
     height: 297mm;
     margin: 0;
     padding: $padding;
@@ -21,4 +23,16 @@
     -webkit-print-color-adjust: exact !important; /* Chrome, Safari 6 – 15.3, Edge */
     color-adjust: exact !important; /* Firefox 48 – 96 */
     print-color-adjust: exact !important; /* Firefox 97+, Safari 15.4+ */
+}
+
+.printInvisibleHeader {
+    padding: $padding;
+    margin: $padding;
+    width: $width;
+}
+
+@media print {
+    .printInvisibleHeader {
+        display: none;
+    }
 }
