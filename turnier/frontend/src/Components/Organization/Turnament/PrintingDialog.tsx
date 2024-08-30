@@ -8,6 +8,13 @@ import { useDispatch } from 'react-redux'
 import { addPrintResult } from '../../../Actions/SampleAction'
 import { useNavigate } from 'react-router-dom'
 import { ResultToPrint } from '../../../Reducer/CommonReducer'
+import { el } from 'date-fns/locale'
+
+export enum ListType {
+    result,
+    participant,
+    sticker
+}
 
 type Props = {
     rankings: {
@@ -24,6 +31,7 @@ type Props = {
             }[];
         }[];
     }[],
+    participants: Participant[],
     isOpen: boolean,
     close: () => void
 }
@@ -44,7 +52,7 @@ const PrintingDialog = (props: Props) => {
 
     const [selectedRuns, setselectedRuns] = useState(runsAndHeights)
 
-    const [listType, setlistType] = useState(0)
+    const [listType, setlistType] = useState(ListType.participant)
 
     const isRunInterChecked = (run: Run) => {
         const check = selectedRuns.find((runAndHeight) => runAndHeight.run === run)?.heights.find((heights) => heights.selected === true)
@@ -53,6 +61,36 @@ const PrintingDialog = (props: Props) => {
 
     const isRunChecked = (run: Run) => {
         return selectedRuns.find((runAndHeight) => runAndHeight.run === run)?.heights.filter((heights) => heights.selected === true).length === heights.length
+    }
+
+    const resultLists = () => {
+        const toPrint: ResultToPrint = []
+        selectedRuns.forEach((runAndHeight) => {
+            runAndHeight.heights.forEach((height) => {
+                if (height.selected) {
+                    const run = props.rankings.find((rank) => rank.run === runAndHeight.run)
+                    if (run) {
+                        const heightResults = run.heights.find((heights) => heights.height === height.height)
+                        if (heightResults) {
+                            toPrint.push({
+                                run: run.run,
+                                size: height.height,
+                                results: heightResults.results.map((result) => {
+                                    return {
+                                        participant: result.participant,
+                                        result: result.result,
+                                        timeFaults: result.timefaults
+                                    }
+                                }),
+                                length: run.length ? run.length : 0,
+                                standardTime: heightResults.stdTime
+                            })
+                        }
+                    }
+                }
+            })
+        })
+        return toPrint
     }
 
     return (
@@ -71,9 +109,9 @@ const PrintingDialog = (props: Props) => {
                             value={listType}
                             onChange={(e) => { setlistType(parseInt(e.target.value)) }}
                         >
-                            <FormControlLabel value={0} control={<Radio />} label="Starterliste(n)" />
-                            <FormControlLabel value={1} control={<Radio />} label="Ergebnisliste(n)" />
-                            <FormControlLabel value={2} control={<Radio />} label="Klebeliste(n)" />
+                            <FormControlLabel value={ListType.participant} control={<Radio />} label="Starterliste(n)" />
+                            <FormControlLabel value={ListType.result} control={<Radio />} label="Ergebnisliste(n)" />
+                            <FormControlLabel value={ListType.sticker} control={<Radio />} label="Klebeliste(n)" />
 
                         </RadioGroup>
                     </FormControl>
@@ -173,34 +211,16 @@ const PrintingDialog = (props: Props) => {
                 <Stack direction="row" justifyContent="space-between" className={style.dialogButtons}>
                     <Button onClick={props.close} variant='outlined'>Abbrechen</Button>
                     <Button onClick={() => {
-                        const toPrint: ResultToPrint = []
-                        selectedRuns.forEach((runAndHeight) => {
-                            runAndHeight.heights.forEach((height) => {
-                                if (height.selected) {
-                                    const run = props.rankings.find((rank) => rank.run === runAndHeight.run)
-                                    if (run) {
-                                        const heightResults = run.heights.find((heights) => heights.height === height.height)
-                                        if (heightResults) {
-                                            toPrint.push({
-                                                run: run.run,
-                                                size: height.height,
-                                                results: heightResults.results.map((result) => {
-                                                    return {
-                                                        participant: result.participant,
-                                                        result: result.result,
-                                                        timeFaults: result.timefaults
-                                                    }
-                                                }),
-                                                length: run.length ? run.length : 0,
-                                                standardTime: heightResults.stdTime
-                                            })
-                                        }
-                                    }
-                                }
-                            })
-                        })
-                        dispatch(addPrintResult(toPrint))
-                        navigate("/o/hsf/2024-08-13/print")
+                        if (listType === ListType.participant) {
+
+                        } else if (listType === ListType.result) {
+                            const toPrint = resultLists()
+                            dispatch(addPrintResult(toPrint))
+                            navigate("/o/hsf/2024-08-13/print")
+                        } else if (listType === ListType.sticker) {
+
+                        }
+
                         props.close()
                     }} variant='contained'>Generieren</Button>
                 </Stack>

@@ -228,7 +228,11 @@ const Turnament = (props: Props) => {
                     </Stack>
                 </Stack>
             </Stack>
-            <PrintingDialog rankings={rankings} isOpen={printDialogOpen} close={() => { setprintDialogOpen(false) }} />
+            <PrintingDialog participants={allParticipants ? allParticipants : []}
+                rankings={rankings}
+                isOpen={printDialogOpen}
+                close={() => { setprintDialogOpen(false) }}
+            />
         </>
     )
 }
