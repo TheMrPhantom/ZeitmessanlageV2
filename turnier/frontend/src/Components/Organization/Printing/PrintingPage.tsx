@@ -2,16 +2,19 @@ import React, { useEffect, useState } from 'react'
 import style from './print.module.scss'
 import PageHeader from './PageHeader'
 import PageType from './PrintType'
-import { Stack, Table, TableCell, TableHead, TableRow } from '@mui/material'
+import { Stack, Table, TableCell, TableHead, TableRow, Typography } from '@mui/material'
 import ParcoursInfo from './ParcoursInfo'
 import { Table as TableType } from './Printing'
 import { maximumTime, runTimeToString } from '../../Common/StaticFunctionsTyped'
 import { ta } from 'date-fns/locale'
 import { ListType, listTypeToString } from '../Turnament/PrintingDialog'
+import { StickerInfo } from '../../../types/ResponseTypes'
+import Sticker from './Sticker'
 
 
 type Props = {
-    tables: TableType[],
+    tables?: TableType[],
+    stickers?: StickerInfo[],
     type: ListType
 }
 
@@ -60,7 +63,7 @@ const PrintingPage = (props: Props) => {
                 <Stack className={style.a4Page} gap={2}>
                     <PageHeader />
 
-                    {props.tables.map((element) => {
+                    {props.tables?.map((element) => {
                         return <>
                             <div>
                                 <PageType type={props.type} run={element.header.run} size={element.header.size} />
@@ -109,7 +112,7 @@ const PrintingPage = (props: Props) => {
                 <Stack className={style.a4Page} gap={2}>
                     <PageHeader />
 
-                    {props.tables.map((element) => {
+                    {props.tables!.map((element) => {
                         return <>
                             <div>
                                 <PageType type={props.type} run={element.header.run} size={element.header.size} />
@@ -143,6 +146,10 @@ const PrintingPage = (props: Props) => {
                 </Stack>
             </>
         )
+    } else if (props.type === ListType.sticker) {
+        return <>{props.stickers!.map((element) => {
+            return <Sticker infos={element} />
+        })}</>
     }
 
     return <></>

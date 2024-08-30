@@ -1,5 +1,5 @@
 import { ParticipantToPrint, ResultToPrint } from "../Reducer/CommonReducer"
-import { Organization, Participant, Result, Run, Size, Turnament } from "../types/ResponseTypes"
+import { Organization, Participant, Result, Run, Size, StickerInfo, Turnament } from "../types/ResponseTypes"
 
 export const createOrganization = (org: Organization) => {
     return {
@@ -96,6 +96,13 @@ export const addPrintParticipant = (participants: ParticipantToPrint) => {
     return {
         type: "ADD_PRINT_PARTICIPANT",
         payload: participants
+    }
+}
+
+export const addPrintSticker = (stickers: StickerInfo[]) => {
+    return {
+        type: "ADD_PRINT_STICKER",
+        payload: stickers
     }
 }
 

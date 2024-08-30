@@ -1,5 +1,5 @@
 import { createOrganization, loadOrganization } from "../../Actions/SampleAction";
-import { Member, Organization, Participant, Result, Run, SkillLevel, Size, RunCategory } from "../../types/ResponseTypes"
+import { Member, Organization, Participant, Result, Run, SkillLevel, Size, RunCategory, KombiResult, ExtendedResult } from "../../types/ResponseTypes"
 import { CommonReducerType } from '../../Reducer/CommonReducer';
 import { faultFactor, maxTimeFactorA0A1A2, maxTimeFactorA3, minSpeedA3, minSpeedJ3, offsetFactor, refusalFactor } from "./AgilityPO";
 
@@ -236,31 +236,97 @@ export const maximumTime: (run: Run, standardTime: number) => number = (run: Run
     }
 }
 
-export const getRanking = (participants: Participant[] | undefined, run: Run, calculatedStandardTime: number, size?: Size) => {
-    if (!participants) { return [] }
-    //Filter out participants without result
-    const filteredParticipants = participants.filter(p => {
-        const result = getResultFromParticipant(run, p);
-        return result.time !== -2 && p.class === runToRunClass(run) && (p.size === size || size === undefined);
-    });
+export const getRanking: (participants: Participant[] | undefined, run: Run, calculatedStandardTime: number, size?: Size) => ExtendedResult[] =
+    (participants: Participant[] | undefined, run: Run, calculatedStandardTime: number, size?: Size) => {
+        if (!participants) { return [] }
+        //Filter out participants without result
+        const filteredParticipants = participants.filter(p => {
+            const result = getResultFromParticipant(run, p);
+            return result.time !== -2 && p.class === runToRunClass(run) && (p.size === size || size === undefined);
+        });
 
-    return filteredParticipants?.sort((a, b) => {
-        const resultA = getResultFromParticipant(run, a)
-        const resultB = getResultFromParticipant(run, b)
-        const totalFaultsA = getTotalFaults(resultA, calculatedStandardTime)
-        const totalFaultsB = getTotalFaults(resultB, calculatedStandardTime)
-        if (resultA.time === -1) {
-            return 1
-        } if (resultB.time === -1) {
-            return -1
-        }
-        if (totalFaultsA === totalFaultsB) {
-            return resultA.time - resultB.time
-        }
-        return totalFaultsA - totalFaultsB
-    }).map((p, index) => {
-        const result = getResultFromParticipant(run, p)
+        return filteredParticipants?.sort((a, b) => {
+            const resultA = getResultFromParticipant(run, a)
+            const resultB = getResultFromParticipant(run, b)
+            const totalFaultsA = getTotalFaults(resultA, calculatedStandardTime)
+            const totalFaultsB = getTotalFaults(resultB, calculatedStandardTime)
+            if (resultA.time === -1) {
+                return 1
+            } if (resultB.time === -1) {
+                return -1
+            }
+            if (totalFaultsA === totalFaultsB) {
+                return resultA.time - resultB.time
+            }
+            return totalFaultsA - totalFaultsB
+        }).map((p, index) => {
+            const result = getResultFromParticipant(run, p)
 
-        return { result: result, participant: p, rank: index + 1, timefaults: getTimeFaults(result, calculatedStandardTime) }
-    })
+            return { result: result, participant: p, rank: result.time !== -1 ? index + 1 : -1, timefaults: getTimeFaults(result, calculatedStandardTime) }
+        })
+    }
+
+export const getKombiRanking: (participants: Participant[], skill: SkillLevel, size: Size, standardTimeA: number, standardTimeJ: number) => KombiResult[] =
+    (participants: Participant[], skill: SkillLevel, size: Size, standardTimeA: number, standardTimeJ: number) => {
+
+        /* Initialize array of participants with their combi results, initially all -1 */
+        const combiResults = participants.map(p => {
+            return {
+                participant: p,
+                totalFaults: 0,
+                totalTime: 0,
+                kombi: -1
+            }
+        })
+
+        //Filter out participants who have results in both A and J
+        const filteredParticipants = participants.filter(p => {
+            const resultA = getResultFromParticipant(skill * 2, p)
+            const resultJ = getResultFromParticipant(skill * 2 + 1, p)
+            return resultA.time > 0 && resultJ.time > 0 && p.size === size && p.class === skill
+        });
+
+        /* Calculate total faults and total time for each participant */
+        filteredParticipants.forEach(p => {
+            const resultA = getResultFromParticipant(skill * 2, p)
+            const resultJ = getResultFromParticipant(skill * 2 + 1, p)
+
+            combiResults.find(c => c.participant === p)!.totalFaults = getTotalFaults(resultA, standardTimeA) + getTotalFaults(resultJ, standardTimeJ)
+            combiResults.find(c => c.participant === p)!.totalTime = resultA.time + resultJ.time
+        })
+
+        /* Sort participants by total faults and then total time */
+        combiResults.sort((a, b) => {
+            if (a.totalFaults === b.totalFaults) {
+                return a.totalTime - b.totalTime
+            }
+            return a.totalFaults - b.totalFaults
+        })
+
+        /* Assign ranks to participants */
+        combiResults.forEach((c, index) => {
+            c.kombi = index + 1
+        })
+
+        return combiResults
+    }
+
+export const getRating = (time: number, totalFaults: number) => {
+    /* V SG G OB DIS */
+    //https://www.vdh.de/fileadmin/media/hundesport/agility/2018/Ordnung/VDH_TEil_FCI-PO_Agility_2018_2018-05-17_V-6_HP.pdf
+
+    if (time === -1) {
+        return "DIS"
+    }
+
+    if (totalFaults < 6) {
+        return "V"
+    } else if (totalFaults < 16) {
+        return "SG"
+    }
+    else if (totalFaults < 26) {
+        return "G"
+    } else {
+        return "OB"
+    }
 }

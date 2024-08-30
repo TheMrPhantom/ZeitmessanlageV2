@@ -56,6 +56,13 @@ export type Result = {
     class: Run,
 }
 
+export type ExtendedResult = {
+    result: Result;
+    participant: Participant;
+    rank: number;
+    timefaults: number;
+}
+
 export type Turnament = {
     date: Date,
     judge: string,
@@ -101,5 +108,12 @@ export type StickerInfo = {
 export type FinalResult = {
     resultA: Result & { place: number, size: Size, speed: number, timefaults: number, numberofparticipants: number },
     resultJ: Result & { place: number, size: Size, speed: number, timefaults: number, numberofparticipants: number },
-    kombi: number
+    kombi: KombiResult
+}
+
+export type KombiResult = {
+    participant: Participant;
+    totalFaults: number;
+    totalTime: number;
+    kombi: number;
 }

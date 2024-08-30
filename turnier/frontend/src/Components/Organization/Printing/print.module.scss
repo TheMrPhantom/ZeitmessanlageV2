@@ -2,6 +2,52 @@
 
 $width: 210mm;
 
+.sticker {
+    width: 190mm;
+    height: 15mm;
+}
+
+.turnamentInfo {
+    //transform: scale(0.6);
+    //transform-origin: top left;
+    white-space: nowrap;
+    overflow: hidden;
+    width: 47mm;
+}
+
+.turnamentText {
+    transform: scale(0.58);
+    transform-origin: top left;
+}
+
+.tableContainer {
+    width: 110mm;
+    position: relative;
+}
+
+.judgeContainer {
+    width: calc(190mm - 110mm - 47mm - 4mm);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+.stickerTable {
+    transform: scale(0.49);
+    transform-origin: top left;
+    white-space: nowrap;
+    height: 12mm;
+}
+
+.starterText {
+    padding-left: 3.5mm;
+    width: 150mm;
+    transform: scale(0.58);
+    transform-origin: bottom left;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+}
+
 .a4Page {
     width: $width;
     height: 297mm;

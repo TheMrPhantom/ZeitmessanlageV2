@@ -1,14 +1,16 @@
 import { Button, Checkbox, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControl, FormControlLabel, FormLabel, InputLabel, MenuItem, Paper, Radio, RadioGroup, Select, Stack } from '@mui/material'
 import React, { useState } from 'react'
-import { classToString, runClassToString, sizeToString } from '../../Common/StaticFunctionsTyped'
-import { Participant, Result, Run, Size, SkillLevel } from '../../../types/ResponseTypes'
+import { classToString, getKombiRanking, runClassToString, sizeToString } from '../../Common/StaticFunctionsTyped'
+import { ExtendedResult, FinalResult, KombiResult, Organization, Participant, Result, Run, Size, SkillLevel, StickerInfo, Turnament } from '../../../types/ResponseTypes'
 import Spacer from '../../Common/Spacer'
 import style from './turnament.module.scss'
 import { useDispatch } from 'react-redux'
-import { addPrintParticipant, addPrintResult } from '../../../Actions/SampleAction'
+import { addPrintParticipant, addPrintResult, addPrintSticker } from '../../../Actions/SampleAction'
 import { useNavigate } from 'react-router-dom'
 import { ParticipantToPrint, ResultToPrint } from '../../../Reducer/CommonReducer'
 import { el } from 'date-fns/locale'
+import { assert } from 'console'
+import { minSpeedA3, minSpeedJ3 } from '../../Common/AgilityPO'
 
 export enum ListType {
     result,
@@ -34,15 +36,12 @@ type Props = {
         heights: {
             height: Size;
             stdTime: number;
-            results: {
-                result: Result;
-                participant: Participant;
-                rank: number;
-                timefaults: number;
-            }[];
+            results: ExtendedResult[];
         }[];
     }[],
     participants: Participant[],
+    organization: Organization,
+    turnament: Turnament,
     isOpen: boolean,
     close: () => void
 }
@@ -119,6 +118,128 @@ const PrintingDialog = (props: Props) => {
                 }
             })
         })
+        return toPrint
+    }
+
+    const stickerList = () => {
+
+        /*Get a list of the selected classes and sizes*/
+        const selectedClasses: SkillLevel[] = []
+        const selectedSizes: Size[] = []
+
+        selectedRuns.forEach((runAndHeight) => {
+            runAndHeight.heights.forEach((height) => {
+                if (height.selected) {
+                    if (!selectedClasses.includes(runAndHeight.run / 2)) {
+                        selectedClasses.push(runAndHeight.run / 2)
+                    }
+                    if (!selectedSizes.includes(height.height)) {
+                        selectedSizes.push(height.height)
+                    }
+                }
+            })
+        })
+
+
+        const rankings = props.rankings
+        const toPrint: StickerInfo[] = []
+
+        /*Get all participants for the selected classes and sizes*/
+        const participants = props.participants.filter((participant) => selectedClasses.includes(participant.class) && selectedSizes.includes(participant.size))
+
+
+        /* For each participant calculate the sticker info */
+        participants.forEach((participant) => {
+            const organization = props.organization
+            const turnament = props.turnament
+            const particpant = participant
+
+            /*Get the rankings of the two runs*/
+            const runA = rankings.find((rank) => rank.run === participant.class * 2)?.heights.find((height) => height.height === participant.size)?.results
+            const runJ = rankings.find((rank) => rank.run === participant.class * 2 + 1)?.heights.find((height) => height.height === participant.size)?.results
+
+            const resultA = runA?.find((result) => result.participant === participant)
+            const resultJ = runJ?.find((result) => result.participant === participant)
+
+            const placeA = resultA?.rank
+            const placeJ = resultJ?.rank
+
+            const size = participant.size
+
+            /* Get parcours length of the two parcours */
+            const lengthA = rankings.find((rank) => rank.run === participant.class * 2)?.length
+            const lengthJ = rankings.find((rank) => rank.run === participant.class * 2 + 1)?.length
+
+            /* Calculate speeds of the two runs */
+            const speedA = lengthA ? lengthA / ((resultA?.result) ? (resultA?.result.time) : 1) : 0
+            const speedJ = lengthJ ? lengthJ / ((resultJ?.result) ? (resultJ?.result.time) : 1) : 0
+
+            /* Standard time of the two runs */
+            const stdTimeA = rankings.find((rank) => rank.run === participant.class * 2)?.heights.find((height) => height.height === participant.size)?.stdTime
+            const stdTimeJ = rankings.find((rank) => rank.run === participant.class * 2 + 1)?.heights.find((height) => height.height === participant.size)?.stdTime
+
+            /* Timefaults of the two runs */
+            const timeFaultsA = resultA?.timefaults
+            const timeFaultsJ = resultJ?.timefaults
+
+            /* Number of participants in the two runs */
+            const numberOfParticipantsA = runA?.length
+            const numberOfParticipantsJ = runJ?.length
+
+            /* Get combined results */
+            const kombiRankings = getKombiRanking(participants,
+                participant.class,
+                participant.size,
+                stdTimeA ? stdTimeA : minSpeedA3,
+                stdTimeJ ? stdTimeJ : minSpeedJ3)
+
+
+
+            const kombiResult = kombiRankings.find((kombi) => kombi.participant === participant)
+
+            /* Create the sticker info */
+            const stickerInfo: StickerInfo = {
+                organization: organization,
+                turnament: turnament,
+                participant: participant,
+                finalResult: {
+                    resultA: {
+                        time: resultA?.result.time ? resultA?.result.time : 0,
+                        faults: resultA?.result.faults ? resultA?.result.faults : 0,
+                        refusals: resultA?.result.refusals ? resultA?.result.refusals : 0,
+                        class: participant.class * 2,
+                        place: placeA ? placeA : 0,
+                        size: size,
+                        speed: speedA,
+                        timefaults: timeFaultsA ? timeFaultsA : 0,
+                        numberofparticipants: numberOfParticipantsA ? numberOfParticipantsA : 0
+                    },
+                    resultJ: {
+                        time: resultJ?.result.time ? resultJ?.result.time : 0,
+                        faults: resultJ?.result.faults ? resultJ?.result.faults : 0,
+                        refusals: resultJ?.result.refusals ? resultJ?.result.refusals : 0,
+                        class: participant.class * 2 + 1,
+                        place: placeJ ? placeJ : 0,
+                        size: size,
+                        speed: speedJ,
+                        timefaults: timeFaultsJ ? timeFaultsJ : 0,
+                        numberofparticipants: numberOfParticipantsJ ? numberOfParticipantsJ : 0
+                    },
+                    kombi: kombiResult ? kombiResult : {
+                        participant: participant,
+                        totalFaults: -1,
+                        totalTime: -1,
+                        kombi: -1
+                    }
+                }
+            }
+
+            toPrint.push(stickerInfo)
+        })
+
+        /* Sort stickerlist by startnumber */
+        toPrint.sort((a, b) => a.participant.startNumber - b.participant.startNumber)
+
         return toPrint
     }
 
@@ -249,7 +370,9 @@ const PrintingDialog = (props: Props) => {
                             dispatch(addPrintResult(toPrint))
                             navigate("/o/hsf/2024-08-13/print")
                         } else if (listType === ListType.sticker) {
-
+                            const toPrint = stickerList()
+                            dispatch(addPrintSticker(toPrint))
+                            navigate("/o/hsf/2024-08-13/print")
                         }
 
                         props.close()

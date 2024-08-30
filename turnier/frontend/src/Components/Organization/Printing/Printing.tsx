@@ -3,7 +3,7 @@ import PrintingPage from './PrintingPage'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '../../../Reducer/reducerCombiner'
-import { Participant, Result, Run, Size } from '../../../types/ResponseTypes';
+import { Participant, Result, Run, Size, StickerInfo } from '../../../types/ResponseTypes';
 import { clearPrints } from '../../../Actions/SampleAction';
 import { ListType } from '../Turnament/PrintingDialog';
 import Spacer from '../../Common/Spacer';
@@ -26,6 +26,7 @@ const Printing = (props: Props) => {
     const rowHeight = 10;
     const footerHeight = rowHeight;
     const maxheight = 297;
+    const stickerHeight = 15;
 
     const common: CommonReducerType = useSelector((state: RootState) => state.common);
     const dispatch = useDispatch()
@@ -38,8 +39,11 @@ const Printing = (props: Props) => {
         let currentPage: Page = []
         const results = common.resultsToPrint
         const participants = common.participantspToPrint
+        const sticker = common.stickersToPrint
+
         let currentTable: Table | null = null;
         let type = ListType.result
+        const stickerLists: StickerInfo[][] = []
 
         if (results.length > 0) {
             type = ListType.result
@@ -163,11 +167,33 @@ const Printing = (props: Props) => {
 
             })
             pages.push(currentPage)
+        } else if (sticker.length > 0) {
+            let pageHeight = 0
+            let stickerPage: StickerInfo[] = []
+
+            sticker.forEach((stickerInfo) => {
+                if (pageHeight + stickerHeight < maxheight) {
+                    stickerPage.push(stickerInfo)
+                    pageHeight += stickerHeight
+                } else {
+                    stickerLists.push(stickerPage)
+                    stickerPage = []
+                    pageHeight = 0
+                }
+            })
+            if (stickerPage.length > 0) {
+                stickerLists.push(stickerPage)
+            }
         }
 
         //dispatch(clearPrints())
 
-        return pages.map((page) => <PrintingPage tables={page} type={type} />)
+        if (pages.length > 0) {
+            return pages.map((page) => <PrintingPage tables={page} type={type} />)
+        } else if (sticker.length > 0) {
+            return stickerLists.map((stickerPage) => <PrintingPage stickers={stickerPage} type={ListType.sticker} />)
+        }
+
 
     }
 
