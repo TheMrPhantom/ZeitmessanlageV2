@@ -12,6 +12,7 @@ const PageHeader = (props: Props) => {
                     src={`/Logo-Simple-black.svg`}
                     className={style.logo}
                     loading="eager"
+                    alt="Logo"
                 />
                 <Typography align="center" className={style.text}>
                     DogDog Zeitmessung

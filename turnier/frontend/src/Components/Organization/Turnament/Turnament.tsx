@@ -1,8 +1,8 @@
 import { Button, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import style from './turnament.module.scss'
 import { Organization, Run, Size } from '../../../types/ResponseTypes'
-import { classToString, getNumberOfParticipantsForRun, getNumberOfParticipantsForRunWithResult, getRanking, sizeToString, standardTime } from '../../Common/StaticFunctionsTyped'
+import { classToString, getNumberOfParticipantsForRun, getNumberOfParticipantsForRunWithResult, getRanking, sizeToString, standardTime, startSerial } from '../../Common/StaticFunctionsTyped'
 
 import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
@@ -16,6 +16,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'
 import { de } from 'date-fns/locale'
 import PrintingDialog from './PrintingDialog'
 import { minSpeedA3 } from '../../Common/AgilityPO'
+import { openErrorToast, openToast } from '../../../Actions/CommonAction'
 
 type Props = {}
 
@@ -226,14 +227,16 @@ const Turnament = (props: Props) => {
                         </TableContainer>
                     </Stack>
                 </Stack>
-            </Stack>
-            {turnament ? <PrintingDialog participants={allParticipants ? allParticipants : []}
-                rankings={rankings}
-                isOpen={printDialogOpen}
-                organization={common.organization}
-                turnament={turnament}
-                close={() => { setprintDialogOpen(false) }}
-            /> : <></>}
+            </Stack >
+            {
+                turnament ? <PrintingDialog participants={allParticipants ? allParticipants : []}
+                    rankings={rankings}
+                    isOpen={printDialogOpen}
+                    organization={common.organization
+                    }
+                    turnament={turnament}
+                    close={() => { setprintDialogOpen(false) }}
+                /> : <></ >}
 
         </>
     )

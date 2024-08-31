@@ -2,7 +2,7 @@ import { Person, SettingsOutlined } from '@mui/icons-material'
 import { AppBar, Button, IconButton, Slide, Stack, Toolbar, Typography } from '@mui/material'
 import React, { useEffect, useState } from 'react'
 import Spacer from '../Spacer'
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { doPostRequest } from '../StaticFunctions';
@@ -41,7 +41,6 @@ const TopBar = (props: Props) => {
     const [drawerOpen, setdrawerOpen] = useState(true)
     const [drawerVisible, setdrawerVisible] = useState(true)
     const [aboutDialogOpen, setaboutDialogOpen] = useState(false)
-    const params = useParams()
 
     const showDrawerButton = () => {
         if (location.pathname.startsWith("/admin")) {
@@ -244,7 +243,7 @@ const TopBar = (props: Props) => {
                                 <img
                                     src={`/Logo-Simple.svg`}
                                     height={50}
-
+                                    alt='Logo'
                                     loading="lazy"
                                 />
                                 {window.globalTS.HOME_BUTTON}

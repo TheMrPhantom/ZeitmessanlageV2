@@ -339,3 +339,61 @@ export const getRating = (time: number, totalFaults: number) => {
         return "OB"
     }
 }
+
+export const openSerial = async (setSerial: (port: any) => void) => {
+    let port = await (navigator as any).serial.requestPort();
+
+    await port.open({ baudRate: 115200, bufferSize: 1000000 });
+
+    setSerial(port)
+}
+
+export const startSerial = async (onmessage: (message: string) => void, onconnected: () => void, ondisconnect: () => void) => {
+    let port
+    let message = ""
+    try {
+        try {
+            port = await (navigator as any).serial.requestPort();
+
+            await port.open({ baudRate: 115200, bufferSize: 1000000 });
+            // Listen to data coming from the serial device.
+
+            const textDecoderStream = new TextDecoderStream('utf-8');
+            const decodedStream = port.readable.pipeThrough(textDecoderStream);
+
+
+            const reader = decodedStream.getReader();
+
+            onconnected()
+            let { value, done } = await reader.read();
+            let activeMessage = false;
+            message = ""
+            while (!done) {
+                if (value.includes("$") && value.includes("#")) {
+                    onmessage(value.substring(value.indexOf("$") + 1, value.indexOf("#")))
+                } else if (value.includes("$")) {
+                    activeMessage = true;
+                    message += value.substring(value.indexOf("$") + 1);
+                } else if (value.includes("#")) {
+                    activeMessage = false;
+
+                    message += value.substring(0, value.indexOf("#"));
+                    onmessage(message)
+                    message = ""
+                }
+                if (activeMessage) {
+                    message += value
+                }
+                ({ value, done } = await reader.read());
+            }
+
+        } catch (e) {
+            console.log(e)
+            ondisconnect()
+            //dispatch(openToast({ message: "Die Verbindung zur Zeitmessanlage wurde unterbrochen, klicke auf verbinden Knopf", type: "error", headline: "Fehler mit Zeitmessanlage", duration: 15000 }))
+        }
+        //port.close()
+    } catch (e) {
+
+    }
+}

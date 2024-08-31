@@ -10,15 +10,23 @@ import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom'
-import { getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, getTotalFaults, loadPermanent, maximumTime, runTimeToString, runTimeToStringClock, standardTime, storePermanent } from '../../Common/StaticFunctionsTyped';
+import { getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, loadPermanent, maximumTime, runTimeToString, runTimeToStringClock, standardTime, startSerial, storePermanent } from '../../Common/StaticFunctionsTyped';
 import { dateToURLString, doPostRequest } from '../../Common/StaticFunctions';
 import { Run as RunType, SkillLevel, Participant, defaultParticipant, RunCategory } from '../../../types/ResponseTypes';
 import { changeParticipants } from '../../../Actions/SampleAction';
 import { minSpeedA3 } from '../../Common/AgilityPO';
 import { useCallback, useMemo } from 'react';
-import { time } from 'console';
 
-type Props = {}
+type Props = {
+    startSerial: () => void,
+    timeError: boolean,
+    connected: boolean,
+    setconnected: (value: boolean) => void
+    lastMessage: string | null
+    setlastMessage: (value: string | null) => void
+    timeMeasurementActive: boolean
+    settimeMeasurementActive: (value: boolean) => void
+}
 
 const Run = (props: Props) => {
     const common: CommonReducerType = useSelector((state: RootState) => state.common);
@@ -42,7 +50,10 @@ const Run = (props: Props) => {
     const currentSize = params.class ? Number(params.size) : 0
     const participants = allParticipants?.filter(p => p.class === currentRunClass && p.size === currentSize)
 
-    const [selectedParticipantIndex, setselectedParticipantIndex] = useState(0)
+    // Get index of first participant without result
+    const firstIndex = participants?.findIndex(p => getResultFromParticipant(currentRun, p).time === -2)
+    // Set the selected participant as the first without result
+    const [selectedParticipantIndex, setselectedParticipantIndex] = useState(firstIndex === -1 || !firstIndex ? 0 : firstIndex)
     const selectedParticipant: Participant = participants && participants.length > 0 ? participants[selectedParticipantIndex] : defaultParticipant
 
     const currentResult = getResultFromParticipant(currentRun, selectedParticipant)
@@ -132,12 +143,11 @@ const Run = (props: Props) => {
             dispatch(changeParticipants(turnamentDate, newParticipants))
             storePermanent(organization, common.organization)
         }
-    }, [common.organization, currentRun, dispatch, organization, participants, selectedParticipant.startNumber, turnamentDate])
+    }, [common.organization, currentRun, dispatch, organization, selectedParticipant.startNumber, turnamentDate, allParticipants])
 
     const changeTime = useCallback(
         (value: number) => {
             if (allParticipants) {
-
                 if (newFaults === -1 && newRefusals === -1) {
                     const newParticipants = allParticipants.map(p => {
                         if (p.startNumber === selectedParticipant.startNumber) {
@@ -162,24 +172,13 @@ const Run = (props: Props) => {
                 }
             }
         }
-        , [common.organization,
-            dispatch,
-            organization,
-            participants,
-        selectedParticipant.startNumber,
-            turnamentDate,
-            currentRun,
-            currentFaults,
-            currentRefusals,
-            newFaults,
-            newRefusals,
-            changeAll
+        , [allParticipants, changeAll, common.organization, currentFaults, currentRefusals, currentRun, dispatch, newFaults, newRefusals, organization, selectedParticipant.startNumber, turnamentDate
         ])
 
 
     const [started, setStarted] = useState(false);
-    const [initTime, setinitTime] = useState(new Date().getTime())
 
+    const [initTime, setinitTime] = useState(new Date().getTime())
 
     useEffect(() => {
         if (!started) {
@@ -189,6 +188,7 @@ const Run = (props: Props) => {
         var id = setInterval(() => {
             const milliseconds = new Date().getTime() - initTime;
             const seconds = Math.floor(milliseconds / 10) / 100
+
             changeTime(seconds);
             if (!started) {
                 clearInterval(id);
@@ -199,6 +199,7 @@ const Run = (props: Props) => {
 
     useEffect(() => {
         if (currentTime > 0) {
+
             if (currentTime > maximumTime(currentRun, calculatedStandardTime)) {
                 //Disqualify
                 changeTime(-1)
@@ -207,22 +208,72 @@ const Run = (props: Props) => {
     }, [calculatedStandardTime, changeTime, currentRun, currentTime])
 
 
-
-    const startTimer = () => {
+    const startTimer = useCallback(() => {
         if (currentTime === -2 || currentTime === 0) {
             setinitTime(new Date().getTime());
             setStarted(true)
             doPostRequest("0/timer", { action: "start" })
         }
-    }
+    }, [currentTime])
 
 
-    const stopTimer = () => {
+    const stopTimer = useCallback((time?: number) => {
+        if (!started) {
+            return;
+        }
         setStarted(false)
-        doPostRequest("0/timer", { action: "stop", time: currentTime })
+        if (time === undefined) {
+            doPostRequest("0/timer", { action: "stop", time: currentTime })
+        } else {
+            doPostRequest("0/timer", { action: "stop", time: Math.floor(time / 10) / 100 })
+            changeTime(Math.floor(time / 10) / 100)
+        }
+    }, [currentTime, started, changeTime])
+
+
+
+    useEffect(() => {
+        if (props.lastMessage !== null) {
+            console.log(props.lastMessage)
+            props.setlastMessage(null)
+            props.setconnected(true)
+            if (props.lastMessage === "start") {
+                props.settimeMeasurementActive(true)
+                startTimer()
+            } else if (props.lastMessage.startsWith("stop")) {
+                props.settimeMeasurementActive(false)
+                if (started) {
+                    const t = Number(props.lastMessage.substring(4))
+                    stopTimer()
+
+                    wait(100).then(() => {
+                        changeTime(Math.floor(t / 10) / 100)
+                        wait(1000).then(() => {
+                            setselectedParticipantIndex((selectedParticipantIndex + 1) % (participants ? participants.length : 0))
+                        })
+                    })
+                }
+
+            } else if (props.lastMessage === "reset") {
+                props.settimeMeasurementActive(false)
+                if (started) {
+                    stopTimer()
+
+                    wait(100).then(() => {
+                        changeTime(-2)
+                        wait(1000).then(() => {
+                            setselectedParticipantIndex((selectedParticipantIndex + 1) % (participants ? participants.length : 0))
+                        })
+                    })
+                }
+            }
+
+        }
+    }, [props, startTimer, stopTimer, changeTime, participants, selectedParticipantIndex, started])
+
+    const wait = async (ms: number) => {
+        return new Promise(r => setTimeout(r, ms));
     }
-
-
     return (
         <Stack className={style.runContainer} direction="column" alignItems="center" gap={4}>
             <Paper className={style.timeContainer}>
@@ -244,9 +295,16 @@ const Run = (props: Props) => {
                                     <Typography variant='h1'>{runTimeToStringClock(getResultFromParticipant(currentRun, selectedParticipant).time)}</Typography>
                                 </Stack>
                                 <Stack gap={1}>
-                                    <Button variant='contained' color="success" disabled={!started} onClick={() => { stopTimer() }}>Aktiv</Button>
-                                    <Button variant='contained' color="warning" disabled={started} onClick={() => { startTimer() }}>Bereit</Button>
-                                    <Button variant='contained' color="error" disabled>Error</Button>
+                                    <Button variant='contained' color="success" disabled={(!props.timeMeasurementActive) || props.timeError} onClick={() => { stopTimer() }}>Aktiv</Button>
+                                    <Button variant='contained' color="warning" disabled={(props.timeMeasurementActive) || props.timeError} onClick={() => { startTimer() }}>Bereit</Button>
+                                    <Button variant='contained' color="error" disabled={!props.timeError || props.connected}>Error</Button>
+                                    <Button variant='contained'
+                                        color="info"
+                                        disabled={props.connected}
+                                        onClick={() => {
+                                            props.startSerial()
+                                        }}
+                                    >{!props.connected ? "Verbinden" : "Verbunden"}</Button>
                                 </Stack>
                             </Stack>
                             <Divider orientation='horizontal' flexItem />
@@ -268,7 +326,12 @@ const Run = (props: Props) => {
                                 <ArrowUpwardIcon />
                             </IconButton>
                             <Button color='error' variant="outlined" onClick={() => {
-                                changeAll(-1, 0, 0)
+                                const stopRoutine = async () => {
+                                    stopTimer()
+                                    await wait(100)
+                                    changeAll(-1, 0, 0)
+                                }
+                                stopRoutine()
                             }}>
                                 <CloseIcon />
                             </Button>
@@ -295,8 +358,14 @@ const Run = (props: Props) => {
                             }}
                             onChange={(value) => {
                                 if (Number(value.target.value) > -1) {
-                                    changeTime(Number(value.target.value))
-                                    doPostRequest("0/timer", { action: "stop", time: Number(value.target.value) })
+                                    if (Number(value.target.value) === 0) {
+                                        changeTime(-2)
+                                        doPostRequest("0/timer", { action: "stop", time: -2 })
+                                    } else {
+                                        changeTime(Number(value.target.value))
+                                        doPostRequest("0/timer", { action: "stop", time: Number(value.target.value) })
+                                    }
+
                                 }
                             }} />
                         <TextField className={style.runStats} value={getResultFromParticipant(currentRun, selectedParticipant).faults}
@@ -349,7 +418,7 @@ const Run = (props: Props) => {
                                 participants?.map((p, index) => {
                                     const result = getResultFromParticipant(currentRun, p)
                                     return (
-                                        <TableRow key={p.startNumber} className={index === selectedParticipantIndex ? style.selected : ""}>
+                                        <TableRow onClick={() => { setselectedParticipantIndex(p.sorting - 1) }} key={p.startNumber} className={index === selectedParticipantIndex ? style.selected : ""}>
                                             <TableCell>{p.sorting}</TableCell>
                                             <TableCell>{p.startNumber}</TableCell>
                                             <TableCell>{p.name}</TableCell>
@@ -393,7 +462,7 @@ const Run = (props: Props) => {
                             {/*Participants with result sorted by totalfaults and time*/
                                 getRanking(participantsWithResults, currentRun, calculatedStandardTime).map((value) => {
                                     return (
-                                        <TableRow key={value.participant.startNumber} className={value.participant.startNumber === selectedParticipant.startNumber ? style.selected : ""}>
+                                        <TableRow onClick={() => { setselectedParticipantIndex(value.participant.sorting - 1) }} key={value.participant.startNumber} className={value.participant.startNumber === selectedParticipant.startNumber ? style.selected : ""}>
                                             <TableCell>{value.rank}.</TableCell>
                                             <TableCell>{value.participant.name}</TableCell>
                                             <TableCell>{value.participant.dog}</TableCell>

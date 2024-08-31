@@ -1,5 +1,5 @@
 import { Button, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
-import React, { useEffect, useState } from 'react'
+import React, { useState } from 'react'
 import style from './dashboard.module.scss'
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -12,7 +12,7 @@ import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { addTurnament, createOrganization, loadOrganization, removeTurnament } from '../../../Actions/SampleAction';
 import { dateToString, dateToURLString } from '../../Common/StaticFunctions';
-import { ALL_HEIGHTS, ALL_RUNS, Organization, Run, RunInformation, Size, Turnament } from '../../../types/ResponseTypes';
+import { ALL_HEIGHTS, ALL_RUNS, Organization, RunInformation, Turnament } from '../../../types/ResponseTypes';
 
 type Props = {}
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React from 'react'
 import Button from '@mui/material/Button';
 import Dialog from '@mui/material/Dialog';
 import DialogActions from '@mui/material/DialogActions';
@@ -8,9 +8,8 @@ import DialogTitle from '@mui/material/DialogTitle';
 import { Typography } from '@mui/material';
 import style from './topbar.module.scss';
 import SettingsLink from './SettingsLink';
-import { AKTUELLES_RELEASE, BUILD_NUMBER, DATENSCHUTZ, GETREANKELISTE, IMPRESSUM, IMPRESSUM_DATENSCHUTZ, OFFENE_ISSUES, OK } from '../Internationalization/i18n';
+import { BUILD_NUMBER, DATENSCHUTZ, GETREANKELISTE, IMPRESSUM, IMPRESSUM_DATENSCHUTZ, OK } from '../Internationalization/i18n';
 import Buildnumber from '../../../BuildNumber.json'
-import { doGetRequest } from '../StaticFunctions';
 import { format } from 'react-string-format';
 
 type Props = {

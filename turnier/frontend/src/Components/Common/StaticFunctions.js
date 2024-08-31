@@ -1,5 +1,4 @@
 import Cookies from "js-cookie";
-import { Size } from "../../types/ResponseTypes";
 
 export const doPostRequest = async (path, data) => {
     const resp = await fetch(window.globalTS.DOMAIN + path,

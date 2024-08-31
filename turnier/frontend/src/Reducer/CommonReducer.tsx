@@ -56,7 +56,17 @@ const reducer = (state = initialState, { type, payload }: any) => {
 
     var newState = { ...state }
     switch (type) {
+        case "OPEN_TOAST":
+            newState.toast.open = true;
+            newState.toast.message = payload.message;
+            newState.toast.headline = payload.headline
+            newState.toast.duration = payload.duration ? payload.duration : initialState.toast.duration
+            newState.toast.type = payload.type ? payload.type : defaultAlertType
+            return newState
 
+        case "CLOSE_TOAST":
+            newState.toast.open = false;
+            return newState
 
         case "CREATE_ORGANIZATION":
             newState.organization = payload

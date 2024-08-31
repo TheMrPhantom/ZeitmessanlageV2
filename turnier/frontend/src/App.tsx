@@ -7,7 +7,7 @@ import allReducer from './Reducer/reducerCombiner';
 import { createStore } from 'redux';
 import { composeWithDevTools } from 'redux-devtools-extension';
 import { Provider } from 'react-redux';
-import { Box, CssBaseline, ScopedCssBaseline, Toolbar } from '@mui/material';
+import { Box, CssBaseline, ScopedCssBaseline } from '@mui/material';
 import { BrowserRouter as Router } from 'react-router-dom';
 import TopBar from './Components/Common/TopBar/TopBar';
 import Routing from './Components/Routing/Routing';
