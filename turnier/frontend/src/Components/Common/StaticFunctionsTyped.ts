@@ -487,3 +487,23 @@ export const updateDatabase = (turnament: Tournament | undefined) => {
         doPostRequest(`0/${date}`, turnament ? turnament : null)//Updates the database
     }
 }
+
+export const favoriteIdenfitier = (participant: Participant) => {
+    return `${participant.name}-${participant.dog}`
+}
+
+export const checkIfFavorite = (participant: Participant, favorites: string | undefined | null) => {
+    console.log(favorites)
+    if (favorites === undefined || favorites === null) { return false }
+
+    let isFavorite = false
+
+    favorites.split(";").forEach(favorite => {
+
+        if (favorite === favoriteIdenfitier(participant)) {
+            isFavorite = true
+            return
+        }
+    })
+    return isFavorite
+}

@@ -4,7 +4,7 @@ import style from './runselection.module.scss'
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import PetsIcon from '@mui/icons-material/Pets';
 import Spacer from '../../Common/Spacer';
-import { Run, Size, SkillLevel, Tournament } from '../../../types/ResponseTypes';
+import { Participant, Size, SkillLevel, Tournament } from '../../../types/ResponseTypes';
 import { useNavigate } from 'react-router-dom';
 import Dog from './Dog';
 import { dateToString, doGetRequest } from '../../Common/StaticFunctions';
@@ -14,12 +14,15 @@ import SportsIcon from '@mui/icons-material/Sports';
 import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import StadiumIcon from '@mui/icons-material/Stadium';
+import { favoriteIdenfitier } from '../../Common/StaticFunctionsTyped';
 
 type Props = {}
 
 const RunSelection = (props: Props) => {
     const [skillLevel, setskillLevel] = useState(SkillLevel.A3)
     const [jumpHeight, setjumpHeight] = useState(Size.Small)
+    const [reload, setreload] = useState(false)
+
     const navigate = useNavigate()
     const dispatch = useDispatch()
 
@@ -35,6 +38,38 @@ const RunSelection = (props: Props) => {
         })
     }, [dispatch])
 
+
+    const favoriteDogs = () => {
+        const favorites = window.localStorage.getItem('favorites')
+        const favoriteParticipants: Participant[] = []
+        common.userTurnament.participants.forEach((participant) => {
+            if (favorites?.includes(participant.dog)) {
+                favoriteParticipants.push(participant)
+            }
+        })
+        console.log(favoriteParticipants)
+        if (favoriteParticipants.length === 0) {
+            return <Typography variant="caption">Noch keine Hunde favorisiert</Typography>
+        } else {
+            return favoriteParticipants.map((participant) => {
+                return <Dog dogname={participant.dog}
+                    resultA={participant.resultA}
+                    resultJ={participant.resultJ}
+                    dogsLeft={null}
+                    unlike={() => {
+                        let storage = window.localStorage.getItem("favorites")
+                        console.log(storage)
+                        storage = storage ? storage : ""
+                        storage = storage.replace(`${favoriteIdenfitier(participant)};`, "")
+                        console.log(storage)
+                        window.localStorage.setItem("favorites", storage)
+                        setreload(!reload)
+
+                    }}
+                />
+            })
+        }
+    }
 
     return (
         <Stack
@@ -65,17 +100,10 @@ const RunSelection = (props: Props) => {
                     </Stack>
 
                 </Stack>
+                <Divider />
                 <Stack gap={1}>
                     <Typography variant="overline">Deine Hunde</Typography>
-                    {/*<Typography variant="caption">Noch keine Hunde favorisiert</Typography>*/}
-                    <Dog dogname="Fluffy McFluff"
-                        resultA={{ time: 37.58, faults: 1, refusals: 0, run: Run.A0 }}
-                        resultJ={{ time: -2, faults: 0, refusals: 0, run: Run.A0 }}
-                        dogsLeft={null} />
-                    <Dog dogname="Speedy Super Fast"
-                        resultA={{ time: 37.58, faults: 1, refusals: 0, run: Run.A0 }}
-                        resultJ={{ time: -2, faults: 0, refusals: 0, run: Run.A0 }}
-                        dogsLeft={5} />
+                    {favoriteDogs()}
                 </Stack>
 
             </Stack>

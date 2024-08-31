@@ -5,17 +5,18 @@ import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom'
-import { getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, maximumTime, runTimeToString, runTimeToStringClock, standardTime } from '../../Common/StaticFunctionsTyped';
+import { checkIfFavorite, favoriteIdenfitier, getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, maximumTime, runTimeToString, runTimeToStringClock, standardTime } from '../../Common/StaticFunctionsTyped';
 import { Run as RunType, SkillLevel, Participant, defaultParticipant, RunCategory } from '../../../types/ResponseTypes';
 import { changeParticipants } from '../../../Actions/SampleAction';
 import { minSpeedA3 } from '../../Common/AgilityPO';
 import { useCallback } from 'react';
+import Spacer from '../../Common/Spacer';
 
 type Props = {}
 
 const Run = (props: Props) => {
     const common: CommonReducerType = useSelector((state: RootState) => state.common);
-    const [ws, setws] = useState<WebSocket | null>(null);
+    const [, setwebsocket] = useState<WebSocket | null>(null);
     const dispatch = useDispatch()
 
     const params = useParams()
@@ -34,8 +35,9 @@ const Run = (props: Props) => {
     const currentSize = params.class ? Number(params.size) : 0
     const participants = allParticipants?.filter(p => p.skillLevel === currentRunClass && p.size === currentSize)
 
-    const [selectedParticipantIndex, setselectedParticipantIndex] = useState(0)
-    const selectedParticipant: Participant = participants && participants.length > 0 ? participants[selectedParticipantIndex] : defaultParticipant
+    const [selectedParticipantStartNumber, setselectedParticipantStartNumber] = useState(0)
+    const unsafeselectedParticipant = participants?.find(p => p.startNumber === selectedParticipantStartNumber)
+    const selectedParticipant: Participant = unsafeselectedParticipant ? unsafeselectedParticipant : defaultParticipant
 
     const currentResult = getResultFromParticipant(currentRun, selectedParticipant)
 
@@ -60,6 +62,8 @@ const Run = (props: Props) => {
 
     const [started, setStarted] = useState(false);
     const [initTime, setinitTime] = useState(new Date().getTime())
+
+    const [reload, setreload] = useState(false)
 
     const changeFaults = useCallback((value: number) => {
 
@@ -192,11 +196,8 @@ const Run = (props: Props) => {
     }, [calculatedStandardTime, changeTime, currentRun, currentTime])
 
     useEffect(() => {
-        setws(new WebSocket("ws://localhost:9001/ws"));
+        const ws = new WebSocket("ws://localhost:9001/ws")
 
-    }, [])
-
-    useEffect(() => {
         const closeWs = () => {
             try {
                 if (ws !== null) {
@@ -208,47 +209,53 @@ const Run = (props: Props) => {
             }
         }
 
-        if (ws !== null) {
-            ws.onmessage = (e: MessageEvent) => {
-                const message = JSON.parse(e.data);
-                console.log(message)
-                switch (message.action) {
-                    case "start_timer":
-                        startTimer();
-                        break;
-                    case "stop_timer":
-                        stopTimer();
-                        changeTime(message.time)
-                        break;
-                    case "changed_current_participant":
-                        setselectedParticipantIndex(message.participant)
-                        break;
-                    case "changed_current_fault":
-                        changeFaults(message.fault)
-                        break;
-                    case "changed_current_refusal":
-                        changeRefusals(message.refusal)
-                        break;
-                }
+        ws.onmessage = (e: MessageEvent) => {
+            const message = JSON.parse(e.data);
+            console.log(message)
+            switch (message.action) {
+                case "start_timer":
+                    startTimer();
+                    break;
+                case "stop_timer":
+                    stopTimer();
+                    changeTime(message.time)
+                    break;
+                case "changed_current_participant":
+                    setselectedParticipantStartNumber(message.participant)
 
-            };
-
-            ws.onerror = () => {
-                setTimeout(() => {
-                    closeWs()
-                    setws(new WebSocket("ws://localhost:9001/ws"));
-                }, Math.random() * (maxTimeout - minTimeout) + minTimeout);
+                    break;
+                case "changed_current_fault":
+                    changeFaults(message.fault)
+                    break;
+                case "changed_current_refusal":
+                    changeRefusals(message.refusal)
+                    break;
             }
 
-            ws.onclose = () => {
-                setTimeout(() => {
-                    closeWs()
-                    setws(new WebSocket("ws://localhost:9001/ws"));
-                }, Math.random() * (maxTimeout - minTimeout) + minTimeout);
-            }
+        };
 
+        ws.onerror = () => {
+            setTimeout(() => {
+                closeWs()
+                setwebsocket(new WebSocket("ws://localhost:9001/ws"));
+            }, Math.random() * (maxTimeout - minTimeout) + minTimeout);
         }
-    }, [ws, changeTime, changeFaults, changeRefusals])
+
+        ws.onclose = () => {
+            setTimeout(() => {
+                closeWs()
+                setwebsocket(new WebSocket("ws://localhost:9001/ws"));
+            }, Math.random() * (maxTimeout - minTimeout) + minTimeout);
+        }
+        setwebsocket(ws);
+
+        return () => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.close();
+            }
+        };
+
+    }, [changeFaults, changeRefusals, changeTime])
 
 
     const startTimer = () => {
@@ -263,10 +270,9 @@ const Run = (props: Props) => {
         setStarted(false)
     }
 
-
-    return (
-        <Stack className={style.runContainer} direction="column" alignItems="center" gap={4}>
-            <Paper className={style.timeContainer}>
+    const runnerDetails = () => {
+        if (unsafeselectedParticipant) {
+            return <Paper className={style.timeContainer}>
                 <Stack gap={2} direction="column">
                     <Stack gap={1} direction="column" alignItems="flex-start">
                         <Typography variant='overline'>Aktuell am Start</Typography>
@@ -292,6 +298,12 @@ const Run = (props: Props) => {
 
                 </Stack>
             </Paper>
+        }
+        return <Spacer />
+    }
+    return (
+        <Stack className={style.runContainer} direction="column" alignItems="center" gap={4}>
+            {runnerDetails()}
             <Stack gap={3}>
                 <Stack direction="row" gap={2} justifyContent="space-between">
                     <Typography variant='h5'>Starter</Typography>
@@ -308,19 +320,37 @@ const Run = (props: Props) => {
                                     <TableCell>#</TableCell>
                                     <TableCell>Starter</TableCell>
                                     <TableCell>Hund</TableCell>
-                                    <TableCell>Favorit</TableCell>
+                                    <TableCell align="center">Favorit</TableCell>
                                 </TableRow>
                             </TableHead>
                             <TableBody>
                                 {
+
                                     participants?.map((p, index) => {
+                                        console.log(participants);
                                         return (
-                                            <TableRow key={p.startNumber} className={index === selectedParticipantIndex ? style.selected : ""}>
+                                            <TableRow key={p.startNumber} className={p.startNumber === selectedParticipantStartNumber ? style.selected : ""}>
                                                 <TableCell>{p.sorting}</TableCell>
                                                 <TableCell>{p.name} </TableCell>
                                                 <TableCell>{p.dog}</TableCell>
                                                 <TableCell align="center">
-                                                    <Rating max={1} />
+                                                    <Rating max={1} value={
+                                                        checkIfFavorite(p, window.localStorage.getItem("favorites")) ? 1 : 0
+                                                    }
+                                                        onChange={(e, newValue) => {
+                                                            let storage = window.localStorage.getItem("favorites")
+                                                            storage = storage ? storage : ""
+
+                                                            if (newValue === 1) {
+                                                                storage = `${storage}${favoriteIdenfitier(p)};`
+                                                            }
+                                                            else {
+                                                                storage = storage.replace(`${favoriteIdenfitier(p)};`, "")
+                                                            }
+                                                            setreload(!reload)
+                                                            window.localStorage.setItem("favorites", storage)
+                                                        }}
+                                                    />
                                                 </TableCell>
 
                                             </TableRow>

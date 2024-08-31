@@ -9,6 +9,7 @@ type Props = {
     resultA: Result,
     resultJ: Result,
     dogsLeft: number | null,
+    unlike: () => void
 }
 
 const Dog = (props: Props) => {
@@ -30,7 +31,7 @@ const Dog = (props: Props) => {
             <Stack gap={2}>
                 <Stack direction="row" gap={2} alignItems="center" justifyContent="space-between">
                     <Typography variant="h5">{props.dogname}</Typography>
-                    <Rating max={1} />
+                    <Rating max={1} value={1} onChange={(e, o) => { console.log(props.dogname); props.unlike() }} />
                 </Stack>
                 <Stack gap={1}>
                     <Stack direction="row" gap={2} justifyContent="space-between">
