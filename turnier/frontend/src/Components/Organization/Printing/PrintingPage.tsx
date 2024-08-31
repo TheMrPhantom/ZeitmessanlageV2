@@ -148,6 +148,9 @@ const PrintingPage = (props: Props) => {
         )
     } else if (props.type === ListType.sticker) {
         return <>{props.stickers!.map((element) => {
+            if (element.finalResult.resultA.time === -1 && element.finalResult.resultJ.time === -1) {
+                return <></>
+            }
             return <Sticker infos={element} />
         })}</>
     }
