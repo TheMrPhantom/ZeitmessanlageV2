@@ -158,8 +158,13 @@ const reducer = (state = initialState, { type, payload }: any) => {
 
         case "CHANGE_PARTICIPANTS":
             const turnament = newState.organization.turnaments.find((t) => dateToURLString(new Date(t.date)) === dateToURLString(payload.date))
+
             if (turnament) {
                 turnament.participants = payload.participants
+            } else {
+                if (newState.userTurnament.runs.length > 0) {
+                    newState.userTurnament.participants = payload.participants
+                }
             }
             return newState
         case "ADD_PRINT_RESULT":

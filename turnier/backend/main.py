@@ -145,7 +145,7 @@ class update_data(Resource):
         
         db.session.commit()
 
-
+        socket.send({"action": "reload"})
         return util.build_response("OK")
 
 @api.route('/<int:organization_id>/<string:secret>/<date>')
@@ -182,7 +182,7 @@ class api_timer(Resource):
             socket.send({"action": "start_timer"})
         if action == "stop":
             # send websocket message
-            socket.send({"action": "stop_timer","time":post_data["time"]})
+            socket.send({"action": "stop_timer","message":post_data["time"]})
         return util.build_response("OK")
 
 @api.route('/<int:organization_id>/current/participant')
@@ -193,7 +193,7 @@ class api_currentParticipant(Resource):
         """
 
         # send websocket message
-        socket.send({"action": "changed_current_participant","participant":request.json})
+        socket.send({"action": "changed_current_participant","message":request.json})
         return util.build_response("OK")
 
 @api.route('/<int:organization_id>/current/faults')
@@ -204,7 +204,7 @@ class api_currentFaults(Resource):
         """
 
         # send websocket message
-        socket.send({"action": "changed_current_fault","fault":request.json})
+        socket.send({"action": "changed_current_fault","message":request.json})
         return util.build_response("OK")
 
 @api.route('/<int:organization_id>/current/refusals')
@@ -215,7 +215,7 @@ class api_currentRefusal(Resource):
         """
 
         # send websocket message
-        socket.send({"action": "changed_current_refusal","refusal":request.json})
+        socket.send({"action": "changed_current_refusal","message":request.json})
         return util.build_response("OK")
 
 
