@@ -260,7 +260,7 @@ const Run = (props: Props) => {
                     stopTimer()
 
                     wait(100).then(() => {
-                        changeTime(-2)
+                        changeTime(-1)
                         wait(1000).then(() => {
                             setselectedParticipantIndex((selectedParticipantIndex + 1) % (participants ? participants.length : 0))
                         })
