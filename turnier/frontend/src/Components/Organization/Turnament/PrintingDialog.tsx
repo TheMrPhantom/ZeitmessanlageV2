@@ -1,7 +1,7 @@
 import { Button, Checkbox, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControl, FormControlLabel, FormLabel, Grow, Paper, Radio, RadioGroup, Stack } from '@mui/material'
 import React, { useState } from 'react'
 import { classToString, getKombiRanking, getRunCategory, sizeToString } from '../../Common/StaticFunctionsTyped'
-import { ExtendedResult, Organization, Participant, Run, RunCategory, Size, SkillLevel, StickerInfo, Turnament } from '../../../types/ResponseTypes'
+import { ExtendedResult, Organization, Participant, Run, RunCategory, Size, SkillLevel, StickerInfo, Tournament } from '../../../types/ResponseTypes'
 import Spacer from '../../Common/Spacer'
 import style from './turnament.module.scss'
 import { useDispatch } from 'react-redux'
@@ -39,7 +39,7 @@ type Props = {
     }[],
     participants: Participant[],
     organization: Organization,
-    turnament: Turnament,
+    turnament: Tournament,
     isOpen: boolean,
     close: () => void
 }
@@ -120,7 +120,7 @@ const PrintingDialog = (props: Props) => {
             runAndHeight.heights.forEach((height) => {
                 if (height.selected) {
                     /*Get all participants for this run and height*/
-                    const participants = props.participants.filter((participant) => participant.class === Math.floor(runAndHeight.run / 2) && participant.size === height.height).sort((a, b) => a.sorting - b.sorting)
+                    const participants = props.participants.filter((participant) => participant.skillLevel === Math.floor(runAndHeight.run / 2) && participant.size === height.height).sort((a, b) => a.sorting - b.sorting)
                     toPrint.push({
                         run: runAndHeight.run,
                         size: height.height,
@@ -156,7 +156,7 @@ const PrintingDialog = (props: Props) => {
         const toPrint: StickerInfo[] = []
 
         /*Get all participants for the selected classes and sizes*/
-        const participants = props.participants.filter((participant) => selectedClasses.includes(participant.class) && selectedSizes.includes(participant.size))
+        const participants = props.participants.filter((participant) => selectedClasses.includes(participant.skillLevel) && selectedSizes.includes(participant.size))
 
 
         /* For each participant calculate the sticker info */
@@ -165,8 +165,8 @@ const PrintingDialog = (props: Props) => {
             const turnament = props.turnament
 
             /*Get the rankings of the two runs*/
-            const runA = rankings.find((rank) => rank.run === participant.class * 2)?.heights.find((height) => height.height === participant.size)?.results
-            const runJ = rankings.find((rank) => rank.run === participant.class * 2 + 1)?.heights.find((height) => height.height === participant.size)?.results
+            const runA = rankings.find((rank) => rank.run === participant.skillLevel * 2)?.heights.find((height) => height.height === participant.size)?.results
+            const runJ = rankings.find((rank) => rank.run === participant.skillLevel * 2 + 1)?.heights.find((height) => height.height === participant.size)?.results
 
             const resultA = runA?.find((result) => result.participant === participant)
             const resultJ = runJ?.find((result) => result.participant === participant)
@@ -177,16 +177,16 @@ const PrintingDialog = (props: Props) => {
             const size = participant.size
 
             /* Get parcours length of the two parcours */
-            const lengthA = rankings.find((rank) => rank.run === participant.class * 2)?.length
-            const lengthJ = rankings.find((rank) => rank.run === participant.class * 2 + 1)?.length
+            const lengthA = rankings.find((rank) => rank.run === participant.skillLevel * 2)?.length
+            const lengthJ = rankings.find((rank) => rank.run === participant.skillLevel * 2 + 1)?.length
 
             /* Calculate speeds of the two runs */
             const speedA = lengthA ? lengthA / ((resultA?.result) ? (resultA?.result.time) : 1) : 0
             const speedJ = lengthJ ? lengthJ / ((resultJ?.result) ? (resultJ?.result.time) : 1) : 0
 
             /* Standard time of the two runs */
-            const stdTimeA = rankings.find((rank) => rank.run === participant.class * 2)?.heights.find((height) => height.height === participant.size)?.stdTime
-            const stdTimeJ = rankings.find((rank) => rank.run === participant.class * 2 + 1)?.heights.find((height) => height.height === participant.size)?.stdTime
+            const stdTimeA = rankings.find((rank) => rank.run === participant.skillLevel * 2)?.heights.find((height) => height.height === participant.size)?.stdTime
+            const stdTimeJ = rankings.find((rank) => rank.run === participant.skillLevel * 2 + 1)?.heights.find((height) => height.height === participant.size)?.stdTime
 
             /* Timefaults of the two runs */
             const timeFaultsA = resultA?.timefaults
@@ -198,7 +198,7 @@ const PrintingDialog = (props: Props) => {
 
             /* Get combined results */
             const kombiRankings = getKombiRanking(participants,
-                participant.class,
+                participant.skillLevel,
                 participant.size,
                 stdTimeA ? stdTimeA : minSpeedA3,
                 stdTimeJ ? stdTimeJ : minSpeedJ3)
@@ -217,7 +217,7 @@ const PrintingDialog = (props: Props) => {
                         time: resultA?.result.time ? resultA?.result.time : -2,
                         faults: resultA?.result.faults ? resultA?.result.faults : 0,
                         refusals: resultA?.result.refusals ? resultA?.result.refusals : 0,
-                        class: participant.class * 2,
+                        run: participant.skillLevel * 2,
                         place: placeA ? placeA : 0,
                         size: size,
                         speed: speedA,
@@ -228,7 +228,7 @@ const PrintingDialog = (props: Props) => {
                         time: resultJ?.result.time ? resultJ?.result.time : -2,
                         faults: resultJ?.result.faults ? resultJ?.result.faults : 0,
                         refusals: resultJ?.result.refusals ? resultJ?.result.refusals : 0,
-                        class: participant.class * 2 + 1,
+                        run: participant.skillLevel * 2 + 1,
                         place: placeJ ? placeJ : 0,
                         size: size,
                         speed: speedJ,

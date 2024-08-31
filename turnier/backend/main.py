@@ -19,11 +19,18 @@ import flask
 import mail
 import secrets
 from websck import Websocket
+from database.Models import *
+from typing import List
+
 
 api_bp = flask.Blueprint("api", __name__, url_prefix="/api/")
 api = Api(api_bp, doc='/docu/', base_url='/api')
 app.register_blueprint(api_bp)
-socket=Websocket()
+
+try:
+    socket=Websocket()
+except Exception as e:
+    print(e)
 
 with app.app_context():
     db = Queries.Queries(sql_database)
@@ -59,6 +66,107 @@ def admin(fn):
 
 def is_self_or_admin(request, member_id):
     return str(member_id) == str(request.cookies.get(f"{util.auth_cookie_memberID}memberID")) or str(request.cookies.get(f"{util.auth_cookie_memberID}memberID")) == "1"
+
+@api.route('/<int:organization_id>/<string:date>')
+class update_data(Resource):
+    def post(self,organization_id,date):
+        """
+        Start or stop a timer
+        """
+
+        t:Tournament=db.session.query(Tournament).filter(Tournament.date == date).first()
+        
+        participants:List[Participant]=db.session.query(Participant).filter(Participant.turnament_id == t.id).all()
+        
+        t.name=request.json["name"]
+        t.judge=request.json["judge"]
+        
+        t.date= date
+
+        runs_from_request=request.json["runs"]
+        for run in runs_from_request:
+            run_info:RunInformation = db.session.query(RunInformation).filter(RunInformation.run == run["run"] and RunInformation.height == run["height"] and RunInformation.turnament_id==t.id).first()           
+            run_info.height=run["height"]
+            run_info.length=run["length"]
+            run_info.speed=run["speed"]
+
+        participants_from_request= request.json["participants"]
+        for participant in participants_from_request:
+            # Find participant in participants list
+            participant_info:Participant = next((x for x in participants if x.start_number == participant["startNumber"]), None)
+            if participant_info is None:
+                # Create new participant
+                participant_info=Participant()
+                participant_info.turnament_id=t.id
+                participant_info.start_number=participant["startNumber"]
+                participant_info.sorting=participant["sorting"]
+                participant_info.name=participant["name"]
+                participant_info.club=participant["club"]
+                participant_info.dog=participant["dog"]
+                participant_info.skill_level=participant["skillLevel"]
+                participant_info.size=participant["size"]
+                db.session.add(participant_info)
+                
+                # Add result_a
+                result_a=Result()
+                result_a.time=participant["resultA"]["time"]
+                result_a.faults=participant["resultA"]["faults"]
+                result_a.refusals=participant["resultA"]["refusals"]
+                result_a.run=participant["resultA"]["run"]
+                db.session.add(result_a)
+                participant_info.result_a=result_a
+
+                # Add result_j
+                result_j=Result()
+                result_j.time=participant["resultJ"]["time"]
+                result_j.faults=participant["resultJ"]["faults"]
+                result_j.refusals=participant["resultJ"]["refusals"]
+                result_j.run=participant["resultJ"]["run"]
+                db.session.add(result_j)
+                participant_info.result_j=result_j
+            else:
+                participant_info.start_number=participant["startNumber"]
+                participant_info.sorting=participant["sorting"]
+                participant_info.name=participant["name"]
+                participant_info.club=participant["club"]
+                participant_info.dog=participant["dog"]
+                participant_info.skill_level=participant["skillLevel"]
+                participant_info.size=participant["size"]
+
+                participant_info.result_a.time=participant["resultA"]["time"]
+                participant_info.result_a.faults=participant["resultA"]["faults"]
+                participant_info.result_a.refusals=participant["resultA"]["refusals"]
+                participant_info.result_a.run=participant["resultA"]["run"]
+
+                participant_info.result_j.time=participant["resultJ"]["time"]
+                participant_info.result_j.faults=participant["resultJ"]["faults"]
+                participant_info.result_j.refusals=participant["resultJ"]["refusals"]
+                participant_info.result_j.run=participant["resultJ"]["run"]
+        
+        db.session.commit()
+
+
+        return util.build_response("OK")
+
+@api.route('/<int:organization_id>/<string:secret>/<date>')
+class get_data(Resource):
+    def get(self,organization_id,secret,date):
+        """
+        Start or stop a timer
+        """
+        t:Tournament=db.session.query(Tournament).filter(Tournament.date == date).first()
+        
+        participants:List[Participant]=db.session.query(Participant).filter(Participant.turnament_id == t.id).all()
+        participants=[participant.to_dict() for participant in participants]
+
+        runs:List[RunInformation]=db.session.query(RunInformation).filter(RunInformation.turnament_id == t.id).all()
+        runs=[run.to_dict() for run in runs]
+        return util.build_response({"name":t.name,
+                                    "judge":t.judge,
+                                    "date":t.date,
+                                    "participants":participants,
+                                    "runs":runs})
+
 
 @api.route('/<int:organization_id>/timer')
 class api_timer(Resource):

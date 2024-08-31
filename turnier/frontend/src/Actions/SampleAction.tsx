@@ -1,5 +1,5 @@
 import { ParticipantToPrint, ResultToPrint } from "../Reducer/CommonReducer"
-import { Organization, Participant, Run, StickerInfo, Turnament } from "../types/ResponseTypes"
+import { Organization, Participant, Run, StickerInfo, Tournament } from "../types/ResponseTypes"
 
 export const createOrganization = (org: Organization) => {
     return {
@@ -8,14 +8,14 @@ export const createOrganization = (org: Organization) => {
     }
 }
 
-export const addTurnament = (turnament: Turnament) => {
+export const addTurnament = (turnament: Tournament) => {
     return {
         type: "ADD_TURNAMENT",
         payload: turnament
     }
 }
 
-export const removeTurnament = (turnament: Turnament) => {
+export const removeTurnament = (turnament: Tournament) => {
     return {
         type: "REMOVE_TURNAMENT",
         payload: turnament
@@ -109,5 +109,12 @@ export const addPrintSticker = (stickers: StickerInfo[]) => {
 export const clearPrints = () => {
     return {
         type: "CLEAR_PRINTS"
+    }
+}
+
+export const updateUserTurnament = (turnament: Tournament) => {
+    return {
+        type: "UPDATE_USER_TURNAMENT",
+        payload: turnament
     }
 }

@@ -12,7 +12,7 @@ export type Participant = {
     name: string,
     club: string,
     dog: string,
-    class: SkillLevel,
+    skillLevel: SkillLevel,
     size: Size,
     resultA: Result,
     resultJ: Result
@@ -53,7 +53,7 @@ export type Result = {
     time: number,
     faults: number,
     refusals: number,
-    class: Run,
+    run: Run,
 }
 
 export type ExtendedResult = {
@@ -63,7 +63,7 @@ export type ExtendedResult = {
     timefaults: number;
 }
 
-export type Turnament = {
+export type Tournament = {
     date: Date,
     judge: string,
     name: string,
@@ -80,7 +80,7 @@ export type RunInformation = {
 
 export type Organization = {
     name: string,
-    turnaments: Turnament[]
+    turnaments: Tournament[]
 }
 
 export const ALL_RUNS = [Run.A3, Run.A2, Run.A1, Run.A0, Run.J3, Run.J2, Run.J1, Run.J0]
@@ -91,15 +91,15 @@ export const defaultParticipant: Participant = {
     name: "",
     club: "",
     dog: "",
-    class: SkillLevel.A0,
+    skillLevel: SkillLevel.A0,
     size: Size.Small,
-    resultA: { time: 0, faults: 0, refusals: 0, class: Run.A0 },
-    resultJ: { time: 0, faults: 0, refusals: 0, class: Run.J0 }
+    resultA: { time: 0, faults: 0, refusals: 0, run: Run.A0 },
+    resultJ: { time: 0, faults: 0, refusals: 0, run: Run.J0 }
 }
 
 export type StickerInfo = {
     organization: Organization,
-    turnament: Turnament,
+    turnament: Tournament,
     participant: Participant,
     finalResult: FinalResult
 }

@@ -1,18 +1,39 @@
 import { Button, Divider, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import style from './runselection.module.scss'
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import PetsIcon from '@mui/icons-material/Pets';
 import Spacer from '../../Common/Spacer';
-import { Run, Size, SkillLevel } from '../../../types/ResponseTypes';
+import { Run, Size, SkillLevel, Tournament } from '../../../types/ResponseTypes';
 import { useNavigate } from 'react-router-dom';
 import Dog from './Dog';
+import { dateToString, doGetRequest } from '../../Common/StaticFunctions';
+import { useDispatch, useSelector } from 'react-redux';
+import { updateUserTurnament } from '../../../Actions/SampleAction';
+import SportsIcon from '@mui/icons-material/Sports';
+import { RootState } from '../../../Reducer/reducerCombiner'
+import { CommonReducerType } from '../../../Reducer/CommonReducer';
+import StadiumIcon from '@mui/icons-material/Stadium';
+
 type Props = {}
 
 const RunSelection = (props: Props) => {
     const [skillLevel, setskillLevel] = useState(SkillLevel.A3)
     const [jumpHeight, setjumpHeight] = useState(Size.Small)
     const navigate = useNavigate()
+    const dispatch = useDispatch()
+
+    const common: CommonReducerType = useSelector((state: RootState) => state.common);
+
+    useEffect(() => {
+        doGetRequest('0/secret/2024-08-31').then((data) => {
+            if (data.code === 200) {
+                dispatch(updateUserTurnament(data.content as Tournament))
+            } else {
+                console.log(data)
+            }
+        })
+    }, [dispatch])
 
 
     return (
@@ -28,23 +49,32 @@ const RunSelection = (props: Props) => {
                     <Typography variant="overline">Veranstaltungs Infos</Typography>
                     <Stack direction="row" gap={1}>
                         <PetsIcon />
-                        <Typography variant="h6">Neue Hundesporthalle e.V.</Typography>
+                        <Typography variant="h6">{common.userTurnament.name}</Typography>
                     </Stack>
                     <Stack direction="row" gap={1}>
                         <CalendarMonthIcon />
-                        <Typography variant="h6">23.03.2025</Typography>
+                        <Typography variant="h6">{dateToString(new Date(common.userTurnament.date))}</Typography>
                     </Stack>
+                    <Stack direction="row" gap={1}>
+                        <StadiumIcon />
+                        <Typography variant="h6">{"<Platzhalter Verein>"}</Typography>
+                    </Stack>
+                    <Stack direction="row" gap={1}>
+                        <SportsIcon />
+                        <Typography variant="h6">{common.userTurnament.judge}</Typography>
+                    </Stack>
+
                 </Stack>
                 <Stack gap={1}>
                     <Typography variant="overline">Deine Hunde</Typography>
                     {/*<Typography variant="caption">Noch keine Hunde favorisiert</Typography>*/}
                     <Dog dogname="Fluffy McFluff"
-                        resultA={{ time: 37.58, faults: 1, refusals: 0, class: Run.A0 }}
-                        resultJ={{ time: -2, faults: 0, refusals: 0, class: Run.A0 }}
+                        resultA={{ time: 37.58, faults: 1, refusals: 0, run: Run.A0 }}
+                        resultJ={{ time: -2, faults: 0, refusals: 0, run: Run.A0 }}
                         dogsLeft={null} />
                     <Dog dogname="Speedy Super Fast"
-                        resultA={{ time: 37.58, faults: 1, refusals: 0, class: Run.A0 }}
-                        resultJ={{ time: -2, faults: 0, refusals: 0, class: Run.A0 }}
+                        resultA={{ time: 37.58, faults: 1, refusals: 0, run: Run.A0 }}
+                        resultJ={{ time: -2, faults: 0, refusals: 0, run: Run.A0 }}
                         dogsLeft={5} />
                 </Stack>
 
@@ -114,7 +144,7 @@ const RunSelection = (props: Props) => {
 
 
             </Stack>
-        </Stack>
+        </Stack >
 
     )
 }

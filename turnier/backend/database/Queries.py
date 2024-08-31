@@ -158,62 +158,24 @@ class Queries:
             KeyValue(key="version", value=util.CURRENT_VERSION))
         self.session.commit()
 
-        if util.token is not None and util.old_domain is not None:
+        hashedPassword, salt = TokenManager.hashPassword("test")
+        
+        new_member = Member(name="HSF",alias="hsf", password=hashedPassword, salt=salt)
+        self.session.add(
+            new_member
+            )
+        self.session.commit()
+        new_turnament=Tournament(name="Test", 
+                                    date="2024-08-31", 
+                                    judge="Supertoll", 
+                                    member_id=new_member.id,
+                                    )
+        
+        self.session.add(new_turnament)
+        self.session.commit()
 
-            # Import Users
-            resp = requests.get(f"https://{util.old_domain}/api/users",
-                                headers={"x-auth-token": util.token}, timeout=10)
-
-            for user in resp.json():
-                self.add_user(user["name"], user["balance"]/100,
-                              util.standard_user_password, hidden=True if user["hidden"] == 1 else False)
-                print("User", user["name"], "imported")
-
-            print("-->", len(resp.json()), "users imported")
-            print()
-
-            # Import Drinks
-            resp = requests.get(f"https://{util.old_domain}/api/beverages",
-                                headers={"x-auth-token": util.token}, timeout=10)
-
-            for drink in resp.json():
-                self.add_drink(
-                    drink["name"], drink["price"]/100, drink["stock"])
-                print("Drink", drink["name"], "imported")
-
-            print("-->", len(resp.json()), "drinks imported")
-            print()
-
-            # Import Transactions
-            users = self.get_users()
-            transactions = []
-            for user in users:
-                resp = requests.get(f"https://{util.old_domain}/api/orders/{user['name']}",
-                                    headers={"x-auth-token": util.token}, timeout=10)
-
-                for transaction in resp.json():
-                    date = datetime.strptime(
-                        transaction["timestamp"], "%Y-%m-%d %H:%M:%S")
-                    transactions.append(
-                        {
-                            "description": transaction["reason"],
-                            "member_id": user["id"],
-                            "amount": transaction["amount"]/100,
-                            "date": date
-                        })
-
-                    print("Transaction", transaction["reason"],
-                          "for user", user["name"], "loaded")
-                print()
-            print("Sorting transactions...")
-            transactions.sort(key=lambda x: x.get('date'))
-            print("Done sorting transactions")
-            for t in transactions:
-                self.session.add(Transaction(description=t["description"],
-                                             member_id=t["member_id"],
-                                             amount=t["amount"],
-                                             date=t["date"]))
-
-            print("Starting to commit Transactions to database")
-            self.session.commit()
-            print("Done")
+        # Create runs for each height 0-3 runs 0-8
+        for i in range(4):
+            for j in range(9):
+                self.session.add(RunInformation(run=j, height=i, length=0, speed=0, turnament_id=new_turnament.id))
+        self.session.commit()

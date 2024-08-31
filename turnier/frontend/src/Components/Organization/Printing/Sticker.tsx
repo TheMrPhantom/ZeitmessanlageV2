@@ -66,7 +66,7 @@ const Sticker = (props: Props) => {
                         </TableRow>
                     </TableHead>
                     <TableRow className={style.tableRow}>
-                        <TableCell className={style.tableRow}>{`FCI ${classToString(props.infos.finalResult.resultA.class)} ${sizeToString(props.infos.finalResult.resultA.size)}`}</TableCell>
+                        <TableCell className={style.tableRow}>{`FCI ${classToString(props.infos.finalResult.resultA.run)} ${sizeToString(props.infos.finalResult.resultA.size)}`}</TableCell>
                         <TableCell className={style.tableRow}>{runTimeToString(props.infos.finalResult.resultA.time)}</TableCell>
                         <TableCell className={style.tableRow}>{checkDis(timeA, props.infos.finalResult.resultA.speed.toFixed(2))}</TableCell>
                         <TableCell className={style.tableRow}>{checkDis(timeA, props.infos.finalResult.resultA.faults)}</TableCell>

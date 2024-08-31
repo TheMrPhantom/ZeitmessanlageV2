@@ -10,14 +10,13 @@ import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom'
-import { getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, loadPermanent, maximumTime, runTimeToString, runTimeToStringClock, standardTime, storePermanent } from '../../Common/StaticFunctionsTyped';
+import { getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, loadPermanent, maximumTime, runTimeToString, runTimeToStringClock, standardTime, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped';
 import { dateToURLString, doPostRequest } from '../../Common/StaticFunctions';
 import { Run as RunType, SkillLevel, Participant, defaultParticipant, RunCategory } from '../../../types/ResponseTypes';
 import { changeLength, changeParticipants, changeSpeed } from '../../../Actions/SampleAction';
 import { minSpeedA3 } from '../../Common/AgilityPO';
 import { useCallback, useMemo } from 'react';
 import SaveIcon from '@mui/icons-material/Save';
-import { set } from 'date-fns';
 
 type Props = {
     startSerial: () => void,
@@ -40,6 +39,7 @@ const Run = (props: Props) => {
     const tempturnamentDate = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(tempdate))?.date
     const turnamentDate = useMemo(() => { return new Date(tempturnamentDate ? tempturnamentDate : tempdate) }, [tempturnamentDate, tempdate])
     const organization = params.organization ? params.organization : ""
+    const turnament = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate))
 
     loadPermanent(params, dispatch, common)
 
@@ -50,7 +50,7 @@ const Run = (props: Props) => {
     //Filter all participants for the current run
     const currentRunClass: SkillLevel = params.class ? Math.floor(Number(params.class) / 2) : 0
     const currentSize = params.class ? Number(params.size) : 0
-    const participants = allParticipants?.filter(p => p.class === currentRunClass && p.size === currentSize)
+    const participants = allParticipants?.filter(p => p.skillLevel === currentRunClass && p.size === currentSize)
 
     // Get index of first participant without result
     const firstIndex = participants?.findIndex(p => getResultFromParticipant(currentRun, p).time === -2)
@@ -225,12 +225,17 @@ const Run = (props: Props) => {
         }
         setStarted(false)
         if (time === undefined) {
-            doPostRequest("0/timer", { action: "stop", time: currentTime })
+            doPostRequest("0/timer", { action: "stop", time: currentTime }).then(() => {
+                updateDatabase(turnament)
+            })
         } else {
-            doPostRequest("0/timer", { action: "stop", time: Math.floor(time / 10) / 100 })
+            doPostRequest("0/timer", { action: "stop", time: Math.floor(time / 10) / 100 }).then(() => {
+                updateDatabase(turnament)
+            })
             changeTime(Math.floor(time / 10) / 100)
         }
-    }, [currentTime, started, changeTime])
+
+    }, [currentTime, started, changeTime, turnament])
 
     const [speedWarning, setspeedWarning] = useState(false)
     const [lengthWarning, setlengthWarning] = useState(false)
@@ -421,18 +426,26 @@ const Run = (props: Props) => {
                             </Stack>
                             <Divider orientation='horizontal' flexItem />
                             <Stack direction="row" justifyContent="space-evenly">
-                                <Button variant='outlined' className={style.btn} onClick={() => { changeFaults(currentFaults + 1); }}>Fehler</Button>
-                                <Button variant='outlined' className={style.btn} onClick={() => { changeRefusals(currentRefusals + 1); }}>Verweigerung</Button>
+                                <Button variant='outlined' className={style.btn} onClick={() => {
+                                    changeFaults(currentFaults + 1)
+                                    updateDatabase(turnament)
+                                }}>Fehler</Button>
+                                <Button variant='outlined' className={style.btn} onClick={() => {
+                                    changeRefusals(currentRefusals + 1)
+                                    updateDatabase(turnament)
+                                }}>Verweigerung</Button>
                             </Stack>
                         </Stack>
                         <Divider orientation='vertical' flexItem />
                         <Stack direction="column" gap={3} className={style.timeBoxRight} alignItems="center">
                             <IconButton className={style.button}
                                 onClick={() => {
-                                    const participantsLength = participants?.length ? participants?.length : 0
-                                    const nextIndex = (selectedParticipantIndex - 1) < 0 ? participantsLength - 1 : selectedParticipantIndex - 1
-                                    setselectedParticipantIndex(nextIndex)
-                                    doPostRequest("0/current/participant", nextIndex)
+                                    if (participants) {
+                                        const participantsLength = participants?.length ? participants?.length : 0
+                                        const nextIndex = (selectedParticipantIndex - 1) < 0 ? participantsLength - 1 : selectedParticipantIndex - 1
+                                        setselectedParticipantIndex(nextIndex)
+                                        doPostRequest("0/current/participant", participants[nextIndex].startNumber)
+                                    }
                                 }}
                             >
                                 <ArrowUpwardIcon />
@@ -449,10 +462,12 @@ const Run = (props: Props) => {
                             </Button>
                             <IconButton className={style.button}
                                 onClick={() => {
-                                    const participantsLength = participants?.length ? participants?.length : 0
-                                    const nextIndex = (selectedParticipantIndex + 1) % participantsLength
-                                    setselectedParticipantIndex(nextIndex)
-                                    doPostRequest("0/current/participant", nextIndex)
+                                    if (participants) {
+                                        const participantsLength = participants?.length ? participants?.length : 0
+                                        const nextIndex = (selectedParticipantIndex + 1) % participantsLength
+                                        setselectedParticipantIndex(nextIndex)
+                                        doPostRequest("0/current/participant", participants[nextIndex].startNumber)
+                                    }
                                 }}
                             >
                                 <ArrowDownwardIcon />

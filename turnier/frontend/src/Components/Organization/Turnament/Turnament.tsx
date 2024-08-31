@@ -1,8 +1,8 @@
 import { Button, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import style from './turnament.module.scss'
 import { ALL_HEIGHTS, ALL_RUNS, Organization, Run, Size } from '../../../types/ResponseTypes'
-import { classToString, fixDis, getNumberOfParticipantsForRun, getNumberOfParticipantsForRunWithResult, getRanking, setMaxTime, sizeToString, standardTime, startSerial, storePermanent } from '../../Common/StaticFunctionsTyped'
+import { classToString, fixDis, getNumberOfParticipantsForRun, getNumberOfParticipantsForRunWithResult, getRanking, setMaxTime, sizeToString, standardTime, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped'
 
 import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
@@ -16,7 +16,6 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'
 import { de } from 'date-fns/locale'
 import PrintingDialog from './PrintingDialog'
 import { minSpeedA3 } from '../../Common/AgilityPO'
-import { openErrorToast, openToast } from '../../../Actions/CommonAction'
 
 type Props = {}
 
@@ -47,7 +46,7 @@ const Turnament = (props: Props) => {
         }
     }
 
-    const date = params.date ? new Date(params.date) : new Date()
+    const date = useMemo(() => params.date ? new Date(params.date) : new Date(), [params.date])
     const turnamentDate = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(date))?.date
 
     const turnament = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(date))
@@ -60,6 +59,33 @@ const Turnament = (props: Props) => {
 
     const runsDialog = [Run.A3, Run.J3, Run.A2, Run.J2, Run.A1, Run.J1, Run.A0, Run.J0]
     const heightsDialog = [Size.Small, Size.Medium, Size.Intermediate, Size.Large]
+
+    const fixAllParticipants = useCallback(() => {
+
+        /* Fix max time and 3 dis */
+
+
+        var tempParticipants = allParticipants ? allParticipants : []
+        /* For each run execute setmaxtime */
+        ALL_RUNS.forEach(run => {
+            ALL_HEIGHTS.forEach(height => {
+                const length = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === run)?.length
+                const speed = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === run)?.speed
+                const stdTime = standardTime(run, height, tempParticipants ? tempParticipants : [], length ? length : 0, speed ? speed : minSpeedA3)
+                const p = tempParticipants?.filter(p => p.skillLevel === Math.floor(run / 2) && p.size === height)
+
+                tempParticipants = setMaxTime(run, stdTime, p ? p : [], tempParticipants ? tempParticipants : [])
+                tempParticipants = fixDis(run, p ? p : [], tempParticipants ? tempParticipants : [])
+
+            })
+        })
+
+
+
+        dispatch(changeParticipants(date, tempParticipants))
+        storePermanent(t_organization, common.organization)
+
+    }, [allParticipants, common.organization, date, dispatch, params.date, t_organization])
 
     const rankings = runsDialog.map((run) => {
         const length = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === run)?.length
@@ -84,34 +110,16 @@ const Turnament = (props: Props) => {
             hasMounted.current = true;
             fixAllParticipants()
         }
-    }, [allParticipants, common.organization, date, dispatch, params.date, t_organization])
-
-    const fixAllParticipants = () => {
-
-        /* Fix max time and 3 dis */
-
-
-        var tempParticipants = allParticipants ? allParticipants : []
-        /* For each run execute setmaxtime */
-        ALL_RUNS.forEach(run => {
-            ALL_HEIGHTS.forEach(height => {
-                const length = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === run)?.length
-                const speed = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === run)?.speed
-                const stdTime = standardTime(run, height, tempParticipants ? tempParticipants : [], length ? length : 0, speed ? speed : minSpeedA3)
-                const p = tempParticipants?.filter(p => p.class === Math.floor(run / 2) && p.size === height)
-
-                tempParticipants = setMaxTime(run, stdTime, p ? p : [], tempParticipants ? tempParticipants : [])
-                tempParticipants = fixDis(run, p ? p : [], tempParticipants ? tempParticipants : [])
-
-            })
-        })
+    }, [allParticipants, common.organization, date, dispatch, params.date, t_organization, fixAllParticipants])
 
 
 
-        dispatch(changeParticipants(date, tempParticipants))
-        storePermanent(t_organization, common.organization)
+    useEffect(() => {
+        //get current turnament
+        updateDatabase(turnament)
 
-    }
+    }, [turnament])
+
 
     return (
         <>

@@ -12,7 +12,7 @@ import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { addTurnament, createOrganization, loadOrganization, removeTurnament } from '../../../Actions/SampleAction';
 import { dateToString, dateToURLString } from '../../Common/StaticFunctions';
-import { ALL_HEIGHTS, ALL_RUNS, Organization, RunInformation, Turnament } from '../../../types/ResponseTypes';
+import { ALL_HEIGHTS, ALL_RUNS, Organization, RunInformation, Tournament } from '../../../types/ResponseTypes';
 
 type Props = {}
 
@@ -87,7 +87,7 @@ const Dashboard = (props: Props) => {
                                         });
                                     });
 
-                                    const turnament: Turnament = {
+                                    const turnament: Tournament = {
                                         date: turnamentDate,
                                         judge: judgeName,
                                         participants: [],

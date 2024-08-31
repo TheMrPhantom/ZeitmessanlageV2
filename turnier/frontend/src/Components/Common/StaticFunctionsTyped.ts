@@ -1,7 +1,8 @@
-import { changeParticipants, createOrganization, loadOrganization } from "../../Actions/SampleAction";
-import { Member, Organization, Participant, Result, Run, SkillLevel, Size, RunCategory, KombiResult, ExtendedResult } from "../../types/ResponseTypes"
+import { createOrganization, loadOrganization } from "../../Actions/SampleAction";
+import { Member, Organization, Participant, Result, Run, SkillLevel, Size, RunCategory, KombiResult, ExtendedResult, Tournament } from "../../types/ResponseTypes"
 import { CommonReducerType } from '../../Reducer/CommonReducer';
 import { faultFactor, maxTimeFactorA0A1A2, maxTimeFactorA3, minSpeedA3, minSpeedJ3, offsetFactor, refusalFactor } from "./AgilityPO";
+import { doPostRequest } from "./StaticFunctions";
 
 export const safeMemberName = (member: Member) => {
     return member.alias === "" ? member.name : member.alias
@@ -135,11 +136,15 @@ export const runTimeToStringClock = (time: number) => {
 }
 
 export const getParticipantsForRun = (participants: Participant[], run: SkillLevel, size: Size) => {
-    return participants?.filter(p => p.class === run && p.size === size)
+    return participants?.filter(p => p.skillLevel === run && p.size === size)
 }
 
 export const getNumberOfParticipantsForRun = (participants: Participant[], run: SkillLevel, size: Size) => {
     return getParticipantsForRun(participants, run, size).length
+}
+
+export const getParticipantFromStartNumber = (participants: Participant[], startNumber: number) => {
+    return participants.find(p => p.startNumber === startNumber)
 }
 
 export const getNumberOfParticipantsForRunWithResult = (participants: Participant[], run: Run, size: Size) => {
@@ -242,7 +247,7 @@ export const getRanking: (participants: Participant[] | undefined, run: Run, cal
         //Filter out participants without result
         const filteredParticipants = participants.filter(p => {
             const result = getResultFromParticipant(run, p);
-            return result.time !== -2 && p.class === runToRunClass(run) && (p.size === size || size === undefined);
+            return result.time !== -2 && p.skillLevel === runToRunClass(run) && (p.size === size || size === undefined);
         });
 
         return filteredParticipants?.sort((a, b) => {
@@ -275,7 +280,7 @@ export const getKombiRanking: (participants: Participant[], skill: SkillLevel, s
         const filteredParticipants = participants.filter(p => {
             const resultA = getResultFromParticipant(skill * 2, p)
             const resultJ = getResultFromParticipant(skill * 2 + 1, p)
-            return resultA.time > 0 && resultJ.time > 0 && p.size === size && p.class === skill
+            return resultA.time > 0 && resultJ.time > 0 && p.size === size && p.skillLevel === skill
         });
 
         /* Initialize array of participants with their combi results, initially all -1 */
@@ -470,4 +475,15 @@ export const fixDis = (currentRun: Run,
     })
 
     return tempParticipants
+}
+
+export const updateDatabase = (turnament: Tournament | undefined) => {
+    if (turnament) {
+        const year = new Date(turnament?.date).getFullYear()
+        const month = new Date(turnament?.date).getMonth() + 1
+        const day = new Date(turnament?.date).getDate()
+        const date = `${year}-${month < 10 ? "0" + month : month}-${day < 10 ? "0" + day : day}`
+        console.log(date)
+        doPostRequest(`0/${date}`, turnament ? turnament : null)//Updates the database
+    }
 }

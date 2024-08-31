@@ -41,19 +41,19 @@ const Participants = (props: Props) => {
             name: name,
             club: club,
             dog: dog,
-            class: runclass,
+            skillLevel: runclass,
             size: size,
             resultA: {
                 time: -2,
                 faults: 0,
                 refusals: 0,
-                class: runclass * 2
+                run: runclass * 2
             },
             resultJ: {
                 time: -2,
                 faults: 0,
                 refusals: 0,
-                class: runclass * 2 + 1
+                run: runclass * 2 + 1
             }
         }
 
@@ -65,7 +65,7 @@ const Participants = (props: Props) => {
         participant.startNumber = startNumber + 1
 
         //Get participants with same class and size
-        const sameClass = participants?.filter(p => p.class === runclass && p.size === size)
+        const sameClass = participants?.filter(p => p.skillLevel === runclass && p.size === size)
         //Get the highest sorting
         const sorting = sameClass && sameClass.length > 0 ? Math.max(...sameClass.map(p => p.sorting)) : 0
         //Add 1 to the highest sorting
@@ -172,7 +172,7 @@ const Participants = (props: Props) => {
                                         <TableCell>{participant.name}</TableCell>
                                         <TableCell>{participant.club}</TableCell>
                                         <TableCell>{participant.dog}</TableCell>
-                                        <TableCell>{runClassToString(participant.class)}</TableCell>
+                                        <TableCell>{runClassToString(participant.skillLevel)}</TableCell>
                                         <TableCell>{sizeToString(participant.size)}</TableCell>
                                         <TableCell>
                                             <Button color='error' variant="outlined" onClick={() => {

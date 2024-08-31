@@ -296,7 +296,6 @@ const TopBar = (props: Props) => {
                 </Drawer>
             </Slide>
 
-            <Toolbar />
         </>
     )
 }

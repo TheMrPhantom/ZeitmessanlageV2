@@ -1,19 +1,15 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import style from './run.module.scss'
 import { Collapse, Divider, FormControlLabel, Paper, Rating, Stack, Switch, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material'
-
-
-
 import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom'
-import { getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, getTotalFaults, loadPermanent, maximumTime, runTimeToString, runTimeToStringClock, standardTime } from '../../Common/StaticFunctionsTyped';
-import { dateToURLString } from '../../Common/StaticFunctions';
-import { Run as RunType, SkillLevel, Participant, defaultParticipant, RunCategory, Result } from '../../../types/ResponseTypes';
+import { getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, maximumTime, runTimeToString, runTimeToStringClock, standardTime } from '../../Common/StaticFunctionsTyped';
+import { Run as RunType, SkillLevel, Participant, defaultParticipant, RunCategory } from '../../../types/ResponseTypes';
 import { changeParticipants } from '../../../Actions/SampleAction';
 import { minSpeedA3 } from '../../Common/AgilityPO';
-import { useCallback, useMemo } from 'react';
+import { useCallback } from 'react';
 
 type Props = {}
 
@@ -21,30 +17,25 @@ const Run = (props: Props) => {
     const common: CommonReducerType = useSelector((state: RootState) => state.common);
     const [ws, setws] = useState<WebSocket | null>(null);
     const dispatch = useDispatch()
-    //const navigate = useNavigate()
+
     const params = useParams()
 
     const minTimeout = 2000;
     const maxTimeout = 5000;
 
-    const tempdate = useMemo<Date>(() => { return params.date ? new Date(params.date) : new Date() }, [params.date])
-    const tempturnamentDate = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(tempdate))?.date
-    const turnamentDate = useMemo(() => { return new Date(tempturnamentDate ? tempturnamentDate : tempdate) }, [tempturnamentDate, tempdate])
-    const organization = params.organization ? params.organization : ""
-
-    loadPermanent(params, dispatch, common)
+    const turnamentDate = useMemo(() => new Date(common.userTurnament.date), [common.userTurnament.date])
 
     //Get all participants
-    const allParticipants = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate))?.participants
+    const allParticipants = common.userTurnament.participants
     const currentRun: RunType = params.class ? Number(params.class) : 0
 
     //Filter all participants for the current run
     const currentRunClass: SkillLevel = params.class ? Math.floor(Number(params.class) / 2) : 0
     const currentSize = params.class ? Number(params.size) : 0
-    const participants = allParticipants?.filter(p => p.class === currentRunClass && p.size === currentSize)
+    const participants = allParticipants?.filter(p => p.skillLevel === currentRunClass && p.size === currentSize)
 
     const [selectedParticipantIndex, setselectedParticipantIndex] = useState(0)
-    const selectedParticipant: Participant = participants ? participants[selectedParticipantIndex] : defaultParticipant
+    const selectedParticipant: Participant = participants && participants.length > 0 ? participants[selectedParticipantIndex] : defaultParticipant
 
     const currentResult = getResultFromParticipant(currentRun, selectedParticipant)
 
@@ -53,7 +44,7 @@ const Run = (props: Props) => {
     const [showStarter, setshowStarter] = useState(true)
     const [showResults, setshowResults] = useState(true)
 
-    const parcoursInfos = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate))?.runs.find(r => r.run === currentRun && r.height === currentSize)
+    const parcoursInfos = common.userTurnament.runs.find(r => r.run === currentRun && r.height === currentSize)
 
     const participantsWithResults = participants?.filter(p => getResultFromParticipant(currentRun, p).time > -2)
     const calculatedStandardTime = standardTime(currentRun,
@@ -90,7 +81,7 @@ const Run = (props: Props) => {
                 setnewFaults(value)
             }
         }
-    }, [currentRun, dispatch, participants, selectedParticipant.startNumber, turnamentDate, started])
+    }, [currentRun, dispatch, selectedParticipant.startNumber, turnamentDate, started, allParticipants])
 
     const changeRefusals = useCallback((value: number) => {
         if (allParticipants) {
@@ -112,7 +103,7 @@ const Run = (props: Props) => {
                 setnewRefusals(value)
             }
         }
-    }, [currentRun, dispatch, participants, selectedParticipant.startNumber, turnamentDate, started])
+    }, [currentRun, dispatch, selectedParticipant.startNumber, turnamentDate, started, allParticipants])
 
     const changeAll = useCallback((time: number, faults: number, refusals: number) => {
         if (allParticipants) {
@@ -130,7 +121,7 @@ const Run = (props: Props) => {
 
             dispatch(changeParticipants(turnamentDate, newParticipants))
         }
-    }, [currentRun, dispatch, participants, selectedParticipant.startNumber, turnamentDate])
+    }, [currentRun, dispatch, selectedParticipant.startNumber, turnamentDate, allParticipants])
 
     const changeTime = useCallback(
         (value: number) => {
@@ -160,7 +151,6 @@ const Run = (props: Props) => {
             }
         }
         , [dispatch,
-            participants,
             selectedParticipant,
             turnamentDate,
             currentRun,
@@ -168,7 +158,8 @@ const Run = (props: Props) => {
             currentRefusals,
             newFaults,
             newRefusals,
-            changeAll
+            changeAll,
+            allParticipants
         ])
 
 
@@ -323,7 +314,6 @@ const Run = (props: Props) => {
                             <TableBody>
                                 {
                                     participants?.map((p, index) => {
-                                        const result = getResultFromParticipant(currentRun, p)
                                         return (
                                             <TableRow key={p.startNumber} className={index === selectedParticipantIndex ? style.selected : ""}>
                                                 <TableCell>{p.sorting}</TableCell>
