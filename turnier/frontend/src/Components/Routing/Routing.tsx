@@ -8,7 +8,6 @@ import Participants from '../Organization/Participants/Participants';
 import Dashboard from '../Organization/OrganizationDashboard/Dashboard';
 import UserRun from '../User/Run/Run';
 import RunSelection from '../User/RunSelection/RunSelection';
-import PrintingPage from '../Organization/Printing/PrintingPage';
 import Printing from '../Organization/Printing/Printing';
 import { Toolbar } from '@mui/material';
 import { startSerial } from '../Common/StaticFunctionsTyped';

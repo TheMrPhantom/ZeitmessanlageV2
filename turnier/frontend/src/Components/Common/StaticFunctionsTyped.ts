@@ -269,8 +269,17 @@ export const getRanking: (participants: Participant[] | undefined, run: Run, cal
 export const getKombiRanking: (participants: Participant[], skill: SkillLevel, size: Size, standardTimeA: number, standardTimeJ: number) => KombiResult[] =
     (participants: Participant[], skill: SkillLevel, size: Size, standardTimeA: number, standardTimeJ: number) => {
 
+
+
+        //Filter out participants who have results in both A and J
+        const filteredParticipants = participants.filter(p => {
+            const resultA = getResultFromParticipant(skill * 2, p)
+            const resultJ = getResultFromParticipant(skill * 2 + 1, p)
+            return resultA.time > 0 && resultJ.time > 0 && p.size === size && p.class === skill
+        });
+
         /* Initialize array of participants with their combi results, initially all -1 */
-        const combiResults = participants.map(p => {
+        const combiResults = filteredParticipants.map(p => {
             return {
                 participant: p,
                 totalFaults: 0,
@@ -279,12 +288,7 @@ export const getKombiRanking: (participants: Participant[], skill: SkillLevel, s
             }
         })
 
-        //Filter out participants who have results in both A and J
-        const filteredParticipants = participants.filter(p => {
-            const resultA = getResultFromParticipant(skill * 2, p)
-            const resultJ = getResultFromParticipant(skill * 2 + 1, p)
-            return resultA.time > 0 && resultJ.time > 0 && p.size === size && p.class === skill
-        });
+
 
         /* Calculate total faults and total time for each participant */
         filteredParticipants.forEach(p => {

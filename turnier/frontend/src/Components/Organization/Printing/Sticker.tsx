@@ -23,6 +23,9 @@ const Sticker = (props: Props) => {
     const timeA = props.infos.finalResult.resultA.time
     const timeJ = props.infos.finalResult.resultJ.time
 
+    const ratingA = getRating(props.infos.finalResult.resultA.time, totalFaultsA)
+    const ratingJ = getRating(props.infos.finalResult.resultJ.time, totalFaultsJ)
+
     const checkDis = (time: number, text: string | number) => {
         if (time > 0) {
             return text
@@ -70,7 +73,7 @@ const Sticker = (props: Props) => {
                         <TableCell className={style.tableRow}>{checkDis(timeA, props.infos.finalResult.resultA.refusals)}</TableCell>
                         <TableCell className={style.tableRow}>{checkDis(timeA, props.infos.finalResult.resultA.timefaults.toFixed(2))}</TableCell>
                         <TableCell className={style.tableRow}>{checkDis(timeA, totalFaultsA)}</TableCell>
-                        <TableCell className={style.tableRow}>{getRating(props.infos.finalResult.resultA.time, totalFaultsA)}</TableCell>
+                        <TableCell className={style.tableRow} style={{ backgroundColor: ratingA === "V0" ? '#dddddd' : '' }}>{ratingA}</TableCell>
                         <TableCell className={style.tableRow}>{checkDis(timeA, `${props.infos.finalResult.resultA.place}/${props.infos.finalResult.resultA.numberofparticipants}`)}</TableCell>
                         <TableCell className={style.tableRow} rowSpan={2} align="center">
                             {props.infos.finalResult.kombi.kombi > 0 ? `${props.infos.finalResult.kombi.kombi}/${props.infos.finalResult.resultA.numberofparticipants}` : <CancelIcon />}
@@ -84,7 +87,7 @@ const Sticker = (props: Props) => {
                         <TableCell className={style.tableRow}>{checkDis(timeJ, props.infos.finalResult.resultJ.refusals)}</TableCell>
                         <TableCell className={style.tableRow}>{checkDis(timeJ, props.infos.finalResult.resultJ.timefaults.toFixed(2))}</TableCell>
                         <TableCell className={style.tableRow}>{checkDis(timeJ, totalFaultsJ)}</TableCell>
-                        <TableCell className={style.tableRow}>{getRating(props.infos.finalResult.resultJ.time, totalFaultsA)}</TableCell>
+                        <TableCell className={style.tableRow} style={{ backgroundColor: ratingJ === "V0" ? '#dddddd' : 'none' }}>{ratingJ}</TableCell>
                         <TableCell className={style.tableRow}>{checkDis(timeJ, `${props.infos.finalResult.resultJ.place}/${props.infos.finalResult.resultJ.numberofparticipants}`)}</TableCell>
                     </TableRow>
 
