@@ -43,3 +43,8 @@
 .timeBoxRight {
     width: min-content;
 }
+
+.error {
+    border: 2px $error-color solid;
+    padding: $padding;
+}

@@ -1,15 +1,15 @@
 import { Button, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import style from './turnament.module.scss'
-import { Organization, Run, Size } from '../../../types/ResponseTypes'
-import { classToString, getNumberOfParticipantsForRun, getNumberOfParticipantsForRunWithResult, getRanking, sizeToString, standardTime, startSerial } from '../../Common/StaticFunctionsTyped'
+import { ALL_HEIGHTS, ALL_RUNS, Organization, Run, Size } from '../../../types/ResponseTypes'
+import { classToString, fixDis, getNumberOfParticipantsForRun, getNumberOfParticipantsForRunWithResult, getRanking, setMaxTime, sizeToString, standardTime, startSerial, storePermanent } from '../../Common/StaticFunctionsTyped'
 
 import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useParams } from 'react-router-dom'
 import { dateToURLString } from '../../Common/StaticFunctions'
-import { changeDate, changeJudge, changeLength, changeSpeed, changeTurnamentName, clearPrints, createOrganization, loadOrganization } from '../../../Actions/SampleAction'
+import { changeDate, changeJudge, changeLength, changeParticipants, changeSpeed, changeTurnamentName, clearPrints, createOrganization, loadOrganization } from '../../../Actions/SampleAction'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider/LocalizationProvider'
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'
@@ -77,6 +77,41 @@ const Turnament = (props: Props) => {
             })
         }
     })
+    const hasMounted = useRef(false);
+
+    useEffect(() => {
+        if (!hasMounted.current) {
+            hasMounted.current = true;
+            fixAllParticipants()
+        }
+    }, [allParticipants, common.organization, date, dispatch, params.date, t_organization])
+
+    const fixAllParticipants = () => {
+
+        /* Fix max time and 3 dis */
+
+
+        var tempParticipants = allParticipants ? allParticipants : []
+        /* For each run execute setmaxtime */
+        ALL_RUNS.forEach(run => {
+            ALL_HEIGHTS.forEach(height => {
+                const length = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === run)?.length
+                const speed = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === run)?.speed
+                const stdTime = standardTime(run, height, tempParticipants ? tempParticipants : [], length ? length : 0, speed ? speed : minSpeedA3)
+                const p = tempParticipants?.filter(p => p.class === Math.floor(run / 2) && p.size === height)
+
+                tempParticipants = setMaxTime(run, stdTime, p ? p : [], tempParticipants ? tempParticipants : [])
+                tempParticipants = fixDis(run, p ? p : [], tempParticipants ? tempParticipants : [])
+
+            })
+        })
+
+
+
+        dispatch(changeParticipants(date, tempParticipants))
+        storePermanent(t_organization, common.organization)
+
+    }
 
     return (
         <>
@@ -145,7 +180,11 @@ const Turnament = (props: Props) => {
                         <Stack className={style.infoBox} gap={2}>
                             <Typography variant='h5'>Listen Drucken</Typography>
                             <Button variant='outlined'
-                                onClick={() => { dispatch(clearPrints()); setprintDialogOpen(true) }}
+                                onClick={() => {
+                                    fixAllParticipants()
+                                    dispatch(clearPrints());
+                                    setprintDialogOpen(true);
+                                }}
                             >Auswählen</Button>
                         </Stack>
                     </Stack>

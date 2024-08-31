@@ -13,9 +13,11 @@ import { useParams } from 'react-router-dom'
 import { getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, loadPermanent, maximumTime, runTimeToString, runTimeToStringClock, standardTime, storePermanent } from '../../Common/StaticFunctionsTyped';
 import { dateToURLString, doPostRequest } from '../../Common/StaticFunctions';
 import { Run as RunType, SkillLevel, Participant, defaultParticipant, RunCategory } from '../../../types/ResponseTypes';
-import { changeParticipants } from '../../../Actions/SampleAction';
+import { changeLength, changeParticipants, changeSpeed } from '../../../Actions/SampleAction';
 import { minSpeedA3 } from '../../Common/AgilityPO';
 import { useCallback, useMemo } from 'react';
+import SaveIcon from '@mui/icons-material/Save';
+import { set } from 'date-fns';
 
 type Props = {
     startSerial: () => void,
@@ -230,6 +232,36 @@ const Run = (props: Props) => {
         }
     }, [currentTime, started, changeTime])
 
+    const [speedWarning, setspeedWarning] = useState(false)
+    const [lengthWarning, setlengthWarning] = useState(false)
+    const [tempLength, settempLength] = useState(300)
+    const [tempSpeed, settempSpeed] = useState(1)
+
+    useEffect(() => {
+        const pLength = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === currentRun)?.length
+        const pSpeed = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === currentRun)?.speed
+        const date = params.date ? new Date(params.date) : new Date()
+
+
+        if (pLength === 0) {
+            console.log(pLength)
+            setlengthWarning(true)
+
+            dispatch(changeLength(date, currentRun, tempLength))
+            const t_organization = params.organization ? params.organization : ""
+            window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
+        }
+
+        console.log(currentRun)
+        if (pSpeed === 0 && currentRun !== RunType.J3 && currentRun !== RunType.A3) {
+            setspeedWarning(true)
+
+            dispatch(changeSpeed(date, currentRun, tempSpeed))
+            const t_organization = params.organization ? params.organization : ""
+            window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
+        }
+
+    }, [common.organization, currentRun, dispatch, params.date, params.organization, tempLength, tempSpeed])
 
 
     useEffect(() => {
@@ -274,6 +306,85 @@ const Run = (props: Props) => {
     const wait = async (ms: number) => {
         return new Promise(r => setTimeout(r, ms));
     }
+
+    const showWarnings = () => {
+        let warnings = []
+        console.log(lengthWarning)
+        if (lengthWarning) {
+            console.log("lengthWarning")
+            warnings.push(<Paper className={style.error}>
+                <Stack direction="column">
+                    <Stack gap={1} direction="column" >
+                        <Typography variant='h5'>Warnung: Parcourlänge nicht gesetzt</Typography>
+                        <Typography variant='overline'>Die Parcourlänge wurde automatisch auf 300m angepasst, bitte korrekte Länge eintragen</Typography>
+                        <Stack direction="row" gap={3}>
+                            <TextField value={tempLength}
+                                type="number"
+                                className={style.runStats}
+
+                                InputProps={{
+                                    endAdornment: <InputAdornment position="end">m</InputAdornment>,
+                                }}
+                                onChange={(value) => {
+                                    settempLength(Number(value.target.value))
+                                }}
+
+                            />
+                            <Button variant='outlined' onClick={() => {
+                                const date = params.date ? new Date(params.date) : new Date()
+                                dispatch(changeLength(date, currentRun, tempLength))
+                                const t_organization = params.organization ? params.organization : ""
+                                window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
+                                setlengthWarning(false)
+                            }}>
+                                <SaveIcon />
+                            </Button>
+                        </Stack>
+                    </Stack>
+                </Stack>
+            </Paper >)
+        }
+        if (speedWarning) {
+            warnings.push(<Paper className={style.error}>
+                <Stack direction="column">
+                    <Stack gap={1} direction="column" >
+                        <Typography variant='h5'>Warnung: Parcourgeschwindigkeit nicht gesetzt</Typography>
+                        <Typography variant='overline'>Die Parcourgeschwindigkeit wurde automatisch auf 1m/s angepasst, bitte korrekte Geschwindigkeit eintragen</Typography>
+                        <Stack direction="row" gap={3}>
+                            <TextField value={tempSpeed}
+                                type="number"
+                                className={style.runStats}
+                                InputProps={{
+                                    endAdornment: <InputAdornment position="end" variant='outlined'>m/s</InputAdornment>,
+                                }}
+                                onChange={(value) => {
+                                    settempSpeed(Number(value.target.value))
+                                }}
+                            />
+                            <Button variant='outlined' onClick={() => {
+                                const date = params.date ? new Date(params.date) : new Date()
+                                dispatch(changeSpeed(date, currentRun, tempSpeed))
+                                const t_organization = params.organization ? params.organization : ""
+                                window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
+                                setspeedWarning(false)
+                            }}>
+                                <SaveIcon />
+                            </Button>
+                        </Stack>
+                    </Stack>
+                </Stack>
+            </Paper>)
+        }
+        if (warnings.length > 0) {
+            return <>
+                <Divider orientation='horizontal' flexItem />
+                {warnings}
+            </>
+        } else {
+            return <></>
+        }
+    }
+
     return (
         <Stack className={style.runContainer} direction="column" alignItems="center" gap={4}>
             <Paper className={style.timeContainer}>
@@ -286,6 +397,7 @@ const Run = (props: Props) => {
                             <Typography variant='h4'>{selectedParticipant?.dog}</Typography>
                         </Stack>
                     </Stack>
+                    {showWarnings()}
                     <Divider orientation='horizontal' flexItem />
                     <Stack direction="row" gap={2} justifyContent="space-between" flexWrap="wrap">
 
@@ -463,7 +575,7 @@ const Run = (props: Props) => {
                                 getRanking(participantsWithResults, currentRun, calculatedStandardTime).map((value) => {
                                     return (
                                         <TableRow onClick={() => { setselectedParticipantIndex(value.participant.sorting - 1) }} key={value.participant.startNumber} className={value.participant.startNumber === selectedParticipant.startNumber ? style.selected : ""}>
-                                            <TableCell>{value.rank}.</TableCell>
+                                            <TableCell>{value.rank > 0 ? `${value.rank}.` : ""}</TableCell>
                                             <TableCell>{value.participant.name}</TableCell>
                                             <TableCell>{value.participant.dog}</TableCell>
                                             <TableCell>{runTimeToString(value.result.time)}</TableCell>

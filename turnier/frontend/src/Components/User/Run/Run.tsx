@@ -366,7 +366,7 @@ const Run = (props: Props) => {
                                     getRanking(participantsWithResults, currentRun, calculatedStandardTime).map((value) => {
                                         return (
                                             <TableRow key={value.participant.startNumber} className={value.participant.startNumber === selectedParticipant.startNumber ? style.selected : ""}>
-                                                <TableCell>{value.rank}.</TableCell>
+                                                <TableCell>{value.rank > 0 ? `${value.rank}.` : ""}</TableCell>
                                                 <TableCell>{value.participant.name}</TableCell>
                                                 <TableCell>{value.participant.dog}</TableCell>
                                                 <TableCell>{runTimeToString(value.result.time)}</TableCell>

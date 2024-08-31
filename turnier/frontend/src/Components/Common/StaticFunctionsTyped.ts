@@ -1,4 +1,4 @@
-import { createOrganization, loadOrganization } from "../../Actions/SampleAction";
+import { changeParticipants, createOrganization, loadOrganization } from "../../Actions/SampleAction";
 import { Member, Organization, Participant, Result, Run, SkillLevel, Size, RunCategory, KombiResult, ExtendedResult } from "../../types/ResponseTypes"
 import { CommonReducerType } from '../../Reducer/CommonReducer';
 import { faultFactor, maxTimeFactorA0A1A2, maxTimeFactorA3, minSpeedA3, minSpeedJ3, offsetFactor, refusalFactor } from "./AgilityPO";
@@ -400,4 +400,74 @@ export const startSerial = async (onmessage: (message: string) => void, onconnec
     } catch (e) {
 
     }
+}
+
+export const setMaxTime = (currentRun: Run,
+    calculatedStandardTime: number,
+    participantsForRun: Participant[],
+    allParticipants: Participant[]
+) => {
+    const maxTime = maximumTime(currentRun, calculatedStandardTime)
+
+    /*Print max time with what run */
+    if (participantsForRun.length > 0)
+        console.log(`Max time for ${classToString(currentRun)} ${sizeToString(participantsForRun[0].size)} is ${maxTime}`)
+
+    let tempParticipants = allParticipants
+
+
+    participantsForRun.forEach(toCheck => {
+
+        /* Get all participants of this run*/
+        tempParticipants = tempParticipants.map(p => {
+            if (p.startNumber === toCheck.startNumber) {
+                //  check if a or j
+                if (getRunCategory(currentRun) === RunCategory.A) {
+                    return { ...p, resultA: { ...p.resultA, time: (p.resultA.time > maxTime) ? -1 : p.resultA.time } }
+                } else {
+                    console.log(`Max time for ${classToString(currentRun)} ${sizeToString(participantsForRun[0].size)} is ${maxTime}`)
+                    console.log({ ...p, resultJ: { ...p.resultJ, time: (p.resultJ.time > maxTime) ? -1 : p.resultJ.time } })
+                    return { ...p, resultJ: { ...p.resultJ, time: (p.resultJ.time > maxTime) ? -1 : p.resultJ.time } }
+                }
+            }
+            return p
+        })
+
+
+        /*print new participants*/
+        console.log(tempParticipants)
+
+
+
+
+    })
+
+    return tempParticipants
+}
+
+export const fixDis = (currentRun: Run,
+    participantsForRun: Participant[],
+    allParticipants: Participant[],
+) => {
+
+    let tempParticipants = allParticipants
+
+    participantsForRun.forEach(toCheck => {
+
+        /* Get all participants of this run*/
+        tempParticipants = tempParticipants.map(p => {
+            if (p.startNumber === toCheck.startNumber) {
+                //  check if a or j
+                if (getRunCategory(currentRun) === RunCategory.A) {
+                    return { ...p, resultA: { ...p.resultA, time: (p.resultA.refusals >= 3) ? -1 : p.resultA.time } }
+                } else {
+                    return { ...p, resultJ: { ...p.resultJ, time: (p.resultJ.refusals >= 3) ? -1 : p.resultJ.time } }
+                }
+            }
+            return p
+        })
+
+    })
+
+    return tempParticipants
 }
