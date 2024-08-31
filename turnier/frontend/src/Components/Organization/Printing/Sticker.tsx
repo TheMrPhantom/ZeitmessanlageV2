@@ -4,7 +4,7 @@ import style from './print.module.scss'
 import CancelIcon from '@mui/icons-material/Cancel';
 import { StickerInfo } from '../../../types/ResponseTypes';
 import { dateToString } from '../../Common/StaticFunctions';
-import { getRating, runTimeToString } from '../../Common/StaticFunctionsTyped';
+import { classToString, getRating, runTimeToString, sizeToString } from '../../Common/StaticFunctionsTyped';
 
 type Props = {
     infos: StickerInfo
@@ -66,7 +66,7 @@ const Sticker = (props: Props) => {
                         </TableRow>
                     </TableHead>
                     <TableRow className={style.tableRow}>
-                        <TableCell className={style.tableRow}>FCI A3 Intermediate</TableCell>
+                        <TableCell className={style.tableRow}>{`FCI ${classToString(props.infos.finalResult.resultA.class)} ${sizeToString(props.infos.finalResult.resultA.size)}`}</TableCell>
                         <TableCell className={style.tableRow}>{runTimeToString(props.infos.finalResult.resultA.time)}</TableCell>
                         <TableCell className={style.tableRow}>{checkDis(timeA, props.infos.finalResult.resultA.speed.toFixed(2))}</TableCell>
                         <TableCell className={style.tableRow}>{checkDis(timeA, props.infos.finalResult.resultA.faults)}</TableCell>
