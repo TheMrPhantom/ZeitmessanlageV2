@@ -493,7 +493,7 @@ export const favoriteIdenfitier = (participant: Participant) => {
 }
 
 export const checkIfFavorite = (participant: Participant, favorites: string | undefined | null) => {
-    console.log(favorites)
+
     if (favorites === undefined || favorites === null) { return false }
 
     let isFavorite = false

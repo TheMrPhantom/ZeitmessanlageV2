@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import style from './run.module.scss'
 import { Collapse, Divider, FormControlLabel, Paper, Rating, Stack, Switch, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material'
 import { RootState } from '../../../Reducer/reducerCombiner'
@@ -6,11 +6,12 @@ import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom'
 import { checkIfFavorite, favoriteIdenfitier, getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, maximumTime, runTimeToString, runTimeToStringClock, standardTime } from '../../Common/StaticFunctionsTyped';
-import { Run as RunType, SkillLevel, Participant, defaultParticipant, RunCategory } from '../../../types/ResponseTypes';
-import { changeParticipants } from '../../../Actions/SampleAction';
+import { Run as RunType, SkillLevel, Participant, defaultParticipant, RunCategory, Tournament } from '../../../types/ResponseTypes';
+import { changeParticipants, updateUserTurnament } from '../../../Actions/SampleAction';
 import { minSpeedA3 } from '../../Common/AgilityPO';
 import { useCallback } from 'react';
 import Spacer from '../../Common/Spacer';
+import { doGetRequest } from '../../Common/StaticFunctions';
 
 type Props = {}
 
@@ -166,9 +167,13 @@ const Run = (props: Props) => {
             allParticipants
         ])
 
-
-
-
+    useEffect(() => {
+        doGetRequest('0/secret/2024-08-31').then((data) => {
+            if (data.code === 200) {
+                dispatch(updateUserTurnament(data.content as Tournament))
+            }
+        })
+    }, [dispatch])
 
     useEffect(() => {
         if (!started) {
@@ -195,67 +200,80 @@ const Run = (props: Props) => {
         }
     }, [calculatedStandardTime, changeTime, currentRun, currentTime])
 
-    useEffect(() => {
-        const ws = new WebSocket("ws://localhost:9001/ws")
 
-        const closeWs = () => {
-            try {
-                if (ws !== null) {
-                    ws.close()
+    const ref = useRef(true)
+
+    useEffect(() => {
+        if (ref.current) {
+            ref.current = false;
+            const ws = new WebSocket("ws://localhost:9001/ws")
+
+            const closeWs = () => {
+                try {
+                    if (ws !== null) {
+                        ws.close()
+                    }
+                }
+                catch (e) {
+                    console.log(e);
                 }
             }
-            catch (e) {
-                console.log(e);
+
+            ws.onmessage = (e: MessageEvent) => {
+                const message = JSON.parse(e.data);
+                console.log(message)
+                switch (message.action) {
+                    case "start_timer":
+                        startTimer();
+                        break;
+                    case "stop_timer":
+                        stopTimer();
+                        changeTime(message.time)
+                        break;
+                    case "changed_current_participant":
+                        setselectedParticipantStartNumber(message.participant)
+
+                        break;
+                    case "changed_current_fault":
+                        changeFaults(message.fault)
+                        break;
+                    case "changed_current_refusal":
+                        changeRefusals(message.refusal)
+                        break;
+                    case "reload":
+                        doGetRequest('0/secret/2024-08-31').then((data) => {
+                            if (data.code === 200) {
+                                dispatch(updateUserTurnament(data.content as Tournament))
+                            }
+                        })
+                        break;
+                }
+
+            };
+
+            ws.onerror = () => {
+                setTimeout(() => {
+                    closeWs()
+                    setwebsocket(new WebSocket("ws://localhost:9001/ws"));
+                }, Math.random() * (maxTimeout - minTimeout) + minTimeout);
             }
-        }
 
-        ws.onmessage = (e: MessageEvent) => {
-            const message = JSON.parse(e.data);
-            console.log(message)
-            switch (message.action) {
-                case "start_timer":
-                    startTimer();
-                    break;
-                case "stop_timer":
-                    stopTimer();
-                    changeTime(message.time)
-                    break;
-                case "changed_current_participant":
-                    setselectedParticipantStartNumber(message.participant)
-
-                    break;
-                case "changed_current_fault":
-                    changeFaults(message.fault)
-                    break;
-                case "changed_current_refusal":
-                    changeRefusals(message.refusal)
-                    break;
+            ws.onclose = () => {
+                setTimeout(() => {
+                    closeWs()
+                    setwebsocket(new WebSocket("ws://localhost:9001/ws"));
+                }, Math.random() * (maxTimeout - minTimeout) + minTimeout);
             }
+            setwebsocket(ws);
 
-        };
+            return () => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.close();
+                }
+            };
 
-        ws.onerror = () => {
-            setTimeout(() => {
-                closeWs()
-                setwebsocket(new WebSocket("ws://localhost:9001/ws"));
-            }, Math.random() * (maxTimeout - minTimeout) + minTimeout);
         }
-
-        ws.onclose = () => {
-            setTimeout(() => {
-                closeWs()
-                setwebsocket(new WebSocket("ws://localhost:9001/ws"));
-            }, Math.random() * (maxTimeout - minTimeout) + minTimeout);
-        }
-        setwebsocket(ws);
-
-        return () => {
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.close();
-            }
-        };
-
-    }, [changeFaults, changeRefusals, changeTime])
+    }, [changeFaults, changeRefusals, changeTime, dispatch])
 
 
     const startTimer = () => {

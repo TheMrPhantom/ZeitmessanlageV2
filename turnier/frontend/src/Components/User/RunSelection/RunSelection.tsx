@@ -1,5 +1,5 @@
 import { Button, Divider, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material'
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import style from './runselection.module.scss'
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import PetsIcon from '@mui/icons-material/Pets';
@@ -22,21 +22,81 @@ const RunSelection = (props: Props) => {
     const [skillLevel, setskillLevel] = useState(SkillLevel.A3)
     const [jumpHeight, setjumpHeight] = useState(Size.Small)
     const [reload, setreload] = useState(false)
+    const [, setwebsocket] = useState<WebSocket | null>(null);
+    const [selectedParticipantStartnumber, setselectedParticipantStartnumber] = useState(-1)
 
     const navigate = useNavigate()
     const dispatch = useDispatch()
 
     const common: CommonReducerType = useSelector((state: RootState) => state.common);
 
+    const minTimeout = 2000;
+    const maxTimeout = 5000;
+
     useEffect(() => {
         doGetRequest('0/secret/2024-08-31').then((data) => {
             if (data.code === 200) {
                 dispatch(updateUserTurnament(data.content as Tournament))
-            } else {
-                console.log(data)
             }
         })
-    }, [dispatch])
+    }, [dispatch, reload])
+
+    const ref = useRef(true)
+
+    useEffect(() => {
+        if (ref.current) {
+            ref.current = false;
+            const ws = new WebSocket("ws://localhost:9001/ws")
+
+            const closeWs = () => {
+                try {
+                    if (ws !== null) {
+                        ws.close()
+                    }
+                }
+                catch (e) {
+                    console.log(e);
+                }
+            }
+
+            ws.onmessage = (e: MessageEvent) => {
+                const message = JSON.parse(e.data);
+                console.log(message)
+                switch (message.action) {
+                    case "reload":
+                        setreload(!reload)
+                        break;
+                    case "changed_current_participant":
+                        setselectedParticipantStartnumber(message.participant)
+                        break;
+                }
+
+            };
+
+            ws.onerror = () => {
+                setTimeout(() => {
+                    closeWs()
+                    setwebsocket(new WebSocket("ws://localhost:9001/ws"));
+                }, Math.random() * (maxTimeout - minTimeout) + minTimeout);
+            }
+
+            ws.onclose = () => {
+                setTimeout(() => {
+                    closeWs()
+                    setwebsocket(new WebSocket("ws://localhost:9001/ws"));
+                }, Math.random() * (maxTimeout - minTimeout) + minTimeout);
+            }
+            setwebsocket(ws);
+
+            return () => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.close();
+                }
+            };
+
+        }
+    }, [reload])
+
 
 
     const favoriteDogs = () => {
@@ -47,7 +107,7 @@ const RunSelection = (props: Props) => {
                 favoriteParticipants.push(participant)
             }
         })
-        console.log(favoriteParticipants)
+
         if (favoriteParticipants.length === 0) {
             return <Typography variant="caption">Noch keine Hunde favorisiert</Typography>
         } else {
@@ -64,7 +124,6 @@ const RunSelection = (props: Props) => {
                         console.log(storage)
                         window.localStorage.setItem("favorites", storage)
                         setreload(!reload)
-
                     }}
                 />
             })
