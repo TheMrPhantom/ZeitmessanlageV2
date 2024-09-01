@@ -182,7 +182,9 @@ const reducer = (state = initialState, { type, payload }: any) => {
             newState.stickersToPrint = []
             return newState
         case "UPDATE_USER_TURNAMENT":
-            newState.userTurnament = payload
+            console.log(payload)
+            newState.userTurnament = { ...payload }
+            console.log(newState)
             return newState
         default:
             return state
