@@ -494,7 +494,7 @@ const Run = (props: Props) => {
                                 if (Number(value.target.value) > -1) {
                                     if (Number(value.target.value) === 0) {
                                         changeTime(-2)
-                                        doPostRequest("0/timer", { action: "stop", time: -2 })
+                                        updateDatabase(turnament)
                                     } else {
                                         changeTime(Number(value.target.value))
                                         updateDatabase(turnament)
