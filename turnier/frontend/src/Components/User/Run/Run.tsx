@@ -93,16 +93,10 @@ const Run = (props: Props) => {
 
     const [initTime, setinitTime] = useState(new Date().getTime())
 
-
-
-    console.log(started)
-
-
-
     const changeFaults = useCallback((value: number) => {
-        console.log(startedR.current)
+
         if (allParticipants) {
-            console.log(startedR.current)
+
             if (!startedR.current) {
 
                 const newParticipants = allParticipants.map(p => {
@@ -116,7 +110,7 @@ const Run = (props: Props) => {
 
                     return p
                 })
-                console.log("oijojioij")
+
                 const t = { ...common }
                 t.participants = newParticipants
                 setcommon(t)
@@ -124,8 +118,7 @@ const Run = (props: Props) => {
                 faultsToDisplay.current = value
 
             } else {
-                console.log("eeeeeeee")
-                console.log(value)
+
                 setnewFaults(value)
                 faultsToDisplay.current = value
             }
