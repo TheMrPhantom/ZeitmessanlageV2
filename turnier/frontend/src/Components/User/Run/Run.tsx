@@ -310,7 +310,8 @@ const Run = (props: Props) => {
             }
         };
 
-
+        // This ignore is there because adding the missing dependencies makes that infinite ws connection are spawned
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [reload])
 
 
