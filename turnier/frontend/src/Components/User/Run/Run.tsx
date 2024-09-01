@@ -52,6 +52,24 @@ const Run = (props: Props) => {
 
     const [newFaults, setnewFaults] = useState(-1)
     const [newRefusals, setnewRefusals] = useState(-1)
+    const [started, setStarted] = useState(false);
+    const [reload, setreload] = useState(false)
+
+    const newFaultsR = useRef(newFaults)
+    newFaultsR.current = newFaults
+
+    const newRefusalsR = useRef(newRefusals)
+    newRefusalsR.current = newRefusals
+
+    const startedR = useRef(false)
+    startedR.current = started
+
+    const reloadR = useRef(reload)
+    reloadR.current = reload
+
+
+
+
     const [showStarter, setshowStarter] = useState(true)
     const [showResults, setshowResults] = useState(true)
 
@@ -70,18 +88,22 @@ const Run = (props: Props) => {
     const currentRefusals = currentResult.refusals
     const currentTimeFault = getTimeFaults(currentResult, calculatedStandardTime).toFixed(2)
 
-    const [started, setStarted] = useState(false);
+    const refusalToDisplay = useRef(currentRefusals)
+    const faultsToDisplay = useRef(currentFaults)
+
     const [initTime, setinitTime] = useState(new Date().getTime())
 
-    const [reload, setreload] = useState(false)
 
-    console.log(common.participants)
+
+    console.log(started)
 
 
 
     const changeFaults = useCallback((value: number) => {
+        console.log(startedR.current)
         if (allParticipants) {
-            if (!started) {
+            console.log(startedR.current)
+            if (!startedR.current) {
 
                 const newParticipants = allParticipants.map(p => {
                     if (p.startNumber === selectedParticipant.startNumber) {
@@ -99,17 +121,21 @@ const Run = (props: Props) => {
                 t.participants = newParticipants
                 setcommon(t)
                 setreload(!reload)
+                faultsToDisplay.current = value
 
             } else {
+                console.log("eeeeeeee")
+                console.log(value)
                 setnewFaults(value)
+                faultsToDisplay.current = value
             }
         }
-    }, [currentRun, selectedParticipant.startNumber, started, allParticipants, reload, common])
+    }, [currentRun, selectedParticipant.startNumber, allParticipants, common, reload])
 
 
     const changeRefusals = useCallback((value: number) => {
         if (allParticipants) {
-            if (!started) {
+            if (!startedR.current) {
                 const newParticipants = allParticipants.map(p => {
                     if (p.startNumber === selectedParticipant.startNumber) {
                         if (getRunCategory(currentRun) === RunCategory.A) {
@@ -125,11 +151,13 @@ const Run = (props: Props) => {
                 const t = { ...common }
                 t.participants = newParticipants
                 setcommon(t)
+                refusalToDisplay.current = value
             } else {
                 setnewRefusals(value)
+                refusalToDisplay.current = value
             }
         }
-    }, [currentRun, selectedParticipant.startNumber, started, allParticipants, common])
+    }, [currentRun, selectedParticipant.startNumber, allParticipants, common])
 
     const changeAll = useCallback((time: number, faults: number, refusals: number) => {
         if (allParticipants) {
@@ -153,8 +181,8 @@ const Run = (props: Props) => {
     const changeTime = useCallback(
         (value: number) => {
             if (allParticipants) {
-                console.log(value)
-                if (newFaults === -1 && newRefusals === -1) {
+
+                if (newFaultsR.current === -1 && newRefusalsR.current === -1) {
                     const newParticipants = allParticipants.map(p => {
                         if (p.startNumber === selectedParticipant.startNumber) {
                             //  check if a or j
@@ -174,19 +202,16 @@ const Run = (props: Props) => {
                 } else {
                     setnewFaults(-1)
                     setnewRefusals(-1)
-                    changeAll(value, newFaults === -1 ? currentFaults : newFaults, newRefusals === -1 ? currentRefusals : newRefusals)
+                    changeAll(value, newFaultsR.current === -1 ? currentFaults : newFaultsR.current, newRefusalsR.current === -1 ? currentRefusals : newRefusalsR.current)
 
                 }
             }
         }
         , [
             selectedParticipant,
-
             currentRun,
             currentFaults,
             currentRefusals,
-            newFaults,
-            newRefusals,
             changeAll,
             allParticipants,
             common
@@ -221,8 +246,8 @@ const Run = (props: Props) => {
         if (currentTime > 0) {
             if (currentTime > maximumTime(currentRun, calculatedStandardTime)) {
                 //Disqualify
-                console.log("Disqualifydfisdfoij")
                 changeTime(-1)
+                stopTimer()
             }
         }
     }, [calculatedStandardTime, changeTime, currentRun, currentTime])
@@ -255,21 +280,24 @@ const Run = (props: Props) => {
                     case "stop_timer":
                         stopTimer();
                         changeTime(message.message)
+                        stopTimer();
                         break;
                     case "changed_current_participant":
                         setselectedParticipantStartNumber(message.message)
                         break;
                     case "changed_current_fault":
-                        console.log(Number(message.message))
+
                         changeFaults(Number(message.message))
+                        setreload(!reload)
                         break;
                     case "changed_current_refusal":
                         changeRefusals(Number(message.message))
+                        setreload(!reload)
                         break;
                     case "reload":
                         doGetRequest('0/secret/2024-08-31').then((data) => {
                             if (data.code === 200) {
-                                console.log(data.content as Tournament)
+
                                 setcommon(data.content as Tournament)
                             }
                         })
@@ -300,7 +328,7 @@ const Run = (props: Props) => {
             };
 
         }
-    }, [changeFaults, changeRefusals, changeTime])
+    }, [changeFaults, changeRefusals, changeTime, reload])
 
 
     const startTimer = () => {
@@ -319,11 +347,16 @@ const Run = (props: Props) => {
     const oldRefusals = useRef(currentRefusals)
     const oldTime = useRef(currentTime)
 
+    const oldPerson = useRef("-")
+    const oldDog = useRef("-")
+
     const runnerDetails = useCallback(() => {
         if (unsafeselectedParticipant) {
-            //oldFaults.current = currentFaults
-            //oldRefusals.current = currentRefusals
-            //oldTime.current = getResultFromParticipant(currentRun, selectedParticipant).time
+            oldFaults.current = currentFaults
+            oldRefusals.current = currentRefusals
+            oldTime.current = getResultFromParticipant(currentRun, selectedParticipant).time
+            oldPerson.current = selectedParticipant?.name
+            oldDog.current = selectedParticipant?.dog
 
             return <Paper className={style.timeContainer}>
                 <Stack gap={2} direction="column">
@@ -341,8 +374,8 @@ const Run = (props: Props) => {
                             <Typography variant='h2'>{runTimeToStringClock(getResultFromParticipant(currentRun, selectedParticipant).time)}</Typography>
                         </Stack>
                         <Stack direction="row" gap={2} flexWrap="wrap" justifyContent="space-between">
-                            <Typography variant='h2'>✋{currentFaults}</Typography>
-                            <Typography variant='h2'>✊{currentRefusals}</Typography>
+                            <Typography variant='h2'>✋{faultsToDisplay.current}</Typography>
+                            <Typography variant='h2'>✊{refusalToDisplay.current}</Typography>
                             <Typography variant='h2'>⌛{currentTimeFault}</Typography>
 
                         </Stack>
@@ -353,12 +386,13 @@ const Run = (props: Props) => {
             </Paper>
         } else {
             return <Paper className={style.timeContainer}>
+
                 <Stack gap={2} direction="column">
                     <Stack gap={1} direction="column" alignItems="flex-start">
                         <Typography variant='overline'>Aktuell am Start</Typography>
-                        <Typography variant='h4'>-</Typography>
+                        <Typography variant='h4'>{oldPerson.current}</Typography>
                         <Typography variant='h5'>mit</Typography>
-                        <Typography variant='h4'>-</Typography>
+                        <Typography variant='h4'>{oldDog.current}</Typography>
                     </Stack>
                     <Divider orientation='horizontal' flexItem />
                     <Stack direction="column" gap={2} alignItems="center" flexWrap="wrap">

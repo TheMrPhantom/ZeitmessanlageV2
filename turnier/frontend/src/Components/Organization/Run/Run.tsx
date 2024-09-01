@@ -185,6 +185,8 @@ const Run = (props: Props) => {
 
     const [initTime, setinitTime] = useState(new Date().getTime())
 
+
+    //The timer
     useEffect(() => {
         if (!started) {
             return;
@@ -203,6 +205,16 @@ const Run = (props: Props) => {
     }, [started, changeTime, initTime]);
 
 
+
+    useEffect(() => {
+
+        var id = setInterval(() => {
+
+            doPostRequest("0/current/participant", selectedParticipant.startNumber)
+
+        }, 3000);
+        return () => clearInterval(id);
+    }, [selectedParticipant.startNumber]);
 
     useEffect(() => {
         if (currentTime > 0) {
