@@ -7,7 +7,7 @@ const defaultAlertType: AlertColor = "success"
 const initialState: CommonReducerType = {
 
     organization: {
-        name: "default",
+        name: "",
         turnaments: []
     },
     isLoggedIn: false,
@@ -87,6 +87,11 @@ const reducer = (state = initialState, { type, payload }: any) => {
             newState.organization.turnaments = newTurnaments ? newTurnaments : []
             return newState
         case "LOAD_ORGANIZATION":
+            console.log("Loading organization")
+            if (payload.name === "") {
+                return newState
+            }
+            console.log(payload)
             newState.organization = payload
             return newState
         case "CHANGE_LENGTH":

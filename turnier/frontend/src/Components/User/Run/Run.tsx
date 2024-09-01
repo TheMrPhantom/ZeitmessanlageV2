@@ -251,7 +251,7 @@ const Run = (props: Props) => {
     useEffect(() => {
         if (ref.current) {
             ref.current = false;
-            const ws = new WebSocket("ws://localhost:9001/ws")
+            const ws = new WebSocket(window.globalTS.WEBSOCKET)
 
             const closeWs = () => {
                 try {
@@ -302,14 +302,14 @@ const Run = (props: Props) => {
             ws.onerror = () => {
                 setTimeout(() => {
                     closeWs()
-                    setwebsocket(new WebSocket("ws://localhost:9001/ws"));
+                    setwebsocket(new WebSocket(window.globalTS.WEBSOCKET));
                 }, Math.random() * (maxTimeout - minTimeout) + minTimeout);
             }
 
             ws.onclose = () => {
                 setTimeout(() => {
                     closeWs()
-                    setwebsocket(new WebSocket("ws://localhost:9001/ws"));
+                    setwebsocket(new WebSocket(window.globalTS.WEBSOCKET));
                 }, Math.random() * (maxTimeout - minTimeout) + minTimeout);
             }
             setwebsocket(ws);

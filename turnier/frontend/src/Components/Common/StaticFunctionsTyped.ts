@@ -88,6 +88,11 @@ export const runClassToString = (runClass: SkillLevel) => {
 }
 
 export const storePermanent = (organization: string, value: Organization) => {
+    if (organization === "" || value.name === "") { return }
+    if (value.name === "") {
+        value.name = organization
+    }
+    console.log(value)
     window.localStorage.setItem(organization, JSON.stringify(value))
 }
 
@@ -101,7 +106,7 @@ export const loadPermanent = (params: any, dispatch: any, common: CommonReducerT
             name: t_organization,
             turnaments: []
         }
-        window.localStorage.setItem(t_organization, JSON.stringify({ organization }))
+        storePermanent(t_organization, organization)
         dispatch(createOrganization(organization))
     } else {
         if (common.organization.name !== t_organization) {

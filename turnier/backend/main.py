@@ -156,6 +156,17 @@ class update_data(Resource):
         socket.send({"action": "reload"})
         return util.build_response("OK")
 
+@api.route('/organization/<string:alias>')
+class get_organizer_info(Resource):
+    def get(self,alias):
+        """
+        Gets the name of an organization
+        """
+        
+        org:Member=db.session.query(Member).filter(Member.alias == alias).first()
+        
+        return util.build_response({"name":org.name})
+
 @api.route('/<int:organization_id>/<string:secret>/<date>')
 class get_data(Resource):
     def get(self,organization_id,secret,date):

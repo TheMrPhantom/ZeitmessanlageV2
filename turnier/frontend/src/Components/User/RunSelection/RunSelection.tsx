@@ -5,9 +5,9 @@ import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import PetsIcon from '@mui/icons-material/Pets';
 import Spacer from '../../Common/Spacer';
 import { Participant, Size, SkillLevel, Tournament } from '../../../types/ResponseTypes';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import Dog from './Dog';
-import { dateToString, doGetRequest } from '../../Common/StaticFunctions';
+import { dateToString, doGetRequest, doPostRequest } from '../../Common/StaticFunctions';
 import { useDispatch, useSelector } from 'react-redux';
 import { updateUserTurnament } from '../../../Actions/SampleAction';
 import SportsIcon from '@mui/icons-material/Sports';
@@ -24,10 +24,10 @@ const RunSelection = (props: Props) => {
     const [reload, setreload] = useState(false)
     const [, setwebsocket] = useState<WebSocket | null>(null);
     const [selectedParticipantStartnumber, setselectedParticipantStartnumber] = useState(-1)
-
+    const params = useParams()
     const navigate = useNavigate()
     const dispatch = useDispatch()
-
+    const [orgName, setorgName] = useState("")
     const common: CommonReducerType = useSelector((state: RootState) => state.common);
 
     const minTimeout = 2000;
@@ -37,16 +37,27 @@ const RunSelection = (props: Props) => {
         doGetRequest('0/secret/2024-08-31').then((data) => {
             if (data.code === 200) {
                 dispatch(updateUserTurnament(data.content as Tournament))
+                settournamentCurrent(data.content as Tournament)
             }
         })
     }, [dispatch, reload])
 
+    useEffect(() => {
+        //Load org name
+        doGetRequest(`organization/${params.organization}`).then((data) => {
+            if (data.code === 200) {
+                setorgName(data.content.name)
+            }
+        })
+    }, [params.organization])
+
     const ref = useRef(true)
+    const [tournamentCurrent, settournamentCurrent] = useState<Tournament>({ date: new Date(), judge: "", name: "", participants: [], runs: [] })
 
     useEffect(() => {
         if (ref.current) {
             ref.current = false;
-            const ws = new WebSocket("ws://localhost:9001/ws")
+            const ws = new WebSocket(window.globalTS.WEBSOCKET)
 
             const closeWs = () => {
                 try {
@@ -64,7 +75,12 @@ const RunSelection = (props: Props) => {
                 console.log(message)
                 switch (message.action) {
                     case "reload":
-                        setreload(!reload)
+                        doGetRequest('0/secret/2024-08-31').then((data) => {
+                            if (data.code === 200) {
+                                dispatch(updateUserTurnament(data.content as Tournament))
+                                settournamentCurrent(data.content as Tournament)
+                            }
+                        })
                         break;
                     case "changed_current_participant":
                         setselectedParticipantStartnumber(message.participant)
@@ -76,14 +92,14 @@ const RunSelection = (props: Props) => {
             ws.onerror = () => {
                 setTimeout(() => {
                     closeWs()
-                    setwebsocket(new WebSocket("ws://localhost:9001/ws"));
+                    setwebsocket(new WebSocket(window.globalTS.WEBSOCKET));
                 }, Math.random() * (maxTimeout - minTimeout) + minTimeout);
             }
 
             ws.onclose = () => {
                 setTimeout(() => {
                     closeWs()
-                    setwebsocket(new WebSocket("ws://localhost:9001/ws"));
+                    setwebsocket(new WebSocket(window.globalTS.WEBSOCKET));
                 }, Math.random() * (maxTimeout - minTimeout) + minTimeout);
             }
             setwebsocket(ws);
@@ -157,19 +173,19 @@ const RunSelection = (props: Props) => {
                     <Typography variant="overline">Veranstaltungs Infos</Typography>
                     <Stack direction="row" gap={1}>
                         <PetsIcon />
-                        <Typography variant="h6">{common.userTurnament.name}</Typography>
+                        <Typography variant="h6">{tournamentCurrent.name}</Typography>
                     </Stack>
                     <Stack direction="row" gap={1}>
                         <CalendarMonthIcon />
-                        <Typography variant="h6">{dateToString(new Date(common.userTurnament.date))}</Typography>
+                        <Typography variant="h6">{dateToString(new Date(tournamentCurrent.date))}</Typography>
                     </Stack>
                     <Stack direction="row" gap={1}>
                         <StadiumIcon />
-                        <Typography variant="h6">{"<Platzhalter Verein>"}</Typography>
+                        <Typography variant="h6">{orgName}</Typography>
                     </Stack>
                     <Stack direction="row" gap={1}>
                         <SportsIcon />
-                        <Typography variant="h6">{common.userTurnament.judge}</Typography>
+                        <Typography variant="h6">{tournamentCurrent.judge}</Typography>
                     </Stack>
 
                 </Stack>

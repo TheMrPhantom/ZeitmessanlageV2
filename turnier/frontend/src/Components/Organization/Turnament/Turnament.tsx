@@ -2,7 +2,7 @@ import { Button, InputAdornment, Paper, Stack, Table, TableBody, TableCell, Tabl
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import style from './turnament.module.scss'
 import { ALL_HEIGHTS, ALL_RUNS, Organization, Run, Size } from '../../../types/ResponseTypes'
-import { classToString, fixDis, getNumberOfParticipantsForRun, getNumberOfParticipantsForRunWithResult, getRanking, setMaxTime, sizeToString, standardTime, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped'
+import { classToString, fixDis, getNumberOfParticipantsForRun, getNumberOfParticipantsForRunWithResult, getRanking, loadPermanent, setMaxTime, sizeToString, standardTime, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped'
 
 import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
@@ -29,22 +29,8 @@ const Turnament = (props: Props) => {
     const params = useParams()
 
     const t_organization = params.organization ? params.organization : ""
-    const item = window.localStorage.getItem(t_organization);
 
-    if (item === null) {
-
-        const organization = {
-            name: t_organization,
-            turnaments: []
-        }
-        window.localStorage.setItem(t_organization, JSON.stringify({ organization }))
-        dispatch(createOrganization(organization))
-    } else {
-        if (common.organization.name !== t_organization) {
-            const org: Organization = JSON.parse(item)
-            dispatch(loadOrganization(org))
-        }
-    }
+    loadPermanent(params, dispatch, common)
 
     const date = useMemo(() => params.date ? new Date(params.date) : new Date(), [params.date])
     const turnamentDate = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(date))?.date
@@ -134,11 +120,12 @@ const Turnament = (props: Props) => {
                                     value={new Date(turnamentDate ? turnamentDate : date)}
                                     onChange={(value) => {
                                         if (value) {
+                                            updateDatabase(turnament)
                                             dispatch(changeDate(date, new Date(value)))
                                             const t_organization = params.organization ? params.organization : ""
-                                            if (item !== null) {
-                                                window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
-                                            }
+
+                                            storePermanent(t_organization, common.organization)
+
                                             navigate(`/o/${params.organization}/${dateToURLString(new Date(value))}`)
                                         }
 
@@ -155,10 +142,11 @@ const Turnament = (props: Props) => {
                                 fullWidth
                                 onChange={(value) => {
                                     dispatch(changeTurnamentName(new Date(turnamentDate ? turnamentDate : date), value.target.value))
+                                    updateDatabase(turnament)
                                     const t_organization = params.organization ? params.organization : ""
-                                    if (item !== null) {
-                                        window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
-                                    }
+
+                                    storePermanent(t_organization, common.organization)
+
                                 }}
                             />
                         </Stack>
@@ -170,10 +158,11 @@ const Turnament = (props: Props) => {
                                 fullWidth
                                 onChange={(value) => {
                                     dispatch(changeJudge(new Date(turnamentDate ? turnamentDate : date), value.target.value))
+                                    updateDatabase(turnament)
                                     const t_organization = params.organization ? params.organization : ""
-                                    if (item !== null) {
-                                        window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
-                                    }
+
+                                    storePermanent(t_organization, common.organization)
+
                                 }}
                             />
                         </Stack>
@@ -226,9 +215,9 @@ const Turnament = (props: Props) => {
                                                             const date = params.date ? new Date(params.date) : new Date()
                                                             dispatch(changeLength(date, run, Number(value.target.value)))
                                                             const t_organization = params.organization ? params.organization : ""
-                                                            if (item !== null) {
-                                                                window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
-                                                            }
+
+                                                            storePermanent(t_organization, common.organization)
+
                                                         }}
                                                     />
                                                 </TableCell>
@@ -244,9 +233,9 @@ const Turnament = (props: Props) => {
                                                                 const date = params.date ? new Date(params.date) : new Date()
                                                                 dispatch(changeSpeed(date, run, Number(value.target.value)))
                                                                 const t_organization = params.organization ? params.organization : ""
-                                                                if (item !== null) {
-                                                                    window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
-                                                                }
+
+                                                                storePermanent(t_organization, common.organization)
+
                                                             }}
                                                         />
                                                     </TableCell> : <TableCell></TableCell>}

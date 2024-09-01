@@ -8,3 +8,4 @@ psycopg2
 waitress
 requests
 werkzeug
+websocket_server

@@ -271,7 +271,7 @@ const Run = (props: Props) => {
 
             dispatch(changeLength(date, currentRun, tempLength))
             const t_organization = params.organization ? params.organization : ""
-            window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
+            storePermanent(t_organization, common.organization)
         }
 
         console.log(currentRun)
@@ -280,7 +280,7 @@ const Run = (props: Props) => {
 
             dispatch(changeSpeed(date, currentRun, tempSpeed))
             const t_organization = params.organization ? params.organization : ""
-            window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
+            storePermanent(t_organization, common.organization)
         }
 
     }, [common.organization, currentRun, dispatch, params.date, params.organization, tempLength, tempSpeed])
@@ -356,7 +356,7 @@ const Run = (props: Props) => {
                                 const date = params.date ? new Date(params.date) : new Date()
                                 dispatch(changeLength(date, currentRun, tempLength))
                                 const t_organization = params.organization ? params.organization : ""
-                                window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
+                                storePermanent(t_organization, common.organization)
                                 setlengthWarning(false)
                             }}>
                                 <SaveIcon />
@@ -387,7 +387,7 @@ const Run = (props: Props) => {
                                 const date = params.date ? new Date(params.date) : new Date()
                                 dispatch(changeSpeed(date, currentRun, tempSpeed))
                                 const t_organization = params.organization ? params.organization : ""
-                                window.localStorage.setItem(t_organization, JSON.stringify(common.organization))
+                                storePermanent(t_organization, common.organization)
                                 setspeedWarning(false)
                             }}>
                                 <SaveIcon />

@@ -1,5 +1,5 @@
 import { Button, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import style from './dashboard.module.scss'
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -13,6 +13,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { addTurnament, createOrganization, loadOrganization, removeTurnament } from '../../../Actions/SampleAction';
 import { dateToString, dateToURLString } from '../../Common/StaticFunctions';
 import { ALL_HEIGHTS, ALL_RUNS, Organization, RunInformation, Tournament } from '../../../types/ResponseTypes';
+import { loadPermanent, storePermanent } from '../../Common/StaticFunctionsTyped';
 
 type Props = {}
 
@@ -23,24 +24,7 @@ const Dashboard = (props: Props) => {
     const navigate = useNavigate()
 
     const t_organization = params.organization ? params.organization : ""
-    const item = window.localStorage.getItem(t_organization);
-
-    if (item === null) {
-        const organization = {
-            name: t_organization,
-            turnaments: []
-        }
-        window.localStorage.setItem(t_organization, JSON.stringify(organization))
-        dispatch(createOrganization(organization))
-    } else {
-        if (common.organization.name !== t_organization) {
-            const org: Organization = JSON.parse(item)
-            console.log(org)
-            dispatch(loadOrganization(org))
-        }
-
-    }
-
+    loadPermanent(params, dispatch, common)
 
 
     const [turnamentDate, setturnamentDate] = useState<Date | null>(new Date())
@@ -98,7 +82,7 @@ const Dashboard = (props: Props) => {
                                     if (item !== null) {
                                         const organization = JSON.parse(item)
                                         organization.turnaments.push(turnament)
-                                        window.localStorage.setItem(t_organization, JSON.stringify(organization))
+                                        storePermanent(t_organization, organization)
                                         dispatch(addTurnament(turnament))
                                     }
                                     setturnamentDate(null);
@@ -147,7 +131,7 @@ const Dashboard = (props: Props) => {
                                                         const organization = JSON.parse(item)
                                                         const newTurnaments = organization.organization.turnaments.filter((t: any) => t.date !== turnament.date)
                                                         organization.organization.turnaments = newTurnaments
-                                                        window.localStorage.setItem(t_organization, JSON.stringify(organization))
+                                                        storePermanent(t_organization, organization)
                                                         dispatch(removeTurnament(turnament))
                                                     }
                                                 }}>
