@@ -587,7 +587,7 @@ const Run = (props: Props) => {
                                 participants?.map((p, index) => {
                                     const result = getResultFromParticipant(currentRun, p)
                                     return (
-                                        <TableRow onClick={() => { setselectedParticipantIndex(p.sorting - 1) }} key={p.startNumber} className={index === selectedParticipantIndex ? style.selected : ""}>
+                                        <TableRow onClick={() => { setselectedParticipantIndex(p.sorting - 1) }} key={p.startNumber} className={index === selectedParticipantIndex ? style.selected : style.starterTableRow}>
                                             <TableCell>{p.sorting}</TableCell>
                                             <TableCell>{p.startNumber}</TableCell>
                                             <TableCell>{p.name}</TableCell>
