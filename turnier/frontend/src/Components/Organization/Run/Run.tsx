@@ -80,6 +80,9 @@ const Run = (props: Props) => {
 
     const currentTimeFault = getTimeFaults(currentResult, calculatedStandardTime)
 
+    useEffect(() => {
+        doPostRequest("0/current/participant", selectedParticipant.startNumber)
+    }, [selectedParticipant.startNumber])
 
     const changeFaults = (value: number) => {
 
@@ -199,6 +202,8 @@ const Run = (props: Props) => {
         return () => clearInterval(id);
     }, [started, changeTime, initTime]);
 
+
+
     useEffect(() => {
         if (currentTime > 0) {
 
@@ -314,7 +319,7 @@ const Run = (props: Props) => {
 
     const showWarnings = () => {
         let warnings = []
-        console.log(lengthWarning)
+
         if (lengthWarning) {
             console.log("lengthWarning")
             warnings.push(<Paper className={style.error}>
@@ -415,6 +420,8 @@ const Run = (props: Props) => {
                                     <Button variant='contained' color="success" disabled={(!props.timeMeasurementActive) || props.timeError} onClick={() => { stopTimer() }}>Aktiv</Button>
                                     <Button variant='contained' color="warning" disabled={(props.timeMeasurementActive) || props.timeError} onClick={() => { startTimer() }}>Bereit</Button>
                                     <Button variant='contained' color="error" disabled={!props.timeError || props.connected}>Error</Button>
+                                    <Button variant='contained' onClick={() => startTimer()}>Start</Button>
+                                    <Button variant='contained' onClick={() => stopTimer()}>Stop</Button>
                                     <Button variant='contained'
                                         color="info"
                                         disabled={props.connected}
@@ -444,7 +451,7 @@ const Run = (props: Props) => {
                                         const participantsLength = participants?.length ? participants?.length : 0
                                         const nextIndex = (selectedParticipantIndex - 1) < 0 ? participantsLength - 1 : selectedParticipantIndex - 1
                                         setselectedParticipantIndex(nextIndex)
-                                        doPostRequest("0/current/participant", participants[nextIndex].startNumber)
+                                        //doPostRequest("0/current/participant", participants[nextIndex].startNumber)
                                     }
                                 }}
                             >
@@ -466,7 +473,7 @@ const Run = (props: Props) => {
                                         const participantsLength = participants?.length ? participants?.length : 0
                                         const nextIndex = (selectedParticipantIndex + 1) % participantsLength
                                         setselectedParticipantIndex(nextIndex)
-                                        doPostRequest("0/current/participant", participants[nextIndex].startNumber)
+                                        //doPostRequest("0/current/participant", participants[nextIndex].startNumber)
                                     }
                                 }}
                             >
@@ -490,7 +497,7 @@ const Run = (props: Props) => {
                                         doPostRequest("0/timer", { action: "stop", time: -2 })
                                     } else {
                                         changeTime(Number(value.target.value))
-                                        doPostRequest("0/timer", { action: "stop", time: Number(value.target.value) })
+                                        updateDatabase(turnament)
                                     }
 
                                 }
@@ -503,6 +510,7 @@ const Run = (props: Props) => {
                             onChange={(value) => {
                                 if (Number(value.target.value) > -1) {
                                     changeFaults(Number(value.target.value))
+                                    updateDatabase(turnament)
                                 }
                             }} />
                         <TextField className={style.runStats} value={getResultFromParticipant(currentRun, selectedParticipant).refusals}
@@ -513,6 +521,7 @@ const Run = (props: Props) => {
                             onChange={(value) => {
                                 if (Number(value.target.value) > -1) {
                                     changeRefusals(Number(value.target.value))
+                                    updateDatabase(turnament)
                                 }
                             }}
                         />

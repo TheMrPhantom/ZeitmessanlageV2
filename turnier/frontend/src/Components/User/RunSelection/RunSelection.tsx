@@ -14,7 +14,7 @@ import SportsIcon from '@mui/icons-material/Sports';
 import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import StadiumIcon from '@mui/icons-material/Stadium';
-import { favoriteIdenfitier } from '../../Common/StaticFunctionsTyped';
+import { favoriteIdenfitier, getParticipantsForRun, getTimeFaults, standardTime } from '../../Common/StaticFunctionsTyped';
 
 type Props = {}
 
@@ -112,9 +112,23 @@ const RunSelection = (props: Props) => {
             return <Typography variant="caption">Noch keine Hunde favorisiert</Typography>
         } else {
             return favoriteParticipants.map((participant) => {
+                //Calculate standard time for the two runs
+                const p = getParticipantsForRun(common.userTurnament.participants, participant.skillLevel, participant.size)
+                let parcourLength = common.userTurnament.runs.find((run) => run.run === participant.resultA.run)?.length
+                let parcourSpeed = common.userTurnament.runs.find((run) => run.run === participant.resultA.run)?.speed
+                let stdTime = standardTime(participant.resultA.run, participant.size, p, parcourLength ? parcourLength : 0, parcourSpeed ? parcourSpeed : 3)
+                const timefaultsA = getTimeFaults(participant.resultA, stdTime)
+
+                parcourLength = common.userTurnament.runs.find((run) => run.run === participant.resultJ.run)?.length
+                parcourSpeed = common.userTurnament.runs.find((run) => run.run === participant.resultJ.run)?.speed
+                stdTime = standardTime(participant.resultJ.run, participant.size, p, parcourLength ? parcourLength : 0, parcourSpeed ? parcourSpeed : 3)
+                const timefaultsJ = getTimeFaults(participant.resultJ, stdTime)
+
                 return <Dog dogname={participant.dog}
                     resultA={participant.resultA}
                     resultJ={participant.resultJ}
+                    timefaultsA={timefaultsA}
+                    timefaultsJ={timefaultsJ}
                     dogsLeft={null}
                     unlike={() => {
                         let storage = window.localStorage.getItem("favorites")

@@ -7,9 +7,9 @@ import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom'
-import { dateToURLString } from '../../Common/StaticFunctions';
+import { dateToURLString, doPostRequest } from '../../Common/StaticFunctions';
 import { addParticipant, removeParticipant } from '../../../Actions/SampleAction';
-import { loadPermanent, runClassToString, sizeToString, storePermanent } from '../../Common/StaticFunctionsTyped';
+import { loadPermanent, runClassToString, sizeToString, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped';
 
 type Props = {}
 
@@ -84,6 +84,9 @@ const Participants = (props: Props) => {
 
         //Store the new participant in the local storage
         storePermanent(organization, common.organization)
+        //Get turnament
+        const t = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate))
+        updateDatabase(t)
     }
 
     return (

@@ -2,13 +2,15 @@ import { Divider, Paper, Rating, Stack, Typography } from '@mui/material'
 import React from 'react'
 import style from './runselection.module.scss'
 import { Result } from '../../../types/ResponseTypes'
-import { runTimeToString } from '../../Common/StaticFunctionsTyped'
+import { getTimeFaults, runTimeToString, standardTime } from '../../Common/StaticFunctionsTyped'
 
 type Props = {
     dogname: string,
     resultA: Result,
     resultJ: Result,
     dogsLeft: number | null,
+    timefaultsA: number,
+    timefaultsJ: number,
     unlike: () => void
 }
 
@@ -51,7 +53,7 @@ const Dog = (props: Props) => {
                             </Stack>
                             <Stack direction="row">
                                 <Typography variant="h6">⌛</Typography>
-                                <Typography variant="h6">???</Typography>
+                                <Typography variant="h6">{props.timefaultsA}</Typography>
                             </Stack>
                         </Stack>
                     </Stack>
@@ -72,7 +74,7 @@ const Dog = (props: Props) => {
                             </Stack>
                             <Stack direction="row">
                                 <Typography variant="h6">⌛</Typography>
-                                <Typography variant="h6">???</Typography>
+                                <Typography variant="h6">{props.timefaultsJ}</Typography>
                             </Stack>
                         </Stack>
                     </Stack>

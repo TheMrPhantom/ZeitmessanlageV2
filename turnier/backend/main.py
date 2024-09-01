@@ -83,17 +83,25 @@ class update_data(Resource):
         
         t.date= date
 
+        
         runs_from_request=request.json["runs"]
         for run in runs_from_request:
+            
             run_info:RunInformation = db.session.query(RunInformation).filter(RunInformation.run == run["run"] and RunInformation.height == run["height"] and RunInformation.turnament_id==t.id).first()           
-            run_info.height=run["height"]
+            #run_info.height=run["height"]
             run_info.length=run["length"]
             run_info.speed=run["speed"]
 
         participants_from_request= request.json["participants"]
         for participant in participants_from_request:
             # Find participant in participants list
-            participant_info:Participant = next((x for x in participants if x.start_number == participant["startNumber"]), None)
+            participant_info=None
+
+            for p in participants:
+                if p.start_number==participant["startNumber"]:
+                    participant_info=p
+                    break
+            
             if participant_info is None:
                 # Create new participant
                 participant_info=Participant()

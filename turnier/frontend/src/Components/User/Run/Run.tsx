@@ -55,7 +55,6 @@ const Run = (props: Props) => {
         participants ? participants : [],
         parcoursInfos?.length ? parcoursInfos?.length : 0,
         parcoursInfos?.speed ? parcoursInfos?.speed : minSpeedA3)
-
     const currentTime = currentResult.time
     const currentFaults = currentResult.faults
     const currentRefusals = currentResult.refusals
@@ -66,10 +65,20 @@ const Run = (props: Props) => {
 
     const [reload, setreload] = useState(false)
 
+    //changed
+    useEffect(() => {
+        doGetRequest('0/secret/2024-08-31').then((data) => {
+            if (data.code === 200) {
+                dispatch(updateUserTurnament(data.content as Tournament))
+            }
+        })
+    }, [dispatch, reload])
+
     const changeFaults = useCallback((value: number) => {
 
         if (allParticipants) {
             if (!started) {
+
                 const newParticipants = allParticipants.map(p => {
                     if (p.startNumber === selectedParticipant.startNumber) {
                         if (getRunCategory(currentRun) === RunCategory.A) {
@@ -78,9 +87,9 @@ const Run = (props: Props) => {
                             return { ...p, resultJ: { ...p.resultJ, faults: value } }
                         }
                     }
+
                     return p
                 })
-
                 dispatch(changeParticipants(turnamentDate, newParticipants))
             } else {
                 setnewFaults(value)
@@ -114,7 +123,6 @@ const Run = (props: Props) => {
         if (allParticipants) {
             const newParticipants = allParticipants.map(p => {
                 if (p.startNumber === selectedParticipant.startNumber) {
-                    console.log(p.name)
                     if (getRunCategory(currentRun) === RunCategory.A) {
                         return { ...p, resultA: { ...p.resultA, time: time, faults: faults, refusals: refusals } }
                     } else {
@@ -131,7 +139,7 @@ const Run = (props: Props) => {
     const changeTime = useCallback(
         (value: number) => {
             if (allParticipants) {
-
+                console.log(value)
                 if (newFaults === -1 && newRefusals === -1) {
                     const newParticipants = allParticipants.map(p => {
                         if (p.startNumber === selectedParticipant.startNumber) {
@@ -195,6 +203,7 @@ const Run = (props: Props) => {
         if (currentTime > 0) {
             if (currentTime > maximumTime(currentRun, calculatedStandardTime)) {
                 //Disqualify
+                console.log("Disqualifydfisdfoij")
                 changeTime(-1)
             }
         }
@@ -221,28 +230,28 @@ const Run = (props: Props) => {
 
             ws.onmessage = (e: MessageEvent) => {
                 const message = JSON.parse(e.data);
-                console.log(message)
                 switch (message.action) {
                     case "start_timer":
                         startTimer();
                         break;
                     case "stop_timer":
                         stopTimer();
-                        changeTime(message.time)
+                        changeTime(message.message)
                         break;
                     case "changed_current_participant":
-                        setselectedParticipantStartNumber(message.participant)
-
+                        setselectedParticipantStartNumber(message.message)
                         break;
                     case "changed_current_fault":
-                        changeFaults(message.fault)
+                        console.log(Number(message.message))
+                        changeFaults(Number(message.message))
                         break;
                     case "changed_current_refusal":
-                        changeRefusals(message.refusal)
+                        changeRefusals(Number(message.message))
                         break;
                     case "reload":
                         doGetRequest('0/secret/2024-08-31').then((data) => {
                             if (data.code === 200) {
+                                console.log(data.content)
                                 dispatch(updateUserTurnament(data.content as Tournament))
                             }
                         })
@@ -345,7 +354,6 @@ const Run = (props: Props) => {
                                 {
 
                                     participants?.map((p, index) => {
-                                        console.log(participants);
                                         return (
                                             <TableRow key={p.startNumber} className={p.startNumber === selectedParticipantStartNumber ? style.selected : ""}>
                                                 <TableCell>{p.sorting}</TableCell>
@@ -387,7 +395,7 @@ const Run = (props: Props) => {
                 </Stack>
                 <Collapse in={showResults} unmountOnExit >
                     <TableContainer component={Paper}>
-                        <Table size="small">
+                        <Table >
                             <TableHead>
                                 <TableRow>
                                     <TableCell></TableCell>
