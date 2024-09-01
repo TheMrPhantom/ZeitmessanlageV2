@@ -160,7 +160,7 @@ class Queries:
 
         hashedPassword, salt = TokenManager.hashPassword("test")
         
-        new_member = Member(name="HSF",alias="hsf", password=hashedPassword, salt=salt)
+        new_member = Member(name="HSV DogDog e.V.",alias="hsf", password=hashedPassword, salt=salt)
         self.session.add(
             new_member
             )
