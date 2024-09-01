@@ -51,9 +51,9 @@ const RunSelection = (props: Props) => {
         })
     }, [params.organization])
 
-    const ref = useRef(true)
-    const [tournamentCurrent, settournamentCurrent] = useState<Tournament>({ date: new Date(), judge: "", name: "", participants: [], runs: [] })
 
+    const [tournamentCurrent, settournamentCurrent] = useState<Tournament>({ date: new Date(), judge: "", name: "", participants: [], runs: [] })
+    const ref = useRef(true)
     useEffect(() => {
         if (ref.current) {
             ref.current = false;
@@ -90,17 +90,15 @@ const RunSelection = (props: Props) => {
             };
 
             ws.onerror = () => {
-                setTimeout(() => {
-                    closeWs()
-                    setwebsocket(new WebSocket(window.globalTS.WEBSOCKET));
-                }, Math.random() * (maxTimeout - minTimeout) + minTimeout);
+                closeWs()
+                setwebsocket(null)
+                ref.current = true;
             }
 
             ws.onclose = () => {
-                setTimeout(() => {
-                    closeWs()
-                    setwebsocket(new WebSocket(window.globalTS.WEBSOCKET));
-                }, Math.random() * (maxTimeout - minTimeout) + minTimeout);
+                closeWs()
+                setwebsocket(null)
+                ref.current = true;
             }
             setwebsocket(ws);
 
@@ -111,7 +109,7 @@ const RunSelection = (props: Props) => {
             };
 
         }
-    }, [reload])
+    }, [reload, dispatch])
 
 
 

@@ -48,3 +48,8 @@
     border: 2px $error-color solid;
     padding: $padding;
 }
+
+.buttonPaper {
+    padding: $padding;
+    height: min-content;
+}

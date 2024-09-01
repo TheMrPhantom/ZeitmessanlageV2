@@ -81,8 +81,10 @@ const Run = (props: Props) => {
     const currentTimeFault = getTimeFaults(currentResult, calculatedStandardTime)
 
     useEffect(() => {
-        doPostRequest("0/current/participant", selectedParticipant.startNumber)
-    }, [selectedParticipant.startNumber])
+        doPostRequest("0/current/participant", {
+            id: selectedParticipant.startNumber, faults: currentFaults, refusals: currentRefusals
+        })
+    }, [selectedParticipant.startNumber, currentFaults, currentRefusals])
 
     const changeFaults = (value: number) => {
 
@@ -210,21 +212,15 @@ const Run = (props: Props) => {
 
         var id = setInterval(() => {
 
-            doPostRequest("0/current/participant", selectedParticipant.startNumber)
+            doPostRequest("0/current/participant", {
+                id: selectedParticipant.startNumber, faults: currentFaults, refusals: currentRefusals
+            })
 
         }, 3000);
         return () => clearInterval(id);
-    }, [selectedParticipant.startNumber]);
+    }, [selectedParticipant.startNumber, currentFaults, currentRefusals]);
 
-    useEffect(() => {
-        if (currentTime > 0) {
 
-            if (currentTime > maximumTime(currentRun, calculatedStandardTime)) {
-                //Disqualify
-                changeTime(-1)
-            }
-        }
-    }, [calculatedStandardTime, changeTime, currentRun, currentTime])
 
 
     const startTimer = useCallback(() => {
@@ -407,6 +403,18 @@ const Run = (props: Props) => {
         }
     }
 
+    useEffect(() => {
+        if (currentTime > 0) {
+
+            if (currentTime > maximumTime(currentRun, calculatedStandardTime)) {
+                //Disqualify
+                stopTimer()
+                changeTime(-1)
+            }
+        }
+    }, [calculatedStandardTime, changeTime, currentRun, currentTime, stopTimer])
+
+
     return (
         <Stack className={style.runContainer} direction="column" alignItems="center" gap={4}>
             <Paper className={style.timeContainer}>
@@ -428,19 +436,32 @@ const Run = (props: Props) => {
                                 <Stack direction="column" justifyContent="center">
                                     <Typography variant='h1'>{runTimeToStringClock(getResultFromParticipant(currentRun, selectedParticipant).time)}</Typography>
                                 </Stack>
-                                <Stack gap={1}>
-                                    <Button variant='contained' color="success" disabled={(!props.timeMeasurementActive) || props.timeError} onClick={() => { stopTimer() }}>Aktiv</Button>
-                                    <Button variant='contained' color="warning" disabled={(props.timeMeasurementActive) || props.timeError} onClick={() => { startTimer() }}>Bereit</Button>
-                                    <Button variant='contained' color="error" disabled={!props.timeError || props.connected}>Error</Button>
-                                    <Button variant='contained'
-                                        color="info"
-                                        disabled={props.connected}
-                                        onClick={() => {
-                                            props.startSerial()
-                                        }}
-                                    >{!props.connected ? "Verbinden" : "Verbunden"}</Button>
-                                    <Button variant='contained' onClick={() => startTimer()}>Start</Button>
-                                    <Button variant='contained' onClick={() => stopTimer()}>Stop</Button>
+                                <Stack gap={1} direction="row" flexWrap="wrap">
+
+                                    <Paper className={style.buttonPaper} elevation={9}>
+                                        <Stack gap={1}>
+                                            <Typography variant='overline'>Zeitmessanlage</Typography>
+                                            <Button variant='contained' color="success" disabled={(!props.timeMeasurementActive) || props.timeError} onClick={() => { stopTimer() }}>Aktiv</Button>
+                                            <Button variant='contained' color="warning" disabled={(props.timeMeasurementActive) || props.timeError} onClick={() => { startTimer() }}>Bereit</Button>
+                                            <Button variant='contained' color="error" disabled={!props.timeError || props.connected}>Error</Button>
+                                            <Button variant='contained'
+                                                color="info"
+                                                disabled={props.connected}
+                                                onClick={() => {
+                                                    props.startSerial()
+                                                }}
+                                            >{!props.connected ? "Verbinden" : "Verbunden"}</Button>
+                                        </Stack>
+                                    </Paper>
+                                    {!props.connected ?
+                                        <Paper className={style.buttonPaper} elevation={9}>
+                                            <Stack gap={1}>
+                                                <Typography variant='overline'>Timer</Typography>
+                                                <Button variant='contained' disabled={started} onClick={() => startTimer()}>Start</Button>
+                                                <Button variant='contained' disabled={!started} onClick={() => stopTimer()}>Stop</Button>
+                                            </Stack>
+                                        </Paper> : <></>
+                                    }
                                 </Stack>
                             </Stack>
                             <Divider orientation='horizontal' flexItem />

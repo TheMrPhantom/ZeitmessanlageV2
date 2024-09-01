@@ -247,88 +247,86 @@ const Run = (props: Props) => {
 
 
     const ref = useRef(true)
-
     useEffect(() => {
-        if (ref.current) {
-            ref.current = false;
-            const ws = new WebSocket(window.globalTS.WEBSOCKET)
+        const ws = new WebSocket(window.globalTS.WEBSOCKET)
 
-            const closeWs = () => {
-                try {
-                    if (ws !== null) {
-                        ws.close()
-                    }
-                }
-                catch (e) {
-                    console.log(e);
+        const closeWs = () => {
+            try {
+                if (ws !== null) {
+                    ws.close()
                 }
             }
-
-            ws.onmessage = (e: MessageEvent) => {
-                const message = JSON.parse(e.data);
-                switch (message.action) {
-                    case "start_timer":
-                        startTimer();
-                        break;
-                    case "stop_timer":
-                        stopTimer();
-                        changeTime(message.message)
-                        stopTimer();
-                        break;
-                    case "changed_current_participant":
-                        setselectedParticipantStartNumber(message.message)
-                        break;
-                    case "changed_current_fault":
-
-                        changeFaults(Number(message.message))
-                        setreload(!reload)
-                        break;
-                    case "changed_current_refusal":
-                        changeRefusals(Number(message.message))
-                        setreload(!reload)
-                        break;
-                    case "reload":
-                        doGetRequest('0/secret/2024-08-31').then((data) => {
-                            if (data.code === 200) {
-
-                                setcommon(data.content as Tournament)
-                            }
-                        })
-                        break;
-                }
-
-            };
-
-            ws.onerror = () => {
-                setTimeout(() => {
-                    closeWs()
-                    setwebsocket(new WebSocket(window.globalTS.WEBSOCKET));
-                }, Math.random() * (maxTimeout - minTimeout) + minTimeout);
+            catch (e) {
+                console.log(e);
             }
-
-            ws.onclose = () => {
-                setTimeout(() => {
-                    closeWs()
-                    setwebsocket(new WebSocket(window.globalTS.WEBSOCKET));
-                }, Math.random() * (maxTimeout - minTimeout) + minTimeout);
-            }
-            setwebsocket(ws);
-
-            return () => {
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.close();
-                }
-            };
-
         }
-    }, [changeFaults, changeRefusals, changeTime, reload])
+
+        ws.onmessage = (e: MessageEvent) => {
+            const message = JSON.parse(e.data);
+            console.log(message)
+            switch (message.action) {
+                case "start_timer":
+                    startTimer();
+                    break;
+                case "stop_timer":
+                    stopTimer();
+                    //changeTime(message.message)
+                    //stopTimer();
+                    break;
+                case "changed_current_participant":
+                    setselectedParticipantStartNumber(message.message.id)
+                    //changeFaults(message.message.faults)
+                    //changeRefusals(message.message.refusals)
+                    break;
+                case "changed_current_fault":
+                    changeFaults(Number(message.message))
+                    //setreload(!reload)
+                    break;
+                case "changed_current_refusal":
+                    changeRefusals(Number(message.message))
+                    //setreload(!reload)
+                    break;
+                case "reload":
+                    doGetRequest('0/secret/2024-08-31').then((data) => {
+                        if (data.code === 200) {
+                            const t = data.content as Tournament
+                            setcommon(t)
+                        }
+                    })
+                    break;
+            }
+
+        };
+
+        getResultFromParticipant(currentRun, selectedParticipant)
+        ws.onerror = () => {
+            closeWs()
+            setwebsocket(null)
+            ref.current = true;
+        }
+
+        ws.onclose = () => {
+            closeWs()
+            setwebsocket(null)
+            ref.current = true;
+            console.log("closed")
+        }
+        setwebsocket(ws);
+
+        return () => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.close();
+                console.log("cleanup")
+            }
+        };
+
+
+    }, [reload])
 
 
     const startTimer = () => {
-
         setinitTime(new Date().getTime());
         setStarted(true)
-
     }
 
 
@@ -367,8 +365,8 @@ const Run = (props: Props) => {
                             <Typography variant='h2'>{runTimeToStringClock(getResultFromParticipant(currentRun, selectedParticipant).time)}</Typography>
                         </Stack>
                         <Stack direction="row" gap={2} flexWrap="wrap" justifyContent="space-between">
-                            <Typography variant='h2'>✋{faultsToDisplay.current}</Typography>
-                            <Typography variant='h2'>✊{refusalToDisplay.current}</Typography>
+                            <Typography variant='h2'>✋{started ? faultsToDisplay.current : currentFaults}</Typography>
+                            <Typography variant='h2'>✊{started ? refusalToDisplay.current : currentRefusals}</Typography>
                             <Typography variant='h2'>⌛{currentTimeFault}</Typography>
 
                         </Stack>
@@ -395,8 +393,8 @@ const Run = (props: Props) => {
                             <Typography variant='h2'>{runTimeToStringClock(oldTime.current)}</Typography>
                         </Stack>
                         <Stack direction="row" gap={2} flexWrap="wrap" justifyContent="space-between">
-                            <Typography variant='h2'>✋{oldFaults.current}</Typography>
-                            <Typography variant='h2'>✊{oldRefusals.current}</Typography>
+                            <Typography variant='h2'>✋{faultsToDisplay.current}</Typography>
+                            <Typography variant='h2'>✊{refusalToDisplay.current}</Typography>
                             <Typography variant='h2'>⌛{currentTimeFault}</Typography>
 
                         </Stack>
@@ -406,7 +404,7 @@ const Run = (props: Props) => {
                 </Stack>
             </Paper>
         }
-    }, [currentFaults, currentRefusals, currentRun, currentTimeFault, selectedParticipant, unsafeselectedParticipant])
+    }, [currentFaults, currentRefusals, currentRun, currentTimeFault, selectedParticipant, unsafeselectedParticipant, started])
 
     return (
         <Stack className={style.runContainer} direction="column" alignItems="center" gap={4}>
@@ -432,7 +430,6 @@ const Run = (props: Props) => {
                             </TableHead>
                             <TableBody>
                                 {
-
                                     participants?.map((p, index) => {
                                         return (
                                             <TableRow key={p.startNumber} className={p.startNumber === selectedParticipantStartNumber ? style.selected : ""}>
