@@ -420,8 +420,6 @@ const Run = (props: Props) => {
                                     <Button variant='contained' color="success" disabled={(!props.timeMeasurementActive) || props.timeError} onClick={() => { stopTimer() }}>Aktiv</Button>
                                     <Button variant='contained' color="warning" disabled={(props.timeMeasurementActive) || props.timeError} onClick={() => { startTimer() }}>Bereit</Button>
                                     <Button variant='contained' color="error" disabled={!props.timeError || props.connected}>Error</Button>
-                                    <Button variant='contained' onClick={() => startTimer()}>Start</Button>
-                                    <Button variant='contained' onClick={() => stopTimer()}>Stop</Button>
                                     <Button variant='contained'
                                         color="info"
                                         disabled={props.connected}
@@ -429,6 +427,8 @@ const Run = (props: Props) => {
                                             props.startSerial()
                                         }}
                                     >{!props.connected ? "Verbinden" : "Verbunden"}</Button>
+                                    <Button variant='contained' onClick={() => startTimer()}>Start</Button>
+                                    <Button variant='contained' onClick={() => stopTimer()}>Stop</Button>
                                 </Stack>
                             </Stack>
                             <Divider orientation='horizontal' flexItem />
