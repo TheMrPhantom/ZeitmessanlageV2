@@ -1,16 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import style from './run.module.scss'
 import { Collapse, Divider, FormControlLabel, Paper, Rating, Stack, Switch, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material'
-import { RootState } from '../../../Reducer/reducerCombiner'
-import { CommonReducerType } from '../../../Reducer/CommonReducer';
-import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom'
 import { checkIfFavorite, favoriteIdenfitier, getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, maximumTime, runTimeToString, runTimeToStringClock, standardTime } from '../../Common/StaticFunctionsTyped';
 import { Run as RunType, SkillLevel, Participant, defaultParticipant, RunCategory, Tournament } from '../../../types/ResponseTypes';
-import { changeParticipants, updateUserTurnament } from '../../../Actions/SampleAction';
 import { minSpeedA3 } from '../../Common/AgilityPO';
 import { useCallback } from 'react';
-import Spacer from '../../Common/Spacer';
 import { doGetRequest } from '../../Common/StaticFunctions';
 
 type Props = {}
@@ -22,9 +17,6 @@ const Run = (props: Props) => {
 
     const params = useParams()
 
-    const minTimeout = 2000;
-    const maxTimeout = 5000;
-
     const [common, setcommon] = useState<Tournament>({
         date: new Date(),
         judge: "",
@@ -32,8 +24,6 @@ const Run = (props: Props) => {
         participants: [],
         runs: []
     })
-
-    const turnamentDate = useMemo(() => new Date(common.date), [common.date])
 
     //Get all participants
     const allParticipants = common.participants
