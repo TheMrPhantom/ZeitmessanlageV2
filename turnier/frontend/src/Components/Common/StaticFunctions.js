@@ -1,79 +1,96 @@
 import Cookies from "js-cookie";
 
 export const doPostRequest = async (path, data) => {
-    const resp = await fetch(window.globalTS.DOMAIN + path,
-        {
-            credentials: 'include',
-            method: "POST",
-            headers: { "Content-type": "application/json", "Access-Control-Allow-Origin": "/*" },
-            body: JSON.stringify(data)
-        });
-    const status_code = resp.status
+    try {
+        const resp = await fetch(window.globalTS.DOMAIN + path,
+            {
+                credentials: 'include',
+                method: "POST",
+                headers: { "Content-type": "application/json", "Access-Control-Allow-Origin": "/*" },
+                body: JSON.stringify(data)
+            });
 
-    const userJson = await resp.json();
+        const status_code = resp.status
 
-    return { code: status_code, content: userJson }
+        const userJson = await resp.json();
+
+        return { code: status_code, content: userJson }
+    } catch (error) {
+        return { code: 503 /*Service unavailable*/, content: {} }
+    }
 
 };
 
 
 export const doRequest = async (method, path, data) => {
-    const resp = await fetch(window.globalTS.DOMAIN + path,
-        {
-            credentials: 'include',
-            method: method,
-            headers: { "Content-type": "application/json", "Access-Control-Allow-Origin": "/*" },
-            body: JSON.stringify(data)
-        });
-    const status_code = resp.status
-    if (status_code === 200) {
-        const userJson = await resp.json();
+    try {
+        const resp = await fetch(window.globalTS.DOMAIN + path,
+            {
+                credentials: 'include',
+                method: method,
+                headers: { "Content-type": "application/json", "Access-Control-Allow-Origin": "/*" },
+                body: JSON.stringify(data)
+            });
+        const status_code = resp.status
+        if (status_code === 200) {
+            const userJson = await resp.json();
 
-        return { code: status_code, content: userJson }
-    } else if (status_code === 403) {
-        return { code: status_code }
-    } else {
-        return { code: status_code }
+            return { code: status_code, content: userJson }
+        } else if (status_code === 403) {
+            return { code: status_code }
+        } else {
+            return { code: status_code }
+        }
+    } catch (error) {
+        return { code: 503 /*Service unavailable*/, content: {} }
     }
 };
 
 export const doPostRequestRawBody = async (path, body) => {
-    const resp = await fetch(window.globalTS.DOMAIN + path,
-        {
-            credentials: 'include',
-            method: "POST",
+    try {
+        const resp = await fetch(window.globalTS.DOMAIN + path,
+            {
+                credentials: 'include',
+                method: "POST",
 
-            body: body
-        });
-    const status_code = resp.status
-    if (status_code === 200) {
-        const userJson = await resp.json();
+                body: body
+            });
+        const status_code = resp.status
+        if (status_code === 200) {
+            const userJson = await resp.json();
 
-        return { code: status_code, content: userJson }
-    } else if (status_code === 403) {
-        return { code: status_code }
-    } else {
-        return { code: status_code }
+            return { code: status_code, content: userJson }
+        } else if (status_code === 403) {
+            return { code: status_code }
+        } else {
+            return { code: status_code }
+        }
+    } catch (error) {
+        return { code: 503 /*Service unavailable*/, content: {} }
     }
 };
 
 export const doGetRequest = async (path) => {
-    const userInput = await fetch(window.globalTS.DOMAIN + path,
-        {
-            credentials: 'include',
-            method: "GET",
-            headers: { "Content-type": "application/json", "Access-Control-Allow-Origin": "*" },
-        });
+    try {
+        const userInput = await fetch(window.globalTS.DOMAIN + path,
+            {
+                credentials: 'include',
+                method: "GET",
+                headers: { "Content-type": "application/json", "Access-Control-Allow-Origin": "*" },
+            });
 
-    const status_code = userInput.status
+        const status_code = userInput.status
 
-    if (status_code === 200) {
-        const userJson = await userInput.json();
-        return { code: status_code, content: userJson }
-    } else if (status_code === 403) {
-        return { code: status_code }
-    } else {
-        return { code: status_code }
+        if (status_code === 200) {
+            const userJson = await userInput.json();
+            return { code: status_code, content: userJson }
+        } else if (status_code === 403) {
+            return { code: status_code }
+        } else {
+            return { code: status_code }
+        }
+    } catch (error) {
+        return { code: 503 /*Service unavailable*/, content: {} }
     }
 };
 
