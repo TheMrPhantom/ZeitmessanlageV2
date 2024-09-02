@@ -41,6 +41,11 @@ class Queries:
 
         return output
 
+    def get_user(self, member_id)->Member:
+        member: Member = self.session.query(
+            Member).filter_by(id=member_id).first()
+        return member
+
 
 
 
@@ -171,7 +176,7 @@ class Queries:
 
         hashedPassword, salt = TokenManager.hashPassword("test")
         
-        new_member = Member(name="hsf", alias="HSV DogDog e.V.", password=hashedPassword, salt=salt)
+        new_member = Member(name="hsf", alias="HSV DogDog e.V.", password=hashedPassword, salt=salt, verified_until=datetime.now() + timedelta(days=30))
         self.session.add(
             new_member
             )

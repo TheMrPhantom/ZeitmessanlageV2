@@ -4,6 +4,10 @@ import os
 import datetime
 import time
 import requests
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+from cryptography.hazmat.primitives import serialization
+import base64
 
 cookie_expire = int(os.environ.get("COOKIE_EXPIRE_TIME")) * \
     60*60 if os.environ.get("COOKIE_EXPIRE_TIME") else 60**3
@@ -118,6 +122,28 @@ def get_user_info(access_token, resource_url):
     headers = {'Authorization': 'Bearer ' + access_token}
     response = requests.get(resource_url, headers=headers)
     return response.json()
+
+# Function to load a private key from a PEM file
+def load_private_key_from_pem(pem_path: str) -> rsa.RSAPrivateKey:
+    with open(pem_path, 'rb') as pem_file:
+        pem_data = pem_file.read()
+        private_key = serialization.load_pem_private_key(
+            pem_data,
+            password=None,
+        )
+    return private_key
+
+private_key: rsa.RSAPrivateKey = load_private_key_from_pem('rsa-keys/private-key.pem')
+
+# Function to sign a message using RSA private key
+def sign_message(message: str) -> str:
+    signature = private_key.sign(
+        message.encode(),
+        padding.PKCS1v15(),
+        hashes.SHA256()
+    )
+    return base64.b64encode(signature).decode()
+
 
 
 checkout_mail_text = """Hallo {name},

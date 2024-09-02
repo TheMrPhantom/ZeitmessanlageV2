@@ -12,6 +12,7 @@ class Member(db.Model):
     hidden = sql.Column(sql.Boolean, nullable=False, default=False)
     password = sql.Column(sql.LargeBinary(length=128), nullable=False)
     salt = sql.Column(sql.String(64), nullable=False)
+    verified_until = sql.Column(sql.DateTime, nullable=True)
 
     def to_dict(self):
         return {
@@ -32,3 +33,5 @@ class Member(db.Model):
             "password": self.password.hex(),
             "salt": self.salt
         }
+
+    

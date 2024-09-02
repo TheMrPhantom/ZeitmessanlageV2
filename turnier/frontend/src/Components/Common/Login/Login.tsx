@@ -3,14 +3,18 @@ import React, { useState } from 'react'
 import { useDispatch } from 'react-redux';
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { openToast } from '../../../Actions/CommonAction';
-import { FALSCHES_PASSWORT, FEHLER, LOGIN, NAME, PASSWORT } from '../Internationalization/i18n';
+import { FALSCHES_PASSWORT, FEHLER, LOGIN, NAME, PASSWORT, WARNUNG } from '../Internationalization/i18n';
 import Spacer from '../Spacer';
 import { doGetRequest, doPostRequest } from '../StaticFunctions';
 import style from './login.module.scss'
+import { sha256 } from 'crypto-hash';
+import { verifySignature } from '../StaticFunctionsTyped';
+import { Verification } from '../../../types/ResponseTypes';
 
 type Props = {}
 
 const Login = (props: Props) => {
+
     const [searchParams,] = useSearchParams();
     const navigate = useNavigate();
     const dispatch = useDispatch();
@@ -37,11 +41,48 @@ const Login = (props: Props) => {
             }
         })();
         doPostRequest("login", { name: username, password: password }).then((value) => {
+            console.log(value)
             if (value.code === 200) {
                 const searchParam = searchParams.get("originalPath")
                 const notNullSeachParam = searchParam !== null ? searchParam : "/";
+                sha256(password).then((hash) => {
+                    window.localStorage.setItem("pw", hash)
+                })
+
+                window.localStorage.setItem("validation", JSON.stringify(value.content))
 
                 navigate(notNullSeachParam)
+            } else if (value.code === 503) {
+                sha256(password).then((hash) => {
+                    if (window.localStorage.getItem("pw") === hash) {
+
+
+                        //PW matched check if license is still valid
+
+                        const verificationString: string | null = window.localStorage.getItem("validation")
+                        const verification: Verification = verificationString !== null ? JSON.parse(verificationString) : null
+
+                        if (verification !== null) {
+                            if (verifySignature(verification.validUntil + verification.name, verification.signedValidation)) {
+                                if (new Date(verification.validUntil) < new Date()) {
+                                    dispatch(openToast({ message: "Lizenz ist abgelaufen, bitte verlängern", type: "error", headline: "Lizenz abgelaufen", duration: 10000 }))
+                                } else {
+                                    const searchParam = searchParams.get("originalPath")
+                                    const notNullSeachParam = searchParam !== null ? searchParam : "/o/" + verification.name;
+                                    navigate(notNullSeachParam)
+                                    dispatch(openToast({ message: "Keine Internetverbindung, die Lokalen dateien werden geladen und bei bestehender Internetverbindung hochgeladen", type: "warning", headline: "Server nicht erreichbar", duration: 10000 }))
+                                }
+                            } else {
+                                dispatch(openToast({ message: "Die Verifikationdatei wurde manipuliert, bitte versuche es später erneut mit Internetverbindung", type: "error", headline: "Server nicht erreichbar", duration: 10000 }))
+                            }
+                        } else {
+                            dispatch(openToast({ message: "Kein Account lokal hinterlegt, probiere es später erneut mit Internetverbindung", type: "error", headline: "Server nicht erreichbar", duration: 10000 }))
+                        }
+                    } else {
+                        dispatch(openToast({ message: "Kein Account lokal hinterlegt oder Passwort falsch, probiere es erneut oder später mit Internetverbindung", type: "error", headline: "Server nicht erreichbar", duration: 10000 }))
+                    }
+                })
+
             } else {
                 dispatch(openToast({ message: FALSCHES_PASSWORT, type: "error", headline: FEHLER }))
             }

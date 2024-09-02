@@ -3,6 +3,7 @@ import { Member, Organization, Participant, Result, Run, SkillLevel, Size, RunCa
 import { CommonReducerType } from '../../Reducer/CommonReducer';
 import { faultFactor, maxTimeFactorA0A1A2, maxTimeFactorA3, minSpeedA3, minSpeedJ3, offsetFactor, refusalFactor } from "./AgilityPO";
 import { doPostRequest } from "./StaticFunctions";
+import * as forge from 'node-forge';
 
 export const safeMemberName = (member: Member) => {
     return member.alias === "" ? member.name : member.alias
@@ -511,4 +512,26 @@ export const checkIfFavorite = (participant: Participant, favorites: string | un
         }
     })
     return isFavorite
+}
+
+
+const publicKey = forge.pki.publicKeyFromPem(`
+    -----BEGIN RSA PUBLIC KEY-----
+    MIIBCgKCAQEAsbc4TN4l3E8VJAC/U/WMUHEWomIbz32+EyDv7BzqtkWUlBtljjtk
+    Rz/g313i4XLj3rLjVJ4RL4zs3Qw/NDzv6fwh895o3mL5/b/arb3TDzjTxthe7qsf
+    e51+GlmgYh/hJEqORmokSxMo50n2BJVKbnGGRg/2T2viWsVIZGPFMUBuk/h5lcKd
+    yXsts7Wf0MVC7z+zbpcsiMKENcelZEqPmhIlEdOIgdqaDNgDF4yLtNlbb6allwwr
+    h9HLrZ4W7KBf2tn5q2dXubiPyVbdUmdQaEj2fN+RaZrxjQn8vTVqyL8x99UYGnc4
+    5t0+9iGnyfxpwqthzgQ+j/dBNsfMZ+4rAQIDAQAB
+    -----END RSA PUBLIC KEY-----
+                `.trim())
+
+export const verifySignature = (message: string, signature: string): boolean => {
+    const md = forge.md.sha256.create();
+    md.update(message, 'utf8');
+    try {
+        return publicKey.verify(md.digest().bytes(), forge.util.decode64(signature));
+    } catch (e) {
+        return false;
+    }
 }

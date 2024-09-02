@@ -1,9 +1,13 @@
 import Cookies from 'js-cookie';
 import React, { useEffect } from 'react'
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { setLoginState } from '../../../Actions/CommonAction';
+import { openToast, setLoginState } from '../../../Actions/CommonAction';
 import { doGetRequest } from '../StaticFunctions';
+import { RootState } from '../../../Reducer/reducerCombiner'
+import { CommonReducerType } from '../../../Reducer/CommonReducer';
+import { verifySignature } from '../StaticFunctionsTyped';
+import { Verification } from '../../../types/ResponseTypes';
 
 type Props = {}
 
@@ -11,6 +15,20 @@ const LoginChecker = (props: Props) => {
     const location = useLocation();
     const navigate = useNavigate();
     const dispatch = useDispatch();
+    const common: CommonReducerType = useSelector((state: RootState) => state.common);
+
+    const loggedIn = (value: {
+        code: number;
+        content: any;
+    } | {
+        code: number;
+        content?: undefined;
+    }) => {
+        dispatch(setLoginState(value.content))
+        if (!window.location.pathname.startsWith(`/o/${value.content.name}`)) {
+            navigate("/o/" + value.content.name)
+        }
+    }
 
     useEffect(() => {
         let requestString = ""
@@ -27,19 +45,40 @@ const LoginChecker = (props: Props) => {
         }
         console.log(Cookies.get(window.globalTS.AUTH_COOKIE_PREFIX + "memberID"))
         doGetRequest(requestString).then((value) => {
-            if (value.code !== 200) {
+            if (value.code !== 200 && value.code !== 503) {
                 // User needs to login
-
                 navigate("/login?originalPath=" + location.pathname)
                 dispatch(setLoginState(null))
 
-            } else {
-                // User is logged login
-                dispatch(setLoginState(value.content))
-                if (!window.location.pathname.startsWith(`/o/${value.content.name}`)) {
-                    navigate("/o/" + value.content.name)
+            } else if (value.code === 503) {
+                const verificationString: string | null = window.localStorage.getItem("validation")
+                const verification: Verification = verificationString !== null ? JSON.parse(verificationString) : null
+
+                if (verification !== null) {
+                    if (verifySignature(verification.validUntil + verification.name, verification.signedValidation)) {
+                        if (new Date(verification.validUntil) < new Date()) {
+                            navigate("/login?originalPath=" + location.pathname)
+                            dispatch(setLoginState(null))
+                            dispatch(openToast({ message: "Lizenz ist abgelaufen, bitte verlängern", type: "error", headline: "Lizenz abgelaufen", duration: 10000 }))
+                        } else {
+                            dispatch(setLoginState({ name: verification.name, alias: verification.alias }))
+                            if (!window.location.pathname.startsWith(`/o/${verification.name}`)) {
+                                navigate("/o/" + verification.name)
+                            }
+                        }
+                    } else {
+                        dispatch(openToast({ message: "Die Verifikationdatei wurde manipuliert, bitte versuche es später erneut mit Internetverbindung", type: "error", headline: "Server nicht erreichbar", duration: 10000 }))
+                    }
+                } else {
+                    dispatch(openToast({ message: "Kein Account lokal hinterlegt, probiere es später erneut mit Internetverbindung", type: "error", headline: "Server nicht erreichbar", duration: 10000 }))
                 }
+            } else {
+
+                // User is logged login
+                loggedIn(value)
             }
+
+
         })
 
     }, [location.pathname, navigate, dispatch])

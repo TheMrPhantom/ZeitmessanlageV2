@@ -35,7 +35,6 @@ except Exception as e:
 with app.app_context():
     db = Queries.Queries(sql_database)
     token_manager = authenticator.TokenManager(db)
-
     db.convert_usernames_to_lower()
 
 
@@ -246,9 +245,9 @@ class login_Check(Resource):
         Check if your login token is valid
         """
         memberID=request.cookies.get(f"{util.auth_cookie_memberID}memberID")
-        # Get the name of the user
-        name, alias = db.get_username_alias(memberID)
-        return util.build_response({"name":name, "alias":alias,"memberID":memberID})
+        member=db.get_user(memberID)
+
+        return util.build_response({"name":member.name, "alias":member.alias,"memberID":member.id})
 
 
 @api.route('/start-oidc')
@@ -347,7 +346,13 @@ class login(Resource):
         if member_id is not None:
             util.log("Login", "User logged in")
             token = token_manager.create_token(member_id)
-            return util.build_response("Login successfull", cookieToken=token, cookieMemberID=member_id)
+
+            member=db.get_user(member_id)
+            valid_until=member.verified_until.isoformat()
+            signed_validation=util.sign_message(valid_until+member.name)
+
+            return util.build_response({"validUntil":valid_until,"signedValidation":signed_validation,"name":member.name,"alias":member.alias}, cookieToken=token, cookieMemberID=member_id)
+        
         return util.build_response("Unauthorized", code=403)
 
 

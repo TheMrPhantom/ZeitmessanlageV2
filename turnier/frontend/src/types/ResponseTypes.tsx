@@ -117,3 +117,10 @@ export type KombiResult = {
     totalTime: number;
     kombi: number;
 }
+
+export type Verification = {
+    validUntil: string,
+    signedValidation: string,
+    name: string,
+    alias: string
+}
