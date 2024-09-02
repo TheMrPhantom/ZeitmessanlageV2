@@ -1,0 +1,17 @@
+@import "../../Common/variables.module.scss";
+
+.container {
+    padding: $padding;
+}
+
+.bigButton {
+    padding: $padding;
+    width: max-content;
+    max-width: 380px;
+    cursor: pointer;
+}
+
+.buttonContainer {
+    padding: $padding;
+    width: 100%;
+}

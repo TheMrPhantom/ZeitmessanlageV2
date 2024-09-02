@@ -51,7 +51,7 @@ const Login = (props: Props) => {
 
                 window.localStorage.setItem("validation", JSON.stringify(value.content))
 
-                navigate(notNullSeachParam)
+                navigate("/use-offline")
             } else if (value.code === 503) {
                 sha256(password).then((hash) => {
                     if (window.localStorage.getItem("pw") === hash) {

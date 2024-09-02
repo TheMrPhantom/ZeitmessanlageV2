@@ -11,6 +11,7 @@ import RunSelection from '../User/RunSelection/RunSelection';
 import Printing from '../Organization/Printing/Printing';
 import { Toolbar } from '@mui/material';
 import { startSerial } from '../Common/StaticFunctionsTyped';
+import UseOffline from '../Organization/UseOffline/UseOffline';
 type Props = {}
 
 const Routing = (props: Props) => {
@@ -23,6 +24,7 @@ const Routing = (props: Props) => {
         <>
             <Routes>
                 <Route path="/login" element={<><Toolbar /><Login /></>} />
+                <Route path="/use-offline" element={<><Toolbar />< UseOffline /></>} />
                 <Route path="/o/:organization" element={<><Toolbar /><Dashboard /></>} />
                 <Route path="/o/:organization/:date" element={<><Toolbar /><Turnament /></>} />
                 <Route path="/o/:organization/:date/participants" element={<><Toolbar /><Participants /></>} />
