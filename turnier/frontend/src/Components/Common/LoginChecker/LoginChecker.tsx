@@ -31,17 +31,13 @@ const LoginChecker = (props: Props) => {
                 // User needs to login
 
                 navigate("/login?originalPath=" + location.pathname)
-                dispatch(setLoginState(false))
+                dispatch(setLoginState(null))
 
             } else {
                 // User is logged login
-                dispatch(setLoginState(true))
-
-                const memberID = Cookies.get(window.globalTS.AUTH_COOKIE_PREFIX + "memberID");
-                const notUndefined = memberID !== undefined ? parseInt(memberID) : 0;
-
-                if (notUndefined > 2) {
-                    navigate("/user/" + Cookies.get(window.globalTS.AUTH_COOKIE_PREFIX + "memberID"))
+                dispatch(setLoginState(value.content))
+                if (!window.location.pathname.startsWith(`/o/${value.content.name}`)) {
+                    navigate("/o/" + value.content.name)
                 }
             }
         })

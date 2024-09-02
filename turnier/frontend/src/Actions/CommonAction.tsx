@@ -30,7 +30,7 @@ export const setHistory = (history: Array<string>) => {
     }
 }
 
-export const setLoginState = (isLoggedIn: boolean) => {
+export const setLoginState = (isLoggedIn: { name: string, alias: string } | null) => {
     return {
         type: "SET_LOGIN",
         payload: isLoggedIn

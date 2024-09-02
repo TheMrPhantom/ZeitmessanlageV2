@@ -10,7 +10,7 @@ const initialState: CommonReducerType = {
         name: "",
         turnaments: []
     },
-    isLoggedIn: false,
+    isLoggedIn: null,
     toast: {
         open: false,
         duration: 4000,
@@ -32,7 +32,7 @@ const initialState: CommonReducerType = {
 
 export type CommonReducerType = {
     organization: Organization,
-    isLoggedIn: boolean,
+    isLoggedIn: { name: string, alias: string } | null,
     toast: {
         open: boolean,
         duration: number,
@@ -190,6 +190,10 @@ const reducer = (state = initialState, { type, payload }: any) => {
             console.log(payload)
             newState.userTurnament = { ...payload }
             console.log(newState)
+            return newState
+        case "SET_LOGIN":
+            console.log(payload)
+            newState.isLoggedIn = payload
             return newState
         default:
             return state

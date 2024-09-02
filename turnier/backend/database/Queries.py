@@ -143,7 +143,18 @@ class Queries:
    
 
    
+    def checkPassword(self, name, password):
+            member: Member = self.session.query(
+                Member).filter_by(name=name.lower()).first()
+            if member is None:
+                return None
 
+            hashed_pw = TokenManager.hashPassword(password, member.salt)
+
+            if hashed_pw == member.password:
+                return member.id
+            else:
+                return None
     
 
     def create_dummy_data(self) -> None:
@@ -160,7 +171,7 @@ class Queries:
 
         hashedPassword, salt = TokenManager.hashPassword("test")
         
-        new_member = Member(name="HSV DogDog e.V.",alias="hsf", password=hashedPassword, salt=salt)
+        new_member = Member(name="hsf", alias="HSV DogDog e.V.", password=hashedPassword, salt=salt)
         self.session.add(
             new_member
             )

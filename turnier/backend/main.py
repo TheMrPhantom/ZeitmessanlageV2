@@ -88,7 +88,6 @@ class update_data(Resource):
         for run in runs_from_request:
             
             run_info:RunInformation = db.session.query(RunInformation).filter(RunInformation.run == run["run"] and RunInformation.height == run["height"] and RunInformation.turnament_id==t.id).first()           
-            #run_info.height=run["height"]
             run_info.length=run["length"]
             run_info.speed=run["speed"]
 
@@ -156,16 +155,16 @@ class update_data(Resource):
         socket.send({"action": "reload"})
         return util.build_response("OK")
 
-@api.route('/organization/<string:alias>')
+@api.route('/organization/<string:name>')
 class get_organizer_info(Resource):
-    def get(self,alias):
+    def get(self,name):
         """
-        Gets the name of an organization
+        Gets the alias of an organization
         """
         
-        org:Member=db.session.query(Member).filter(Member.alias == alias).first()
+        org:Member=db.session.query(Member).filter(Member.name == name).first()
         
-        return util.build_response({"name":org.name})
+        return util.build_response({"name":org.alias})
 
 @api.route('/<int:organization_id>/<string:secret>/<date>')
 class get_data(Resource):
@@ -246,7 +245,10 @@ class login_Check(Resource):
         """
         Check if your login token is valid
         """
-        return util.build_response("OK")
+        memberID=request.cookies.get(f"{util.auth_cookie_memberID}memberID")
+        # Get the name of the user
+        name, alias = db.get_username_alias(memberID)
+        return util.build_response({"name":name, "alias":alias,"memberID":memberID})
 
 
 @api.route('/start-oidc')

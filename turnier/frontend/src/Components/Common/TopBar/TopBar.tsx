@@ -25,7 +25,7 @@ import InfoIcon from '@mui/icons-material/Info';
 import RequestQuoteIcon from '@mui/icons-material/RequestQuote';
 import { ABRECHNUNGEN, EINSTELLUNGEN, GELD_ANFORDERN, GETRAENKE, MITGLIEDER, NUTZER_DASHBOARD, TRANSAKTIONEN, UEBERWEISEN } from '../Internationalization/i18n';
 import Cookies from 'js-cookie';
-import { setRequestDialogOpen, setTransferDialogOpen } from '../../../Actions/CommonAction';
+import { setLoginState, setRequestDialogOpen, setTransferDialogOpen } from '../../../Actions/CommonAction';
 import { classToString, sizeToString } from '../StaticFunctionsTyped';
 import About from './About';
 
@@ -224,7 +224,7 @@ const TopBar = (props: Props) => {
     if (location.pathname.includes("/print")) {
         return <></>
     }
-
+    console.log(common.isLoggedIn)
     return (
         <>
             <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, maxHeight: "77px" }}>
@@ -275,9 +275,10 @@ const TopBar = (props: Props) => {
                         <Button color="inherit" onClick={() => {
                             if (common.isLoggedIn) {
                                 doPostRequest("logout", "")
+                                dispatch(setLoginState(null))
                             }
                             navigate("/login")
-                        }}>{common.isLoggedIn ? "Logout" : "Login"}</Button>
+                        }}>{common.isLoggedIn !== null ? "Logout" : "Login"}</Button>
                     </div>
                 </Toolbar>
             </AppBar>
