@@ -20,7 +20,7 @@ const LoginChecker = (props: Props) => {
             return
         } else if (location.pathname.startsWith("/config")) {
             return
-        } else if (!location.pathname.startsWith("/login")) {
+        } else if (!(location.pathname.startsWith("/login") || location.pathname.startsWith("/u"))) {
             requestString = "login/check"
         } else {
             return
@@ -28,18 +28,13 @@ const LoginChecker = (props: Props) => {
         console.log(Cookies.get(window.globalTS.AUTH_COOKIE_PREFIX + "memberID"))
         doGetRequest(requestString).then((value) => {
             if (value.code !== 200) {
-                /*
-                doGetRequest("config/status").then((response) => {
-                    if (response.code === 200&&response.content===0) {
-                        navigate("/config/start" + location.pathname)
-                        dispatch(setLoginState(false))
-                    } else {
-                        navigate("/login?originalPath=" + location.pathname)
-                        dispatch(setLoginState(false))
-                    }
-                })
-*/
+                // User needs to login
+
+                navigate("/login?originalPath=" + location.pathname)
+                dispatch(setLoginState(false))
+
             } else {
+                // User is logged login
                 dispatch(setLoginState(true))
 
                 const memberID = Cookies.get(window.globalTS.AUTH_COOKIE_PREFIX + "memberID");

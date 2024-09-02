@@ -1,4 +1,4 @@
-import { Button, FormControl, TextField, Typography } from '@mui/material';
+import { Button, FormControl, Paper, Stack, TextField, Typography } from '@mui/material';
 import React, { useState } from 'react'
 import { useDispatch } from 'react-redux';
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -78,45 +78,58 @@ const Login = (props: Props) => {
             </Button></>
     }
 
-    return (
-        <div className={style.outterContainer}>
-            <Typography variant="h3">{!searchParams.get("originalPath")?.includes("admin") ? window.globalTS.WELCOME_TEXT_0 : window.globalTS.WELCOME_TEXT_0_ADMIN}</Typography>
-            <Typography variant="h4">{window.globalTS.WELCOME_TEXT_1}</Typography>
-            <form className={style.textfield} noValidate autoComplete="off" onSubmit={(event) => { event.preventDefault(); login() }}>
-                <FormControl className={style.form}>
-                    <Spacer vertical={40} />
-                    <TextField
-                        fullWidth
-                        label={NAME}
-                        value={username}
-                        onChange={(value) => { setusername(value.target.value) }}
-                        autoFocus
+    return (<>
+        <Spacer vertical={20} />
+        <Stack direction="column" alignItems="center">
+            <Paper className={style.paper}>
+                <Stack direction="column" gap={3} alignItems="center">
+                    <Typography variant="h3">DogDog Zeitmessung</Typography>
+                    <Typography variant="h5">Bitte melde dich an</Typography>
+                    <img
+                        src={`/Logo.svg`}
+                        width={"50%"}
+                        alt='Logo'
+                        loading="lazy"
                     />
+                    <form className={style.form} noValidate autoComplete="off" onSubmit={(event) => { event.preventDefault(); login() }}>
+                        <FormControl className={style.form}>
+                            <Stack direction="column" gap={3} style={{ "width": "100%" }}>
+                                <TextField
+                                    fullWidth
+                                    label={NAME}
+                                    value={username}
+                                    onChange={(value) => { setusername(value.target.value) }}
+                                    autoFocus
+                                />
 
-                    <Spacer vertical={30} />
-                    <TextField
-                        fullWidth
-                        label={PASSWORT}
-                        type="password"
-                        value={password}
-                        onChange={(value) => { setpassword(value.target.value) }}
-                    />
-                    <Spacer vertical={40} />
-                    <Button
-                        size='large'
-                        variant='contained'
-                        onClick={() => {
-                            login()
-                        }}
-                        disabled={disableLoginButton}
-                        type='submit'
-                    >
-                        {LOGIN}
-                    </Button>
-                    {oidcButton()}
-                </FormControl>
-            </form>
-        </div>
+
+                                <TextField
+                                    fullWidth
+                                    label={PASSWORT}
+                                    type="password"
+                                    value={password}
+                                    onChange={(value) => { setpassword(value.target.value) }}
+                                />
+
+                                <Button
+                                    size='large'
+                                    variant='contained'
+                                    onClick={() => {
+                                        login()
+                                    }}
+                                    disabled={disableLoginButton}
+                                    type='submit'
+                                >
+                                    {LOGIN}
+                                </Button>
+                                {oidcButton()}
+                            </Stack>
+                        </FormControl>
+                    </form>
+                </Stack>
+            </Paper>
+        </Stack>
+    </>
     )
 }
 

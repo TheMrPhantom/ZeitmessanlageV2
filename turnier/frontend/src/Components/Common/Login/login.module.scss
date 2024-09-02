@@ -10,10 +10,6 @@
     padding: $padding;
 }
 
-.textfield {
-    width: 80%;
-}
-
 .form {
     width: 100%;
     display: flex;
@@ -22,4 +18,10 @@
     align-items: center;
     text-align: center;
     padding: $padding;
+}
+
+.paper {
+    padding: $padding;
+    width: max-content;
+    height: max-content;
 }
