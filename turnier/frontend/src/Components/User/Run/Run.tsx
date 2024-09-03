@@ -202,12 +202,12 @@ const Run = (props: Props) => {
 
     //changed
     useEffect(() => {
-        doGetRequest('0/secret/2024-08-31').then((data) => {
+        doGetRequest(`${params.organization}/secret/${params.date}`).then((data) => {
             if (data.code === 200) {
                 setcommon(data.content as Tournament)
             }
         })
-    }, [reload])
+    }, [reload, params.date, params.organization])
 
     useEffect(() => {
         if (!started) {
@@ -277,7 +277,7 @@ const Run = (props: Props) => {
                     //setreload(!reload)
                     break;
                 case "reload":
-                    doGetRequest('0/secret/2024-08-31').then((data) => {
+                    doGetRequest(`${params.organization}/secret/${params.date}`).then((data) => {
                         if (data.code === 200) {
                             const t = data.content as Tournament
                             setcommon(t)

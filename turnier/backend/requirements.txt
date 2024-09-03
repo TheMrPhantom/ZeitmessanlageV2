@@ -9,3 +9,4 @@ waitress
 requests
 werkzeug
 websocket_server
+cryptography

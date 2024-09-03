@@ -81,10 +81,10 @@ const Run = (props: Props) => {
     const currentTimeFault = getTimeFaults(currentResult, calculatedStandardTime)
 
     useEffect(() => {
-        doPostRequest("0/current/participant", {
+        doPostRequest(`${common.organization.name}/current/participant`, {
             id: selectedParticipant.startNumber, faults: currentFaults, refusals: currentRefusals
         })
-    }, [selectedParticipant.startNumber, currentFaults, currentRefusals])
+    }, [selectedParticipant.startNumber, currentFaults, currentRefusals, common.organization.name])
 
     const changeFaults = (value: number) => {
 
@@ -106,7 +106,7 @@ const Run = (props: Props) => {
             } else {
                 setnewFaults(value)
             }
-            doPostRequest("0/current/faults", value)
+            doPostRequest(`${common.organization.name}/faults`, value)
         }
     }
 
@@ -130,7 +130,7 @@ const Run = (props: Props) => {
             } else {
                 setnewRefusals(value)
             }
-            doPostRequest("0/current/refusals", value)
+            doPostRequest(`${common.organization.name}/refusals`, value)
         }
     }
 
@@ -212,13 +212,13 @@ const Run = (props: Props) => {
 
         var id = setInterval(() => {
 
-            doPostRequest("0/current/participant", {
+            doPostRequest(`${common.organization.name}/current/participant`, {
                 id: selectedParticipant.startNumber, faults: currentFaults, refusals: currentRefusals
             })
 
         }, 3000);
         return () => clearInterval(id);
-    }, [selectedParticipant.startNumber, currentFaults, currentRefusals]);
+    }, [selectedParticipant.startNumber, currentFaults, currentRefusals, common.organization.name]);
 
 
 
@@ -227,9 +227,9 @@ const Run = (props: Props) => {
         if (currentTime === -2 || currentTime === 0) {
             setinitTime(new Date().getTime());
             setStarted(true)
-            doPostRequest("0/timer", { action: "start" })
+            doPostRequest(`${common.organization.name}/timer`, { action: "start" })
         }
-    }, [currentTime])
+    }, [currentTime, common.organization.name])
 
 
     const stopTimer = useCallback((time?: number) => {
@@ -238,17 +238,17 @@ const Run = (props: Props) => {
         }
         setStarted(false)
         if (time === undefined) {
-            doPostRequest("0/timer", { action: "stop", time: currentTime }).then(() => {
-                updateDatabase(turnament)
+            doPostRequest(`${common.organization.name}/timer`, { action: "stop", time: currentTime }).then(() => {
+                updateDatabase(turnament, common.organization.name)
             })
         } else {
-            doPostRequest("0/timer", { action: "stop", time: Math.floor(time / 10) / 100 }).then(() => {
-                updateDatabase(turnament)
+            doPostRequest(`${common.organization.name}/timer`, { action: "stop", time: Math.floor(time / 10) / 100 }).then(() => {
+                updateDatabase(turnament, common.organization.name)
             })
             changeTime(Math.floor(time / 10) / 100)
         }
 
-    }, [currentTime, started, changeTime, turnament])
+    }, [currentTime, started, changeTime, turnament, common.organization.name])
 
     const [speedWarning, setspeedWarning] = useState(false)
     const [lengthWarning, setlengthWarning] = useState(false)
@@ -468,11 +468,11 @@ const Run = (props: Props) => {
                             <Stack direction="row" justifyContent="space-evenly">
                                 <Button variant='outlined' className={style.btn} onClick={() => {
                                     changeFaults(currentFaults + 1)
-                                    updateDatabase(turnament)
+                                    updateDatabase(turnament, common.organization.name)
                                 }}>Fehler</Button>
                                 <Button variant='outlined' className={style.btn} onClick={() => {
                                     changeRefusals(currentRefusals + 1)
-                                    updateDatabase(turnament)
+                                    updateDatabase(turnament, common.organization.name)
                                 }}>Verweigerung</Button>
                             </Stack>
                         </Stack>
@@ -527,10 +527,10 @@ const Run = (props: Props) => {
                                 if (Number(value.target.value) > -1) {
                                     if (Number(value.target.value) === 0) {
                                         changeTime(-2)
-                                        updateDatabase(turnament)
+                                        updateDatabase(turnament, common.organization.name)
                                     } else {
                                         changeTime(Number(value.target.value))
-                                        updateDatabase(turnament)
+                                        updateDatabase(turnament, common.organization.name)
                                     }
 
                                 }
@@ -543,7 +543,7 @@ const Run = (props: Props) => {
                             onChange={(value) => {
                                 if (Number(value.target.value) > -1) {
                                     changeFaults(Number(value.target.value))
-                                    updateDatabase(turnament)
+                                    updateDatabase(turnament, common.organization.name)
                                 }
                             }} />
                         <TextField className={style.runStats} value={getResultFromParticipant(currentRun, selectedParticipant).refusals}
@@ -554,7 +554,7 @@ const Run = (props: Props) => {
                             onChange={(value) => {
                                 if (Number(value.target.value) > -1) {
                                     changeRefusals(Number(value.target.value))
-                                    updateDatabase(turnament)
+                                    updateDatabase(turnament, common.organization.name)
                                 }
                             }}
                         />

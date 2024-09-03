@@ -66,15 +66,15 @@ def admin(fn):
 def is_self_or_admin(request, member_id):
     return str(member_id) == str(request.cookies.get(f"{util.auth_cookie_memberID}memberID")) or str(request.cookies.get(f"{util.auth_cookie_memberID}memberID")) == "1"
 
-@api.route('/<int:organization_id>/<string:date>')
+@api.route('/<string:name>/<string:date>')
 class update_data(Resource):
-    def post(self,organization_id,date):
+    def post(self,name,date):
         """
-        Start or stop a timer
+        Update the data of a tournament
         """
 
-        t:Tournament=db.session.query(Tournament).filter(Tournament.date == date).first()
-        
+        t:Tournament=db.session.query(Tournament).filter(Tournament.date == date, Member.name==name,Tournament.member_id==Member.id).first()
+        print(t)
         participants:List[Participant]=db.session.query(Participant).filter(Participant.turnament_id == t.id).all()
         
         t.name=request.json["name"]
@@ -84,11 +84,13 @@ class update_data(Resource):
 
         
         runs_from_request=request.json["runs"]
+        print(runs_from_request)
         for run in runs_from_request:
             
-            run_info:RunInformation = db.session.query(RunInformation).filter(RunInformation.run == run["run"] and RunInformation.height == run["height"] and RunInformation.turnament_id==t.id).first()           
+            run_info:RunInformation = db.session.query(RunInformation).filter(RunInformation.run == run["run"], RunInformation.height == run["height"], RunInformation.turnament_id==t.id).first()           
             run_info.length=run["length"]
             run_info.speed=run["speed"]
+            print(run_info.to_dict(),run)
 
         participants_from_request= request.json["participants"]
         for participant in participants_from_request:
@@ -165,13 +167,13 @@ class get_organizer_info(Resource):
         
         return util.build_response({"name":org.alias})
 
-@api.route('/<int:organization_id>/<string:secret>/<date>')
+@api.route('/<string:name>/<string:secret>/<date>')
 class get_data(Resource):
-    def get(self,organization_id,secret,date):
+    def get(self,name,secret,date):
         """
-        Start or stop a timer
+        Get the data of a tournament
         """
-        t:Tournament=db.session.query(Tournament).filter(Tournament.date == date).first()
+        t:Tournament=db.session.query(Tournament).filter(Tournament.date == date,Member.name==name,Tournament.member_id==Member.id).first()
         
         participants:List[Participant]=db.session.query(Participant).filter(Participant.turnament_id == t.id).all()
         participants=[participant.to_dict() for participant in participants]
@@ -183,11 +185,58 @@ class get_data(Resource):
                                     "date":t.date,
                                     "participants":participants,
                                     "runs":runs})
+    
+@api.route('/<string:name>/tournament')
+class tournaments_of_club(Resource):
+    def put(self,name):
+        """
+        Create a new tournament
+        """
+
+        # Check if date is already used
+        db_tournament=db.session.query(Tournament).filter(Tournament.date == request.json["date"],Member.name==name,Member.id==Tournament.member_id).first()
+        if db_tournament is not None:
+            return util.build_response("Date already used", 400)
 
 
-@api.route('/<int:organization_id>/timer')
+        post_data = request.json
+        t=Tournament()
+        t.name=post_data["name"]
+        t.judge=post_data["judge"]
+        t.date=post_data["date"]
+        t.member_id=db.session.query(Member).filter(Member.name == name).first().id
+        db.session.add(t)
+        
+        db.session.commit()
+
+        # Create runs
+        for i in range(4):
+            for j in range(9):
+                db.session.add(RunInformation(run=j, height=i, length=0, speed=0, turnament_id=t.id))
+
+        db.session.commit()
+
+        return util.build_response("OK")
+
+    def delete(self,name):
+        """
+        Delete a tournament
+        """
+        post_data = request.json
+        t:Tournament=db.session.query(Tournament).filter(Tournament.date == post_data["date"],Member.name==name,Tournament.member_id==Member.id).first()
+        
+        if t is None:
+            return util.build_response("Not found", 404)
+        
+        db.session.delete(t)
+        db.session.commit()
+        return util.build_response("OK")
+
+
+
+@api.route('/<string:name>/timer')
 class api_timer(Resource):
-    def post(self,organization_id):
+    def post(self,name):
         """
         Start or stop a timer
         """
@@ -202,33 +251,33 @@ class api_timer(Resource):
             socket.send({"action": "stop_timer","message":post_data["time"]})
         return util.build_response("OK")
 
-@api.route('/<int:organization_id>/current/participant')
+@api.route('/<string:name>/current/participant')
 class api_currentParticipant(Resource):
-    def post(self,organization_id):
+    def post(self,name):
         """
-        Start or stop a timer
+        Change the current participant
         """
 
         # send websocket message
         socket.send({"action": "changed_current_participant","message":request.json})
         return util.build_response("OK")
 
-@api.route('/<int:organization_id>/current/faults')
+@api.route('/<string:name>/current/faults')
 class api_currentFaults(Resource):
-    def post(self,organization_id):
+    def post(self,name):
         """
-        Start or stop a timer
+        Change current faults
         """
 
         # send websocket message
         socket.send({"action": "changed_current_fault","message":request.json})
         return util.build_response("OK")
 
-@api.route('/<int:organization_id>/current/refusals')
+@api.route('/<string:name>/current/refusals')
 class api_currentRefusal(Resource):
-    def post(self,organization_id):
+    def post(self,name):
         """
-        Start or stop a timer
+        Change current refusals
         """
 
         # send websocket message

@@ -483,14 +483,14 @@ export const fixDis = (currentRun: Run,
     return tempParticipants
 }
 
-export const updateDatabase = (turnament: Tournament | undefined) => {
+export const updateDatabase = (turnament: Tournament | undefined, memberName: string) => {
     if (turnament) {
         const year = new Date(turnament?.date).getFullYear()
         const month = new Date(turnament?.date).getMonth() + 1
         const day = new Date(turnament?.date).getDate()
         const date = `${year}-${month < 10 ? "0" + month : month}-${day < 10 ? "0" + day : day}`
         console.log(date)
-        doPostRequest(`0/${date}`, turnament ? turnament : null)//Updates the database
+        doPostRequest(`${memberName}/${date}`, turnament ? turnament : null)//Updates the database
     }
 }
 

@@ -34,13 +34,13 @@ const RunSelection = (props: Props) => {
     const maxTimeout = 5000;
 
     useEffect(() => {
-        doGetRequest('0/secret/2024-08-31').then((data) => {
+        doGetRequest(`${params.organization}/secret/${params.date}`).then((data) => {
             if (data.code === 200) {
                 dispatch(updateUserTurnament(data.content as Tournament))
                 settournamentCurrent(data.content as Tournament)
             }
         })
-    }, [dispatch, reload])
+    }, [dispatch, reload, params.organization, params.date])
 
     useEffect(() => {
         //Load org name
@@ -75,7 +75,7 @@ const RunSelection = (props: Props) => {
                 console.log(message)
                 switch (message.action) {
                     case "reload":
-                        doGetRequest('0/secret/2024-08-31').then((data) => {
+                        doGetRequest(`${params.organization}/secret/${params.date}`).then((data) => {
                             if (data.code === 200) {
                                 dispatch(updateUserTurnament(data.content as Tournament))
                                 settournamentCurrent(data.content as Tournament)
@@ -109,7 +109,7 @@ const RunSelection = (props: Props) => {
             };
 
         }
-    }, [reload, dispatch])
+    }, [reload, dispatch, params.date, params.organization])
 
 
 

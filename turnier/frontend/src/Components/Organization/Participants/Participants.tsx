@@ -86,7 +86,7 @@ const Participants = (props: Props) => {
         storePermanent(organization, common.organization)
         //Get turnament
         const t = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate))
-        updateDatabase(t)
+        updateDatabase(t, organization)
     }
 
     return (

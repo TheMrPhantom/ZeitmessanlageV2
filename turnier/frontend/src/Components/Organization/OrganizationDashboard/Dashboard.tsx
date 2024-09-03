@@ -11,9 +11,10 @@ import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { addTurnament, createOrganization, loadOrganization, removeTurnament } from '../../../Actions/SampleAction';
-import { dateToString, dateToURLString } from '../../Common/StaticFunctions';
+import { dateToString, dateToURLString, doPostRequest, doRequest } from '../../Common/StaticFunctions';
 import { ALL_HEIGHTS, ALL_RUNS, Organization, RunInformation, Tournament } from '../../../types/ResponseTypes';
 import { loadPermanent, storePermanent } from '../../Common/StaticFunctionsTyped';
+import { openToast } from '../../../Actions/CommonAction';
 
 type Props = {}
 
@@ -29,6 +30,7 @@ const Dashboard = (props: Props) => {
 
     const [turnamentDate, setturnamentDate] = useState<Date | null>(new Date())
     const [judgeName, setjudgeName] = useState("")
+    const [tournamentName, settournamentName] = useState("")
 
     return (
         <Stack gap={2} className={style.paper}>
@@ -49,6 +51,13 @@ const Dashboard = (props: Props) => {
                                     }} />
                             </LocalizationProvider>
                             <TextField
+                                value={tournamentName}
+                                label="Turniername"
+                                onChange={(value) => {
+                                    settournamentName(value.target.value)
+                                }}
+                            />
+                            <TextField
                                 value={judgeName}
                                 label="Richter"
                                 onChange={(value) => {
@@ -56,12 +65,13 @@ const Dashboard = (props: Props) => {
                                 }}
                             />
 
+
                         </Stack>
                         <Button
                             variant="contained"
                             color="primary"
                             onClick={() => {
-                                if (turnamentDate !== null && judgeName !== "") {
+                                if (turnamentDate !== null && judgeName !== "" && tournamentName !== "") {
 
                                     const runs: RunInformation[] = []
 
@@ -75,7 +85,7 @@ const Dashboard = (props: Props) => {
                                         date: turnamentDate,
                                         judge: judgeName,
                                         participants: [],
-                                        name: "",
+                                        name: tournamentName,
                                         runs: runs
                                     }
                                     const item = window.localStorage.getItem(t_organization);
@@ -84,9 +94,21 @@ const Dashboard = (props: Props) => {
                                         organization.turnaments.push(turnament)
                                         storePermanent(t_organization, organization)
                                         dispatch(addTurnament(turnament))
+                                        doRequest("PUT", `${t_organization}/tournament`, { date: dateToURLString(turnamentDate), judge: judgeName, name: tournamentName })
                                     }
                                     setturnamentDate(null);
                                     setjudgeName("")
+                                    settournamentName("")
+                                } else {
+                                    //Show warning Toast depending on what is missing
+                                    if (turnamentDate === null) {
+                                        dispatch(openToast({ message: "Bitte ein Datum auswählen", type: "warning" }))
+                                    } else if (judgeName === "") {
+                                        dispatch(openToast({ message: "Bitte einen Richter eintragen", type: "warning" }))
+                                    } else if (tournamentName === "") {
+                                        dispatch(openToast({ message: "Bitte einen Turniernamen eintragen", type: "warning" }))
+                                    }
+
                                 }
                             }
                             }
@@ -129,10 +151,12 @@ const Dashboard = (props: Props) => {
                                                     const item = window.localStorage.getItem(t_organization);
                                                     if (item !== null) {
                                                         const organization = JSON.parse(item)
-                                                        const newTurnaments = organization.organization.turnaments.filter((t: any) => t.date !== turnament.date)
-                                                        organization.organization.turnaments = newTurnaments
+                                                        console.log(organization)
+                                                        const newTurnaments = organization.turnaments.filter((t: any) => t.date !== turnament.date)
+                                                        organization.turnaments = newTurnaments
                                                         storePermanent(t_organization, organization)
                                                         dispatch(removeTurnament(turnament))
+                                                        doRequest("DELETE", `${t_organization}/tournament`, { date: dateToURLString(turnament.date) })
                                                     }
                                                 }}>
                                                 <DeleteIcon />

@@ -29,7 +29,7 @@ class Participant(db.Model):
     dog = sql.Column(sql.String, nullable=False)
     skill_level = sql.Column(sql.Integer, nullable=False)
     size = sql.Column(sql.Integer, nullable=False)
-    turnament_id = sql.Column(sql.Integer, sql.ForeignKey('tournament.id', ondelete='SET NULL'), nullable=True)
+    turnament_id = sql.Column(sql.Integer, sql.ForeignKey('tournament.id', ondelete='CASCADE'), nullable=True)
     result_a_id = sql.Column(sql.Integer, sql.ForeignKey('result.id', ondelete='SET NULL'), nullable=True)
     result_a = relationship('database.DogDog.Result',foreign_keys=[result_a_id], lazy="joined")
     result_j_id = sql.Column(sql.Integer, sql.ForeignKey('result.id', ondelete='SET NULL'), nullable=True)
@@ -56,7 +56,7 @@ class RunInformation(db.Model):
     height = sql.Column(sql.Integer, nullable=False)
     length = sql.Column(sql.Integer, nullable=False)
     speed = sql.Column(sql.Float, nullable=False)
-    turnament_id = sql.Column(sql.Integer, sql.ForeignKey('tournament.id', ondelete='SET NULL'), nullable=True)
+    turnament_id = sql.Column(sql.Integer, sql.ForeignKey('tournament.id', ondelete='CASCADE'), nullable=True)
 
     def to_dict(self):
         return {
@@ -68,8 +68,8 @@ class RunInformation(db.Model):
     
 class Tournament(db.Model):
     id = sql.Column(sql.Integer, primary_key=True)
-    member_id = sql.Column(sql.Integer, sql.ForeignKey('member.id', ondelete='SET NULL'), nullable=False)
-    date = sql.Column(sql.String, nullable=False, unique=True)
+    member_id = sql.Column(sql.Integer, sql.ForeignKey('member.id', ondelete='CASCADE'), nullable=False)
+    date = sql.Column(sql.String, nullable=False)
     judge = sql.Column(sql.String, nullable=False)
     name = sql.Column(sql.String, nullable=False)
     participants = relationship('database.DogDog.Participant', lazy="joined")
