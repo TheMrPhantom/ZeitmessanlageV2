@@ -17,6 +17,7 @@ import { changeLength, changeParticipants, changeSpeed } from '../../../Actions/
 import { minSpeedA3 } from '../../Common/AgilityPO';
 import { useCallback, useMemo } from 'react';
 import SaveIcon from '@mui/icons-material/Save';
+import { openToast } from '../../../Actions/CommonAction';
 
 type Props = {
     startSerial: () => void,
@@ -481,10 +482,15 @@ const Run = (props: Props) => {
                             <IconButton className={style.button}
                                 onClick={() => {
                                     if (participants) {
-                                        const participantsLength = participants?.length ? participants?.length : 0
-                                        const nextIndex = (selectedParticipantIndex - 1) < 0 ? participantsLength - 1 : selectedParticipantIndex - 1
-                                        setselectedParticipantIndex(nextIndex)
-                                        //doPostRequest("0/current/participant", participants[nextIndex].startNumber)
+                                        //Only if timer is started otherwise show warning
+                                        if (!started) {
+                                            const participantsLength = participants?.length ? participants?.length : 0
+                                            const nextIndex = (selectedParticipantIndex - 1) < 0 ? participantsLength - 1 : selectedParticipantIndex - 1
+                                            setselectedParticipantIndex(nextIndex)
+                                            //doPostRequest("0/current/participant", participants[nextIndex].startNumber)
+                                        } else {
+                                            dispatch(openToast({ message: "Bitte Timer stoppen", type: "warning", headline: "Teilnehmer kann nicht gewechselt werden solange der timer läuft" }))
+                                        }
                                     }
                                 }}
                             >
@@ -503,10 +509,14 @@ const Run = (props: Props) => {
                             <IconButton className={style.button}
                                 onClick={() => {
                                     if (participants) {
-                                        const participantsLength = participants?.length ? participants?.length : 0
-                                        const nextIndex = (selectedParticipantIndex + 1) % participantsLength
-                                        setselectedParticipantIndex(nextIndex)
-                                        //doPostRequest("0/current/participant", participants[nextIndex].startNumber)
+                                        if (!started) {
+                                            const participantsLength = participants?.length ? participants?.length : 0
+                                            const nextIndex = (selectedParticipantIndex + 1) % participantsLength
+                                            setselectedParticipantIndex(nextIndex)
+                                            //doPostRequest("0/current/participant", participants[nextIndex].startNumber)
+                                        } else {
+                                            dispatch(openToast({ message: "Bitte Timer stoppen", type: "warning", headline: "Teilnehmer kann nicht gewechselt werden solange der timer läuft" }))
+                                        }
                                     }
                                 }}
                             >
@@ -587,7 +597,13 @@ const Run = (props: Props) => {
                                 participants?.map((p, index) => {
                                     const result = getResultFromParticipant(currentRun, p)
                                     return (
-                                        <TableRow onClick={() => { setselectedParticipantIndex(p.sorting - 1) }} key={p.startNumber} className={index === selectedParticipantIndex ? style.selected : style.starterTableRow}>
+                                        <TableRow onClick={() => {
+                                            if (!started) {
+                                                setselectedParticipantIndex(p.sorting - 1)
+                                            } else {
+                                                dispatch(openToast({ message: "Bitte Timer stoppen", type: "warning", headline: "Teilnehmer kann nicht gewechselt werden solange der timer läuft" }))
+                                            }
+                                        }} key={p.startNumber} className={index === selectedParticipantIndex ? style.selected : style.starterTableRow}>
                                             <TableCell>{p.sorting}</TableCell>
                                             <TableCell>{p.startNumber}</TableCell>
                                             <TableCell>{p.name}</TableCell>
