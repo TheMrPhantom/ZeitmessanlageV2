@@ -1,7 +1,7 @@
 import { Button, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import style from './turnament.module.scss'
-import { ALL_HEIGHTS, ALL_RUNS, Organization, Run, Size } from '../../../types/ResponseTypes'
+import { ALL_HEIGHTS, ALL_RUNS, Run, Size } from '../../../types/ResponseTypes'
 import { classToString, fixDis, getNumberOfParticipantsForRun, getNumberOfParticipantsForRunWithResult, getRanking, loadPermanent, setMaxTime, sizeToString, standardTime, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped'
 
 import { RootState } from '../../../Reducer/reducerCombiner'
@@ -9,7 +9,7 @@ import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useParams } from 'react-router-dom'
 import { dateToURLString } from '../../Common/StaticFunctions'
-import { changeDate, changeJudge, changeLength, changeParticipants, changeSpeed, changeTurnamentName, clearPrints, createOrganization, loadOrganization } from '../../../Actions/SampleAction'
+import { changeDate, changeJudge, changeLength, changeParticipants, changeSpeed, changeTurnamentName, clearPrints, } from '../../../Actions/SampleAction'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider/LocalizationProvider'
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'

@@ -7,7 +7,7 @@ import Spacer from '../../Common/Spacer';
 import { Participant, Size, SkillLevel, Tournament } from '../../../types/ResponseTypes';
 import { useNavigate, useParams } from 'react-router-dom';
 import Dog from './Dog';
-import { dateToString, doGetRequest, doPostRequest } from '../../Common/StaticFunctions';
+import { dateToString, doGetRequest } from '../../Common/StaticFunctions';
 import { useDispatch, useSelector } from 'react-redux';
 import { updateUserTurnament } from '../../../Actions/SampleAction';
 import SportsIcon from '@mui/icons-material/Sports';
@@ -29,9 +29,6 @@ const RunSelection = (props: Props) => {
     const dispatch = useDispatch()
     const [orgName, setorgName] = useState("")
     const common: CommonReducerType = useSelector((state: RootState) => state.common);
-
-    const minTimeout = 2000;
-    const maxTimeout = 5000;
 
     useEffect(() => {
         doGetRequest(`${params.organization}/secret/${params.date}`).then((data) => {

@@ -74,7 +74,7 @@ class update_data(Resource):
         """
 
         t:Tournament=db.session.query(Tournament).filter(Tournament.date == date, Member.name==name,Tournament.member_id==Member.id).first()
-        print(t)
+        
         participants:List[Participant]=db.session.query(Participant).filter(Participant.turnament_id == t.id).all()
         
         t.name=request.json["name"]
@@ -84,13 +84,12 @@ class update_data(Resource):
 
         
         runs_from_request=request.json["runs"]
-        print(runs_from_request)
+
         for run in runs_from_request:
             
             run_info:RunInformation = db.session.query(RunInformation).filter(RunInformation.run == run["run"], RunInformation.height == run["height"], RunInformation.turnament_id==t.id).first()           
             run_info.length=run["length"]
             run_info.speed=run["speed"]
-            print(run_info.to_dict(),run)
 
         participants_from_request= request.json["participants"]
         for participant in participants_from_request:

@@ -1,5 +1,5 @@
 import { Button, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useState } from 'react'
 import style from './dashboard.module.scss'
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -10,9 +10,9 @@ import de from 'date-fns/locale/de';
 import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
-import { addTurnament, createOrganization, loadOrganization, removeTurnament } from '../../../Actions/SampleAction';
-import { dateToString, dateToURLString, doPostRequest, doRequest } from '../../Common/StaticFunctions';
-import { ALL_HEIGHTS, ALL_RUNS, Organization, RunInformation, Tournament } from '../../../types/ResponseTypes';
+import { addTurnament, removeTurnament } from '../../../Actions/SampleAction';
+import { dateToString, dateToURLString, doRequest } from '../../Common/StaticFunctions';
+import { ALL_HEIGHTS, ALL_RUNS, RunInformation, Tournament } from '../../../types/ResponseTypes';
 import { loadPermanent, storePermanent } from '../../Common/StaticFunctionsTyped';
 import { openToast } from '../../../Actions/CommonAction';
 
