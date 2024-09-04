@@ -535,3 +535,30 @@ export const verifySignature = (message: string, signature: string): boolean => 
         return false;
     }
 }
+
+export const moveParticipantInStartList = (direction: "up" | "down", run: Run, size: Size, allParticipants: Participant[], startNumber: number) => {
+    const relevantParticipantsSorted = allParticipants.filter(p => p.skillLevel === runToRunClass(run) && p.size === size).sort((a, b) => a.sorting - b.sorting)
+
+    //Get startnumber and sorting of the participant that should be moved and the one that should be swapped with
+    const participantToMove = relevantParticipantsSorted.find(p => p.startNumber === startNumber)
+    const participantToSwapWith = direction === "up" ? relevantParticipantsSorted.find(p => p.sorting === participantToMove!.sorting - 1) : relevantParticipantsSorted.find(p => p.sorting === participantToMove!.sorting + 1)
+
+    //If there is no participant to swap with, return the original list
+    if (!participantToSwapWith) {
+        return allParticipants
+    }
+
+    //Swap the sorting of the two participants while keeping references
+    const tempSorting = participantToMove!.sorting
+    participantToMove!.sorting = participantToSwapWith.sorting
+    participantToSwapWith.sorting = tempSorting
+
+    return allParticipants.map(p => {
+        if (p.startNumber === participantToMove!.startNumber) {
+            return participantToMove!
+        } else if (p.startNumber === participantToSwapWith.startNumber) {
+            return participantToSwapWith
+        }
+        return p
+    })
+}

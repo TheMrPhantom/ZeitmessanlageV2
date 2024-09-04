@@ -10,7 +10,7 @@ import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom'
-import { getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, loadPermanent, maximumTime, runTimeToString, runTimeToStringClock, standardTime, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped';
+import { getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, loadPermanent, maximumTime, moveParticipantInStartList, runTimeToString, runTimeToStringClock, standardTime, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped';
 import { dateToURLString, doPostRequest } from '../../Common/StaticFunctions';
 import { Run as RunType, SkillLevel, Participant, defaultParticipant, RunCategory } from '../../../types/ResponseTypes';
 import { changeLength, changeParticipants, changeSpeed } from '../../../Actions/SampleAction';
@@ -56,8 +56,9 @@ const Run = (props: Props) => {
     // Get index of first participant without result
     const firstIndex = participants?.findIndex(p => getResultFromParticipant(currentRun, p).time === -2)
     // Set the selected participant as the first without result
-    const [selectedParticipantIndex, setselectedParticipantIndex] = useState(firstIndex === -1 || !firstIndex ? 0 : firstIndex)
-    const selectedParticipant: Participant = participants && participants.length > 0 ? participants[selectedParticipantIndex] : defaultParticipant
+    const [selectedParticipantStartNumber, setselectedParticipantStartNumber] = useState(firstIndex === -1 || !firstIndex ? 0 : firstIndex)
+    const selectedParticipantUnsafe = participants && participants.length > 0 ? participants.find(p => p.startNumber === selectedParticipantStartNumber) : defaultParticipant
+    const selectedParticipant: Participant = selectedParticipantUnsafe ? selectedParticipantUnsafe : defaultParticipant
 
     const currentResult = getResultFromParticipant(currentRun, selectedParticipant)
 
@@ -300,7 +301,11 @@ const Run = (props: Props) => {
                     wait(100).then(() => {
                         changeTime(Math.floor(t / 10) / 100)
                         wait(1000).then(() => {
-                            setselectedParticipantIndex((selectedParticipantIndex + 1) % (participants ? participants.length : 0))
+                            const nextStarterSorting = (selectedParticipant.sorting + 1) % (participants ? participants.length : 0)
+                            const nextStarter = participants?.find(p => p.sorting === nextStarterSorting)
+                            setselectedParticipantStartNumber(nextStarter?.startNumber ? nextStarter.startNumber : 0)
+
+                            //setselectedParticipantIndex((selectedParticipant.sorting + 1) % (participants ? participants.length : 0))
                         })
                     })
                 }
@@ -313,14 +318,16 @@ const Run = (props: Props) => {
                     wait(100).then(() => {
                         changeTime(-1)
                         wait(1000).then(() => {
-                            setselectedParticipantIndex((selectedParticipantIndex + 1) % (participants ? participants.length : 0))
+                            const nextStarterSorting = (selectedParticipant.sorting + 1) % (participants ? participants.length : 0)
+                            const nextStarter = participants?.find(p => p.sorting === nextStarterSorting)
+                            setselectedParticipantStartNumber(nextStarter?.startNumber ? nextStarter.startNumber : 0)
                         })
                     })
                 }
             }
 
         }
-    }, [props, startTimer, stopTimer, changeTime, participants, selectedParticipantIndex, started])
+    }, [props, startTimer, stopTimer, changeTime, participants, selectedParticipantStartNumber, started, selectedParticipant.sorting])
 
     const wait = async (ms: number) => {
         return new Promise(r => setTimeout(r, ms));
@@ -416,6 +423,14 @@ const Run = (props: Props) => {
     }, [calculatedStandardTime, changeTime, currentRun, currentTime, stopTimer])
 
 
+    const clickRow = (p: Participant) => {
+        if (!started) {
+            setselectedParticipantStartNumber(p.startNumber)
+        } else {
+            dispatch(openToast({ message: "Bitte Timer stoppen", type: "warning", headline: "Teilnehmer kann nicht gewechselt werden solange der timer läuft" }))
+        }
+    }
+
     return (
         <Stack className={style.runContainer} direction="column" alignItems="center" gap={4}>
             <Paper className={style.timeContainer}>
@@ -484,10 +499,11 @@ const Run = (props: Props) => {
                                     if (participants) {
                                         //Only if timer is started otherwise show warning
                                         if (!started) {
-                                            const participantsLength = participants?.length ? participants?.length : 0
-                                            const nextIndex = (selectedParticipantIndex - 1) < 0 ? participantsLength - 1 : selectedParticipantIndex - 1
-                                            setselectedParticipantIndex(nextIndex)
-                                            //doPostRequest("0/current/participant", participants[nextIndex].startNumber)
+                                            const prevStarterSortingUnsafe = (selectedParticipant.sorting - 1) % (participants ? participants.length : 0)
+                                            const prevStarterSorting = prevStarterSortingUnsafe < 0 ? participants.length - 1 : prevStarterSortingUnsafe
+
+                                            const prevStarter = participants?.find(p => p.sorting === prevStarterSorting)
+                                            setselectedParticipantStartNumber(prevStarter?.startNumber ? prevStarter.startNumber : 0)
                                         } else {
                                             dispatch(openToast({ message: "Bitte Timer stoppen", type: "warning", headline: "Teilnehmer kann nicht gewechselt werden solange der timer läuft" }))
                                         }
@@ -510,9 +526,9 @@ const Run = (props: Props) => {
                                 onClick={() => {
                                     if (participants) {
                                         if (!started) {
-                                            const participantsLength = participants?.length ? participants?.length : 0
-                                            const nextIndex = (selectedParticipantIndex + 1) % participantsLength
-                                            setselectedParticipantIndex(nextIndex)
+                                            const nextStarterSorting = (selectedParticipant.sorting + 1) % (participants ? participants.length : 0)
+                                            const nextStarter = participants?.find(p => p.sorting === nextStarterSorting)
+                                            setselectedParticipantStartNumber(nextStarter?.startNumber ? nextStarter.startNumber : 0)
                                             //doPostRequest("0/current/participant", participants[nextIndex].startNumber)
                                         } else {
                                             dispatch(openToast({ message: "Bitte Timer stoppen", type: "warning", headline: "Teilnehmer kann nicht gewechselt werden solange der timer läuft" }))
@@ -594,30 +610,40 @@ const Run = (props: Props) => {
                         </TableHead>
                         <TableBody>
                             {
-                                participants?.map((p, index) => {
+                                participants?.sort((a, b) => a.sorting - b.sorting).map((p, index) => {
                                     const result = getResultFromParticipant(currentRun, p)
                                     return (
-                                        <TableRow onClick={() => {
-                                            if (!started) {
-                                                setselectedParticipantIndex(p.sorting - 1)
-                                            } else {
-                                                dispatch(openToast({ message: "Bitte Timer stoppen", type: "warning", headline: "Teilnehmer kann nicht gewechselt werden solange der timer läuft" }))
-                                            }
-                                        }} key={p.startNumber} className={index === selectedParticipantIndex ? style.selected : style.starterTableRow}>
-                                            <TableCell>{p.sorting}</TableCell>
-                                            <TableCell>{p.startNumber}</TableCell>
-                                            <TableCell>{p.name}</TableCell>
-                                            <TableCell>{p.dog}</TableCell>
-                                            <TableCell>{runTimeToString(result.time)}</TableCell>
-                                            <TableCell>{result.time > 0 ? result.faults : "-"}</TableCell>
-                                            <TableCell>{result.time > 0 ? result.refusals : "-"}</TableCell>
-                                            <TableCell>{result.time > 0 ? getTimeFaults(result, calculatedStandardTime).toFixed(2) : "-"}</TableCell>
+                                        <TableRow
+                                            key={p.startNumber}
+                                            className={p.startNumber === selectedParticipantStartNumber ? style.selected : style.starterTableRow}
+                                        >
+                                            <TableCell onClick={() => { clickRow(p) }} >{p.sorting}</TableCell>
+                                            <TableCell onClick={() => { clickRow(p) }} >{p.startNumber}</TableCell>
+                                            <TableCell onClick={() => { clickRow(p) }} >{p.name}</TableCell>
+                                            <TableCell onClick={() => { clickRow(p) }} >{p.dog}</TableCell>
+                                            <TableCell onClick={() => { clickRow(p) }} >{runTimeToString(result.time)}</TableCell>
+                                            <TableCell onClick={() => { clickRow(p) }} >{result.time > 0 ? result.faults : "-"}</TableCell>
+                                            <TableCell onClick={() => { clickRow(p) }} >{result.time > 0 ? result.refusals : "-"}</TableCell>
+                                            <TableCell onClick={() => { clickRow(p) }} >{result.time > 0 ? getTimeFaults(result, calculatedStandardTime).toFixed(2) : "-"}</TableCell>
                                             <TableCell>
                                                 <Stack direction="row" gap={2}>
-                                                    <IconButton>
+                                                    <IconButton onClick={() => {
+                                                        if (allParticipants) {
+                                                            dispatch(changeParticipants(turnamentDate, moveParticipantInStartList("down", currentRun, currentSize, allParticipants, p.startNumber)))
+                                                            updateDatabase(turnament, common.organization.name)
+                                                            storePermanent(organization, common.organization)
+                                                        }
+                                                    }}>
                                                         <ArrowDownwardIcon />
                                                     </IconButton>
-                                                    <IconButton>
+                                                    <IconButton onClick={() => {
+                                                        if (allParticipants) {
+
+                                                            dispatch(changeParticipants(turnamentDate, moveParticipantInStartList("up", currentRun, currentSize, allParticipants, p.startNumber)))
+                                                            updateDatabase(turnament, common.organization.name)
+                                                            storePermanent(organization, common.organization)
+                                                        }
+                                                    }}>
                                                         <ArrowUpwardIcon />
                                                     </IconButton>
                                                 </Stack>
@@ -647,7 +673,8 @@ const Run = (props: Props) => {
                             {/*Participants with result sorted by totalfaults and time*/
                                 getRanking(participantsWithResults, currentRun, calculatedStandardTime).map((value) => {
                                     return (
-                                        <TableRow onClick={() => { setselectedParticipantIndex(value.participant.sorting - 1) }} key={value.participant.startNumber} className={value.participant.startNumber === selectedParticipant.startNumber ? style.selected : ""}>
+                                        <TableRow onClick={() => { clickRow(value.participant) }}
+                                            key={value.participant.startNumber} className={value.participant.startNumber === selectedParticipant.startNumber ? style.selected : ""}>
                                             <TableCell>{value.rank > 0 ? `${value.rank}.` : ""}</TableCell>
                                             <TableCell>{value.participant.name}</TableCell>
                                             <TableCell>{value.participant.dog}</TableCell>

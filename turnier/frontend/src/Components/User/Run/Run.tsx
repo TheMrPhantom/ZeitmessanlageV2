@@ -458,7 +458,7 @@ const Run = (props: Props) => {
                             </TableHead>
                             <TableBody>
                                 {
-                                    participants?.map((p, index) => {
+                                    participants?.sort((a, b) => a.sorting - b.sorting).map((p, index) => {
                                         return (
                                             <TableRow key={p.startNumber} className={p.startNumber === selectedParticipantStartNumber &&
                                                 selectedRun.current === currentRun ? style.selected : ""}>
