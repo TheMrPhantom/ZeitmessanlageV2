@@ -68,7 +68,9 @@ const Run = (props: Props) => {
     const currentFaults = currentResult.faults
     const currentRefusals = currentResult.refusals
 
-
+    //Timer
+    const [started, setStarted] = useState(false);
+    const [initTime, setinitTime] = useState(new Date().getTime())
 
     const parcoursInfos = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate))?.runs.find(r => r.run === currentRun && r.height === currentSize)
 
@@ -83,9 +85,9 @@ const Run = (props: Props) => {
 
     useEffect(() => {
         doPostRequest(`${common.organization.name}/current/participant`, {
-            id: selectedParticipant.startNumber, faults: currentFaults, refusals: currentRefusals
+            id: selectedParticipant.startNumber, faults: currentFaults, refusals: currentRefusals, started: started, time: initTime, currentRun: currentRun
         })
-    }, [selectedParticipant.startNumber, currentFaults, currentRefusals, common.organization.name])
+    }, [selectedParticipant.startNumber, currentFaults, currentRefusals, common.organization.name, started, initTime, currentRun]);
 
     const changeFaults = (value: number) => {
 
@@ -184,9 +186,7 @@ const Run = (props: Props) => {
         ])
 
 
-    const [started, setStarted] = useState(false);
 
-    const [initTime, setinitTime] = useState(new Date().getTime())
 
 
     //The timer
@@ -214,12 +214,12 @@ const Run = (props: Props) => {
         var id = setInterval(() => {
 
             doPostRequest(`${common.organization.name}/current/participant`, {
-                id: selectedParticipant.startNumber, faults: currentFaults, refusals: currentRefusals
+                id: selectedParticipant.startNumber, faults: currentFaults, refusals: currentRefusals, started: started, time: initTime, currentRun: currentRun
             })
 
         }, 3000);
         return () => clearInterval(id);
-    }, [selectedParticipant.startNumber, currentFaults, currentRefusals, common.organization.name]);
+    }, [selectedParticipant.startNumber, currentFaults, currentRefusals, common.organization.name, started, initTime, currentRun]);
 
 
 

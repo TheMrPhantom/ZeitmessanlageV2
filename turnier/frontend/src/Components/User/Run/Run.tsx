@@ -7,6 +7,7 @@ import { Run as RunType, SkillLevel, Participant, defaultParticipant, RunCategor
 import { minSpeedA3 } from '../../Common/AgilityPO';
 import { useCallback } from 'react';
 import { doGetRequest } from '../../Common/StaticFunctions';
+import Spacer from '../../Common/Spacer';
 
 type Props = {}
 
@@ -80,6 +81,7 @@ const Run = (props: Props) => {
 
     const refusalToDisplay = useRef(currentRefusals)
     const faultsToDisplay = useRef(currentFaults)
+    const selectedRun = useRef(-1)
 
     const [initTime, setinitTime] = useState(new Date().getTime())
 
@@ -267,6 +269,15 @@ const Run = (props: Props) => {
                     setselectedParticipantStartNumber(message.message.id)
                     refusalToDisplay.current = message.message.refusals
                     faultsToDisplay.current = message.message.faults
+                    if (message.message.started) {
+                        startTimer(message.message.time)
+                    }
+                    if (selectedRun.current !== message.message.currentRun) {
+                        setreload(!reload)
+                    }
+                    selectedRun.current = message.message.currentRun
+
+
                     //changeFaults(message.message.faults)
                     //changeRefusals(message.message.refusals)
                     break;
@@ -319,15 +330,24 @@ const Run = (props: Props) => {
     }, [reload, params.date, params.organization])
 
 
-    const startTimer = () => {
-        setinitTime(new Date().getTime());
+    const startTimer = (initTime?: number) => {
+        if (initTime) {
+            setinitTime(initTime)
+        }
+        else {
+            setinitTime(new Date().getTime());
+        }
         setStarted(true)
     }
+
+
 
 
     const stopTimer = () => {
         setStarted(false)
     }
+
+
 
     const oldFaults = useRef(currentFaults)
     const oldRefusals = useRef(currentRefusals)
@@ -344,61 +364,72 @@ const Run = (props: Props) => {
             oldPerson.current = selectedParticipant?.name
             oldDog.current = selectedParticipant?.dog
 
-            return <Paper className={style.timeContainer}>
-                <Stack gap={2} direction="column">
-                    <Stack gap={1} direction="column" alignItems="flex-start">
-                        <Typography variant='overline'>Aktuell am Start</Typography>
-                        <Typography variant='h4'>{selectedParticipant?.name}</Typography>
-                        <Typography variant='h5'>mit</Typography>
-                        <Typography variant='h4'>{selectedParticipant?.dog}</Typography>
-                    </Stack>
-                    <Divider orientation='horizontal' flexItem />
-                    <Stack direction="column" gap={2} alignItems="center" flexWrap="wrap">
-
-
-                        <Stack direction="row"  >
-                            <Typography variant='h2'>{runTimeToStringClock(getResultFromParticipant(currentRun, selectedParticipant).time)}</Typography>
+            if (selectedRun.current === currentRun) {
+                return <Paper className={style.timeContainer}>
+                    <Stack gap={2} direction="column">
+                        <Stack gap={1} direction="column" alignItems="flex-start">
+                            <Typography variant='overline'>Aktuell am Start</Typography>
+                            <Typography variant='h4'>{selectedParticipant?.name}</Typography>
+                            <Typography variant='h5'>mit</Typography>
+                            <Typography variant='h4'>{selectedParticipant?.dog}</Typography>
                         </Stack>
-                        <Stack direction="row" gap={2} flexWrap="wrap" justifyContent="space-between">
-                            <Typography variant='h2'>✋{faultsToDisplay.current}</Typography>
-                            <Typography variant='h2'>✊{refusalToDisplay.current}</Typography>
-                            <Typography variant='h2'>⌛{currentTimeFault}</Typography>
+                        <Divider orientation='horizontal' flexItem />
+                        <Stack direction="column" gap={2} alignItems="center" flexWrap="wrap">
 
+
+                            <Stack direction="row"  >
+                                <Typography variant='h2'>{runTimeToStringClock(getResultFromParticipant(currentRun, selectedParticipant).time)}</Typography>
+                            </Stack>
+                            <Stack direction="row" gap={2} flexWrap="wrap" justifyContent="space-between">
+                                <Typography variant='h2'>✋{faultsToDisplay.current}</Typography>
+                                <Typography variant='h2'>✊{refusalToDisplay.current}</Typography>
+                                <Typography variant='h2'>⌛{currentTimeFault}</Typography>
+
+                            </Stack>
                         </Stack>
+
+
                     </Stack>
+                </Paper>
 
-
-                </Stack>
-            </Paper>
+            } else {
+                return <Spacer vertical={0} />
+            }
         } else {
-            return <Paper className={style.timeContainer}>
 
-                <Stack gap={2} direction="column">
-                    <Stack gap={1} direction="column" alignItems="flex-start">
-                        <Typography variant='overline'>Aktuell am Start</Typography>
-                        <Typography variant='h4'>{oldPerson.current}</Typography>
-                        <Typography variant='h5'>mit</Typography>
-                        <Typography variant='h4'>{oldDog.current}</Typography>
-                    </Stack>
-                    <Divider orientation='horizontal' flexItem />
-                    <Stack direction="column" gap={2} alignItems="center" flexWrap="wrap">
+            if (selectedRun.current === currentRun) {
+                return <Paper className={style.timeContainer}>
 
-
-                        <Stack direction="row"  >
-                            <Typography variant='h2'>{runTimeToStringClock(oldTime.current)}</Typography>
+                    <Stack gap={2} direction="column">
+                        <Stack gap={1} direction="column" alignItems="flex-start">
+                            <Typography variant='overline'>Aktuell am Start</Typography>
+                            <Typography variant='h4'>{oldPerson.current}</Typography>
+                            <Typography variant='h5'>mit</Typography>
+                            <Typography variant='h4'>{oldDog.current}</Typography>
                         </Stack>
-                        <Stack direction="row" gap={2} flexWrap="wrap" justifyContent="space-between">
-                            <Typography variant='h2'>✋{faultsToDisplay.current}</Typography>
-                            <Typography variant='h2'>✊{refusalToDisplay.current}</Typography>
-                            <Typography variant='h2'>⌛{currentTimeFault}</Typography>
+                        <Divider orientation='horizontal' flexItem />
+                        <Stack direction="column" gap={2} alignItems="center" flexWrap="wrap">
 
+
+                            <Stack direction="row"  >
+                                <Typography variant='h2'>{runTimeToStringClock(oldTime.current)}</Typography>
+                            </Stack>
+                            <Stack direction="row" gap={2} flexWrap="wrap" justifyContent="space-between">
+                                <Typography variant='h2'>✋{faultsToDisplay.current}</Typography>
+                                <Typography variant='h2'>✊{refusalToDisplay.current}</Typography>
+                                <Typography variant='h2'>⌛{currentTimeFault}</Typography>
+
+                            </Stack>
                         </Stack>
+
+
                     </Stack>
-
-
-                </Stack>
-            </Paper>
+                </Paper>
+            } else {
+                return <Spacer vertical={0} />
+            }
         }
+
     }, [currentFaults, currentRefusals, currentRun, currentTimeFault, selectedParticipant, unsafeselectedParticipant])
 
     return (
@@ -427,7 +458,8 @@ const Run = (props: Props) => {
                                 {
                                     participants?.map((p, index) => {
                                         return (
-                                            <TableRow key={p.startNumber} className={p.startNumber === selectedParticipantStartNumber ? style.selected : ""}>
+                                            <TableRow key={p.startNumber} className={p.startNumber === selectedParticipantStartNumber &&
+                                                selectedRun.current === currentRun ? style.selected : ""}>
                                                 <TableCell>{p.sorting}</TableCell>
                                                 <TableCell>{p.name} </TableCell>
                                                 <TableCell>{p.dog}</TableCell>
@@ -483,7 +515,8 @@ const Run = (props: Props) => {
                                 {/*Participants with result sorted by totalfaults and time*/
                                     getRanking(participantsWithResults, currentRun, calculatedStandardTime).map((value) => {
                                         return (
-                                            <TableRow key={value.participant.startNumber} className={value.participant.startNumber === selectedParticipant.startNumber ? style.selected : ""}>
+                                            <TableRow key={value.participant.startNumber} className={value.participant.startNumber === selectedParticipant.startNumber &&
+                                                selectedRun.current === currentRun ? style.selected : ""}>
                                                 <TableCell>{value.rank > 0 ? `${value.rank}.` : ""}</TableCell>
                                                 <TableCell>{value.participant.name}</TableCell>
                                                 <TableCell>{value.participant.dog}</TableCell>
