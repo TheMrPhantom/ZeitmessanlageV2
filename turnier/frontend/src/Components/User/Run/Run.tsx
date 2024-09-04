@@ -271,13 +271,11 @@ const Run = (props: Props) => {
                     faultsToDisplay.current = message.message.faults
                     if (message.message.started && !timerStaredRef.current) {
                         startTimer(message.message.time)
-                        console.log("started")
                     }
                     if (selectedRun.current !== message.message.currentRun) {
                         setreload(!reload)
                     }
                     selectedRun.current = message.message.currentRun
-
 
                     //changeFaults(message.message.faults)
                     //changeRefusals(message.message.refusals)
