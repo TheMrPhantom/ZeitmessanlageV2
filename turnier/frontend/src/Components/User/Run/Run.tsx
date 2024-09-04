@@ -58,7 +58,7 @@ const Run = (props: Props) => {
     const reloadR = useRef(reload)
     reloadR.current = reload
 
-
+    const timerStaredRef = useRef(false)
 
 
     const [showStarter, setshowStarter] = useState(true)
@@ -269,8 +269,9 @@ const Run = (props: Props) => {
                     setselectedParticipantStartNumber(message.message.id)
                     refusalToDisplay.current = message.message.refusals
                     faultsToDisplay.current = message.message.faults
-                    if (message.message.started) {
+                    if (message.message.started && !timerStaredRef.current) {
                         startTimer(message.message.time)
+                        console.log("started")
                     }
                     if (selectedRun.current !== message.message.currentRun) {
                         setreload(!reload)
@@ -330,14 +331,16 @@ const Run = (props: Props) => {
     }, [reload, params.date, params.organization])
 
 
+
     const startTimer = (initTime?: number) => {
-        if (initTime) {
+        if (initTime !== undefined && !timerStaredRef.current) {
             setinitTime(initTime)
         }
         else {
             setinitTime(new Date().getTime());
         }
         setStarted(true)
+        timerStaredRef.current = true
     }
 
 
@@ -345,6 +348,7 @@ const Run = (props: Props) => {
 
     const stopTimer = () => {
         setStarted(false)
+        timerStaredRef.current = false
     }
 
 
