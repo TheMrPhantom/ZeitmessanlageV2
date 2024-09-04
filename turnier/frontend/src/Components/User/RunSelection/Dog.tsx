@@ -2,7 +2,7 @@ import { Divider, Paper, Rating, Stack, Typography } from '@mui/material'
 import React from 'react'
 import style from './runselection.module.scss'
 import { Result } from '../../../types/ResponseTypes'
-import { getTimeFaults, runTimeToString, standardTime } from '../../Common/StaticFunctionsTyped'
+import { runTimeToString } from '../../Common/StaticFunctionsTyped'
 
 type Props = {
     dogname: string,

@@ -1,11 +1,9 @@
 import Cookies from 'js-cookie';
-import React, { useEffect } from 'react'
-import { useDispatch, useSelector } from 'react-redux';
+import React, { useCallback, useEffect } from 'react'
+import { useDispatch } from 'react-redux';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { openToast, setLoginState } from '../../../Actions/CommonAction';
 import { doGetRequest } from '../StaticFunctions';
-import { RootState } from '../../../Reducer/reducerCombiner'
-import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { verifySignature } from '../StaticFunctionsTyped';
 import { Verification } from '../../../types/ResponseTypes';
 
@@ -15,9 +13,8 @@ const LoginChecker = (props: Props) => {
     const location = useLocation();
     const navigate = useNavigate();
     const dispatch = useDispatch();
-    const common: CommonReducerType = useSelector((state: RootState) => state.common);
 
-    const loggedIn = (value: {
+    const loggedIn = useCallback((value: {
         code: number;
         content: any;
     } | {
@@ -28,7 +25,7 @@ const LoginChecker = (props: Props) => {
         if (!window.location.pathname.startsWith(`/o/${value.content.name}`)) {
             navigate("/o/" + value.content.name)
         }
-    }
+    }, [dispatch, navigate])
 
     useEffect(() => {
         let requestString = ""
@@ -81,7 +78,7 @@ const LoginChecker = (props: Props) => {
 
         })
 
-    }, [location.pathname, navigate, dispatch])
+    }, [location.pathname, navigate, dispatch, loggedIn])
 
     return (
         <></>

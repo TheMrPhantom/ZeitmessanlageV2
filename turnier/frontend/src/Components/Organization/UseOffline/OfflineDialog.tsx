@@ -1,13 +1,7 @@
-import { Button, Checkbox, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, FormControl, FormControlLabel, FormLabel, Grow, Paper, Radio, RadioGroup, Stack, Typography } from '@mui/material'
-import React, { useState } from 'react'
-import { classToString, getKombiRanking, getRunCategory, sizeToString } from '../../Common/StaticFunctionsTyped'
-import { ExtendedResult, Organization, Participant, Run, RunCategory, Size, SkillLevel, StickerInfo, Tournament } from '../../../types/ResponseTypes'
+import { Button, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Stack, Typography } from '@mui/material'
+import React from 'react'
 import Spacer from '../../Common/Spacer'
-import { useDispatch } from 'react-redux'
-import { addPrintParticipant, addPrintResult, addPrintSticker } from '../../../Actions/SampleAction'
-import { useNavigate, useParams } from 'react-router-dom'
-import { ParticipantToPrint, ResultToPrint } from '../../../Reducer/CommonReducer'
-import { minSpeedA3, minSpeedJ3 } from '../../Common/AgilityPO'
+import { useNavigate } from 'react-router-dom'
 
 import WarningIcon from '@mui/icons-material/Warning';
 import style from './useOffline.module.scss'

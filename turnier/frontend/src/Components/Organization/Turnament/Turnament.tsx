@@ -16,6 +16,7 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'
 import { de } from 'date-fns/locale'
 import PrintingDialog from './PrintingDialog'
 import { minSpeedA3 } from '../../Common/AgilityPO'
+import QrCodeIcon from '@mui/icons-material/QrCode';
 
 type Props = {}
 
@@ -182,6 +183,14 @@ const Turnament = (props: Props) => {
                                     setprintDialogOpen(true);
                                 }}
                             >Auswählen</Button>
+                        </Stack>
+                        <Stack className={style.infoBox} gap={2}>
+                            <Typography variant='h5'>Live Ergebnisse</Typography>
+                            <Button variant='outlined'
+                                onClick={() => {
+                                    navigate(`/o/${params.organization}/${params.date}/print/qr`)
+                                }}
+                            ><QrCodeIcon /></Button>
                         </Stack>
                     </Stack>
                 </Stack>

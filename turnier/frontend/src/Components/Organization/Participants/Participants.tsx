@@ -7,7 +7,7 @@ import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom'
-import { dateToURLString, doPostRequest } from '../../Common/StaticFunctions';
+import { dateToURLString } from '../../Common/StaticFunctions';
 import { addParticipant, removeParticipant } from '../../../Actions/SampleAction';
 import { loadPermanent, runClassToString, sizeToString, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped';
 

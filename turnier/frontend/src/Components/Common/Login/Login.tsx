@@ -3,7 +3,7 @@ import React, { useState } from 'react'
 import { useDispatch } from 'react-redux';
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { openToast } from '../../../Actions/CommonAction';
-import { FALSCHES_PASSWORT, FEHLER, LOGIN, NAME, PASSWORT, WARNUNG } from '../Internationalization/i18n';
+import { FALSCHES_PASSWORT, FEHLER, LOGIN, NAME, PASSWORT } from '../Internationalization/i18n';
 import Spacer from '../Spacer';
 import { doGetRequest, doPostRequest } from '../StaticFunctions';
 import style from './login.module.scss'
@@ -43,8 +43,8 @@ const Login = (props: Props) => {
         doPostRequest("login", { name: username, password: password }).then((value) => {
             console.log(value)
             if (value.code === 200) {
-                const searchParam = searchParams.get("originalPath")
-                const notNullSeachParam = searchParam !== null ? searchParam : "/";
+                //const searchParam = searchParams.get("originalPath")
+                //const notNullSeachParam = searchParam !== null ? searchParam : "/";
                 sha256(password).then((hash) => {
                     window.localStorage.setItem("pw", hash)
                 })

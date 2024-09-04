@@ -307,6 +307,17 @@ class api_currentRefusal(Resource):
         socket.send({"action": "changed_current_refusal","message":request.json})
         return util.build_response("OK")
 
+@api.route('/<string:name>/<string:date>/qr')
+class qr_code(Resource):
+    def get(self,name,date):
+        """
+        Get the qr code for a tournament
+        """
+
+        t:Tournament=db.session.query(Tournament).filter(Tournament.date == date,Member.name==name,Tournament.member_id==Member.id).first()
+        
+        return util.build_response(t.secret)
+
 
 
 @api.route('/login/check')

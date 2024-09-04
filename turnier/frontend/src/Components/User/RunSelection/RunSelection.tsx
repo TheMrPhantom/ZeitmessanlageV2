@@ -23,7 +23,7 @@ const RunSelection = (props: Props) => {
     const [jumpHeight, setjumpHeight] = useState(Size.Small)
     const [reload, setreload] = useState(false)
     const [, setwebsocket] = useState<WebSocket | null>(null);
-    const [selectedParticipantStartnumber, setselectedParticipantStartnumber] = useState(-1)
+    const [, setselectedParticipantStartnumber] = useState(-1)
     const params = useParams()
     const navigate = useNavigate()
     const dispatch = useDispatch()

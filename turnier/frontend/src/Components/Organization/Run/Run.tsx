@@ -264,7 +264,6 @@ const Run = (props: Props) => {
 
 
         if (pLength === 0) {
-            console.log(pLength)
             setlengthWarning(true)
 
             dispatch(changeLength(date, currentRun, tempLength))
@@ -272,7 +271,6 @@ const Run = (props: Props) => {
             storePermanent(t_organization, common.organization)
         }
 
-        console.log(currentRun)
         if (pSpeed === 0 && currentRun !== RunType.J3 && currentRun !== RunType.A3) {
             setspeedWarning(true)
 
@@ -286,7 +284,7 @@ const Run = (props: Props) => {
 
     useEffect(() => {
         if (props.lastMessage !== null) {
-            console.log(props.lastMessage)
+
             props.setlastMessage(null)
             props.setconnected(true)
             if (props.lastMessage === "start") {
@@ -337,7 +335,7 @@ const Run = (props: Props) => {
         let warnings = []
 
         if (lengthWarning) {
-            console.log("lengthWarning")
+
             warnings.push(<Paper className={style.error}>
                 <Stack direction="column">
                     <Stack gap={1} direction="column" >
