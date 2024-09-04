@@ -25,6 +25,8 @@ const Routing = (props: Props) => {
             <Routes>
                 <Route path="/login" element={<><Toolbar /><Login /></>} />
                 <Route path="/use-offline" element={<><Toolbar />< UseOffline /></>} />
+
+                {/*Organization pages*/}
                 <Route path="/o/:organization" element={<><Toolbar /><Dashboard /></>} />
                 <Route path="/o/:organization/:date" element={<><Toolbar /><Turnament /></>} />
                 <Route path="/o/:organization/:date/participants" element={<><Toolbar /><Participants /></>} />
@@ -54,8 +56,10 @@ const Routing = (props: Props) => {
 
                 /></>} />
                 <Route path="/o/:organization/:date/print" element={<Printing />} />
-                <Route path="/u/:organization/:date" element={<><Toolbar /><RunSelection /></>} />
-                <Route path="/u/:organization/:date/:class/:size" element={<><Toolbar /><UserRun /></>} />
+
+                {/*User pages*/}
+                <Route path="/u/:organization/:date/:secret" element={<><Toolbar /><RunSelection /></>} />
+                <Route path="/u/:organization/:date/:secret/:class/:size" element={<><Toolbar /><UserRun /></>} />
 
             </Routes>
         </>

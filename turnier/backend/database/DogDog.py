@@ -1,8 +1,10 @@
 import sqlalchemy as sql
 from web import sql_database as db
 from sqlalchemy.orm import relationship
+import secrets
 
-
+def gen_secret():
+    return secrets.token_urlsafe(16)
 
 class Result(db.Model):
     id = sql.Column(sql.Integer, primary_key=True)
@@ -72,5 +74,6 @@ class Tournament(db.Model):
     date = sql.Column(sql.String, nullable=False)
     judge = sql.Column(sql.String, nullable=False)
     name = sql.Column(sql.String, nullable=False)
+    secret = sql.Column(sql.String, nullable=False, default=gen_secret)
     participants = relationship('database.DogDog.Participant', lazy="joined")
     runs = relationship('database.DogDog.RunInformation', lazy="joined")

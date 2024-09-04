@@ -75,6 +75,23 @@ class update_data(Resource):
 
         t:Tournament=db.session.query(Tournament).filter(Tournament.date == date, Member.name==name,Tournament.member_id==Member.id).first()
         
+        if t is None:
+            # Create new tournament
+            t=Tournament()
+            t.name=request.json["name"]
+            t.judge=request.json["judge"]
+            t.date=date
+            t.member_id=db.session.query(Member).filter(Member.name == name).first().id
+            db.session.add(t)
+            db.session.commit()
+
+            # Create runs
+            for i in range(4):
+                for j in range(9):
+                    db.session.add(RunInformation(run=j, height=i, length=0, speed=0, turnament_id=t.id))
+
+            db.session.commit()
+
         participants:List[Participant]=db.session.query(Participant).filter(Participant.turnament_id == t.id).all()
         
         t.name=request.json["name"]
@@ -174,6 +191,12 @@ class get_data(Resource):
         """
         t:Tournament=db.session.query(Tournament).filter(Tournament.date == date,Member.name==name,Tournament.member_id==Member.id).first()
         
+        if t is None:
+            return util.build_response("Not found", 404)
+        elif t.secret!=secret:
+            return util.build_response("Wrong secret", 403)
+        
+
         participants:List[Participant]=db.session.query(Participant).filter(Participant.turnament_id == t.id).all()
         participants=[participant.to_dict() for participant in participants]
 
