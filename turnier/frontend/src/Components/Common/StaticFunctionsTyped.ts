@@ -490,7 +490,7 @@ export const updateDatabase = (turnament: Tournament | undefined, memberName: st
         const day = new Date(turnament?.date).getDate()
         const date = `${year}-${month < 10 ? "0" + month : month}-${day < 10 ? "0" + day : day}`
         console.log(date)
-        doPostRequest(`${memberName}/${date}`, turnament ? turnament : null)//Updates the database
+        doPostRequest(`${memberName}/tournament/${date}`, turnament ? turnament : null)//Updates the database
     }
 }
 

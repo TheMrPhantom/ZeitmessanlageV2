@@ -202,7 +202,7 @@ const Run = (props: Props) => {
 
     //changed
     useEffect(() => {
-        doGetRequest(`${params.organization}/secret/${params.date}`).then((data) => {
+        doGetRequest(`${params.organization}/tournament/secret/${params.date}`).then((data) => {
             if (data.code === 200) {
                 setcommon(data.content as Tournament)
             }
@@ -265,19 +265,23 @@ const Run = (props: Props) => {
                     break;
                 case "changed_current_participant":
                     setselectedParticipantStartNumber(message.message.id)
+                    refusalToDisplay.current = message.message.refusals
+                    faultsToDisplay.current = message.message.faults
                     //changeFaults(message.message.faults)
                     //changeRefusals(message.message.refusals)
                     break;
                 case "changed_current_fault":
+                    //faultsToDisplay.current = Number(message.message)
                     changeFaults(Number(message.message))
                     //setreload(!reload)
                     break;
                 case "changed_current_refusal":
+                    //refusalToDisplay.current = Number(message.message)
                     changeRefusals(Number(message.message))
                     //setreload(!reload)
                     break;
                 case "reload":
-                    doGetRequest(`${params.organization}/secret/${params.date}`).then((data) => {
+                    doGetRequest(`${params.organization}/tournament/secret/${params.date}`).then((data) => {
                         if (data.code === 200) {
                             const t = data.content as Tournament
                             setcommon(t)
@@ -288,7 +292,7 @@ const Run = (props: Props) => {
 
         };
 
-        getResultFromParticipant(currentRun, selectedParticipant)
+
         ws.onerror = () => {
             closeWs()
             setwebsocket(null)
@@ -312,7 +316,7 @@ const Run = (props: Props) => {
 
         // This ignore is there because adding the missing dependencies makes that infinite ws connection are spawned
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [reload])
+    }, [reload, params.date, params.organization])
 
 
     const startTimer = () => {
@@ -356,8 +360,8 @@ const Run = (props: Props) => {
                             <Typography variant='h2'>{runTimeToStringClock(getResultFromParticipant(currentRun, selectedParticipant).time)}</Typography>
                         </Stack>
                         <Stack direction="row" gap={2} flexWrap="wrap" justifyContent="space-between">
-                            <Typography variant='h2'>✋{started ? faultsToDisplay.current : currentFaults}</Typography>
-                            <Typography variant='h2'>✊{started ? refusalToDisplay.current : currentRefusals}</Typography>
+                            <Typography variant='h2'>✋{faultsToDisplay.current}</Typography>
+                            <Typography variant='h2'>✊{refusalToDisplay.current}</Typography>
                             <Typography variant='h2'>⌛{currentTimeFault}</Typography>
 
                         </Stack>
@@ -395,7 +399,7 @@ const Run = (props: Props) => {
                 </Stack>
             </Paper>
         }
-    }, [currentFaults, currentRefusals, currentRun, currentTimeFault, selectedParticipant, unsafeselectedParticipant, started])
+    }, [currentFaults, currentRefusals, currentRun, currentTimeFault, selectedParticipant, unsafeselectedParticipant])
 
     return (
         <Stack className={style.runContainer} direction="column" alignItems="center" gap={4}>

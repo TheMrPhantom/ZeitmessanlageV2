@@ -107,7 +107,7 @@ const Run = (props: Props) => {
             } else {
                 setnewFaults(value)
             }
-            doPostRequest(`${common.organization.name}/faults`, value)
+            doPostRequest(`${common.organization.name}/current/faults`, value)
         }
     }
 
@@ -131,7 +131,7 @@ const Run = (props: Props) => {
             } else {
                 setnewRefusals(value)
             }
-            doPostRequest(`${common.organization.name}/refusals`, value)
+            doPostRequest(`${common.organization.name}/current/refusals`, value)
         }
     }
 

@@ -66,7 +66,7 @@ def admin(fn):
 def is_self_or_admin(request, member_id):
     return str(member_id) == str(request.cookies.get(f"{util.auth_cookie_memberID}memberID")) or str(request.cookies.get(f"{util.auth_cookie_memberID}memberID")) == "1"
 
-@api.route('/<string:name>/<string:date>')
+@api.route('/<string:name>/tournament/<string:date>')
 class update_data(Resource):
     def post(self,name,date):
         """
@@ -166,7 +166,7 @@ class get_organizer_info(Resource):
         
         return util.build_response({"name":org.alias})
 
-@api.route('/<string:name>/<string:secret>/<date>')
+@api.route('/<string:name>/tournament/<string:secret>/<date>')
 class get_data(Resource):
     def get(self,name,secret,date):
         """
@@ -184,6 +184,7 @@ class get_data(Resource):
                                     "date":t.date,
                                     "participants":participants,
                                     "runs":runs})
+    
     
 @api.route('/<string:name>/tournament')
 class tournaments_of_club(Resource):

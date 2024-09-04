@@ -31,7 +31,7 @@ const RunSelection = (props: Props) => {
     const common: CommonReducerType = useSelector((state: RootState) => state.common);
 
     useEffect(() => {
-        doGetRequest(`${params.organization}/secret/${params.date}`).then((data) => {
+        doGetRequest(`${params.organization}/tournament/secret/${params.date}`).then((data) => {
             if (data.code === 200) {
                 dispatch(updateUserTurnament(data.content as Tournament))
                 settournamentCurrent(data.content as Tournament)
@@ -72,7 +72,7 @@ const RunSelection = (props: Props) => {
                 console.log(message)
                 switch (message.action) {
                     case "reload":
-                        doGetRequest(`${params.organization}/secret/${params.date}`).then((data) => {
+                        doGetRequest(`${params.organization}/tournament/secret/${params.date}`).then((data) => {
                             if (data.code === 200) {
                                 dispatch(updateUserTurnament(data.content as Tournament))
                                 settournamentCurrent(data.content as Tournament)
