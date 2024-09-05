@@ -42,7 +42,7 @@ const Run = (props: Props) => {
     const organization = params.organization ? params.organization : ""
     const turnament = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate))
 
-    loadPermanent(params, dispatch, common)
+    loadPermanent(organization, dispatch, common)
 
     //Get all participants
     const allParticipants = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate))?.participants

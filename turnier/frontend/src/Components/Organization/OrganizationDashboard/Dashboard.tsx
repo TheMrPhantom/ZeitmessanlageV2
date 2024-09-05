@@ -25,7 +25,7 @@ const Dashboard = (props: Props) => {
     const navigate = useNavigate()
 
     const t_organization = params.organization ? params.organization : ""
-    loadPermanent(params, dispatch, common)
+    loadPermanent(t_organization, dispatch, common)
 
 
     const [turnamentDate, setturnamentDate] = useState<Date | null>(new Date())

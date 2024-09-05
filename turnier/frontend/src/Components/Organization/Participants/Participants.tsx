@@ -31,7 +31,7 @@ const Participants = (props: Props) => {
     const [runclass, setrunclass] = useState(SkillLevel.A3)
     const [size, setsize] = useState(Size.Small)
 
-    loadPermanent(params, dispatch, common)
+    loadPermanent(organization, dispatch, common)
 
     const addParticipantToTurnament = (name: string, club: string, dog: string, runclass: SkillLevel, size: Size) => {
 

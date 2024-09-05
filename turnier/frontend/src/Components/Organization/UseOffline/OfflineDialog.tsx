@@ -6,10 +6,11 @@ import { useNavigate } from 'react-router-dom'
 import WarningIcon from '@mui/icons-material/Warning';
 import style from './useOffline.module.scss'
 import { doGetRequest } from '../../Common/StaticFunctions';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { loadOrganization } from '../../../Actions/SampleAction';
-import { storePermanent } from '../../Common/StaticFunctionsTyped';
-
+import { loadPermanent, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped';
+import { RootState } from '../../../Reducer/reducerCombiner'
+import { CommonReducerType } from '../../../Reducer/CommonReducer';
 
 type Props = {
     type: "online" | "device",
@@ -18,8 +19,9 @@ type Props = {
 }
 
 const OfflineDialog = (props: Props) => {
-    const dispatch = useDispatch()
     const navigate = useNavigate();
+    const common: CommonReducerType = useSelector((state: RootState) => state.common);
+    const dispatch = useDispatch()
 
     return (
         <Dialog open={props.isOpen} onClose={props.close} sx={{ zIndex: 20000000 }} >
@@ -41,23 +43,30 @@ const OfflineDialog = (props: Props) => {
                 <Stack direction="row" justifyContent="space-between" className={style.buttonContainer}>
                     <Button onClick={props.close} variant='outlined'>Abbrechen</Button>
                     <Button onClick={() => {
-                        if (props.type === "online") {
-                            const localValidationData = localStorage.getItem("validation")
-                            if (localValidationData) {
-                                const organization = JSON.parse(localValidationData).name
+                        const localValidationData = localStorage.getItem("validation")
+                        if (localValidationData) {
+                            const organization = JSON.parse(localValidationData).name
+                            if (props.type === "online") {
                                 if (organization.name !== "") {
                                     doGetRequest(`${organization}`).then((response) => {
                                         if (response.code === 200) {
                                             dispatch(loadOrganization(response.content))
                                             storePermanent(organization, response.content)
                                             props.close()
-                                            navigate(`/`)
+                                            navigate(`/o/${organization}`)
                                         }
                                     })
                                 }
+                            } else {
+                                const org = loadPermanent(organization, dispatch, common, true)
+                                org?.turnaments.forEach(turnament => {
+                                    console.log("muuh")
+                                    updateDatabase(turnament, organization)
+                                })
+                                props.close()
+                                navigate(`/o/${organization}`)
                             }
                         }
-
                     }} variant='contained'>
                         {props.type === "online" ? "Onlinedaten" : "Gerätedaten"}
                     </Button>

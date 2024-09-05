@@ -31,7 +31,7 @@ const Turnament = (props: Props) => {
 
     const t_organization = params.organization ? params.organization : ""
 
-    loadPermanent(params, dispatch, common)
+    loadPermanent(t_organization, dispatch, common)
 
     const date = useMemo(() => params.date ? new Date(params.date) : new Date(), [params.date])
     const turnamentDate = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(date))?.date

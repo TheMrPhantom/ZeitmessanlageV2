@@ -97,10 +97,8 @@ export const storePermanent = (organization: string, value: Organization) => {
     window.localStorage.setItem(organization, JSON.stringify(value))
 }
 
-export const loadPermanent = (params: any, dispatch: any, common: CommonReducerType) => {
-    const t_organization = params.organization ? params.organization : ""
+export const loadPermanent = (t_organization: string, dispatch: any, common: CommonReducerType, forceLoad?: boolean) => {
     const item = window.localStorage.getItem(t_organization);
-
     if (item === null) {
 
         const organization = {
@@ -109,10 +107,12 @@ export const loadPermanent = (params: any, dispatch: any, common: CommonReducerT
         }
         storePermanent(t_organization, organization)
         dispatch(createOrganization(organization))
+        return organization
     } else {
-        if (common.organization.name !== t_organization) {
+        if (common.organization.name !== t_organization || forceLoad) {
             const org: Organization = JSON.parse(item)
             dispatch(loadOrganization(org))
+            return org
         }
     }
 }

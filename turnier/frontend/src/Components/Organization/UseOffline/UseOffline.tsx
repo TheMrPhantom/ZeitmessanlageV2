@@ -29,8 +29,8 @@ const UseOffline = (props: Props) => {
                         onMouseEnter={() => setHovered('online')}
                         onMouseLeave={() => setHovered(null)}
                         onClick={() => {
-                            setopen(true)
                             settype("online")
+                            setopen(true)
                         }}
                     >
                         <Stack direction="column" gap={2}>
@@ -50,8 +50,8 @@ const UseOffline = (props: Props) => {
                         onMouseEnter={() => setHovered('device')}
                         onMouseLeave={() => setHovered(null)}
                         onClick={() => {
-                            setopen(true)
                             settype("device")
+                            setopen(true)
                         }}
                     >
                         <Stack direction="column" gap={2}>
