@@ -169,6 +169,17 @@ class update_data(Resource):
         
         db.session.commit()
 
+        # Check what participants to delete
+        for p in participants:
+            found=False
+            for participant in participants_from_request:
+                if p.start_number==participant["startNumber"]:
+                    found=True
+                    break
+            if not found:
+                db.session.delete(p)
+        db.session.commit()
+
         socket.send({"action": "reload"})
         return util.build_response("OK")
 

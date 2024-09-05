@@ -182,6 +182,7 @@ const Participants = (props: Props) => {
                                                 dispatch(removeParticipant(turnamentDate, participant))
                                                 //Store the new participants in the local storage
                                                 storePermanent(organization, common.organization)
+                                                updateDatabase(common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate)), organization)
                                             }}>
                                                 <DeleteIcon />
                                             </Button>
