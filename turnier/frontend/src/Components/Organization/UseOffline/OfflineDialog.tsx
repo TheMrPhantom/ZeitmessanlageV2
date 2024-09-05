@@ -5,6 +5,10 @@ import { useNavigate } from 'react-router-dom'
 
 import WarningIcon from '@mui/icons-material/Warning';
 import style from './useOffline.module.scss'
+import { doGetRequest } from '../../Common/StaticFunctions';
+import { useDispatch } from 'react-redux';
+import { loadOrganization } from '../../../Actions/SampleAction';
+import { storePermanent } from '../../Common/StaticFunctionsTyped';
 
 
 type Props = {
@@ -14,7 +18,7 @@ type Props = {
 }
 
 const OfflineDialog = (props: Props) => {
-
+    const dispatch = useDispatch()
     const navigate = useNavigate();
 
     return (
@@ -37,9 +41,26 @@ const OfflineDialog = (props: Props) => {
                 <Stack direction="row" justifyContent="space-between" className={style.buttonContainer}>
                     <Button onClick={props.close} variant='outlined'>Abbrechen</Button>
                     <Button onClick={() => {
-                        props.close()
-                        navigate(`/`)
-                    }} variant='contained'>{props.type === "online" ? "Onlinedaten" : "Gerätedaten"}</Button>
+                        if (props.type === "online") {
+                            const localValidationData = localStorage.getItem("validation")
+                            if (localValidationData) {
+                                const organization = JSON.parse(localValidationData).name
+                                if (organization.name !== "") {
+                                    doGetRequest(`${organization}`).then((response) => {
+                                        if (response.code === 200) {
+                                            dispatch(loadOrganization(response.content))
+                                            storePermanent(organization, response.content)
+                                            props.close()
+                                            navigate(`/`)
+                                        }
+                                    })
+                                }
+                            }
+                        }
+
+                    }} variant='contained'>
+                        {props.type === "online" ? "Onlinedaten" : "Gerätedaten"}
+                    </Button>
                 </Stack>
             </DialogActions>
         </Dialog >

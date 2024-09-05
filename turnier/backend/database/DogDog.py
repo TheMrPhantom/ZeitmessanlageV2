@@ -77,3 +77,12 @@ class Tournament(db.Model):
     secret = sql.Column(sql.String, nullable=False, default=gen_secret)
     participants = relationship('database.DogDog.Participant', lazy="joined")
     runs = relationship('database.DogDog.RunInformation', lazy="joined")
+
+    def to_dict(self):
+        return {
+            "date": self.date,
+            "judge": self.judge,
+            "name": self.name,
+            "participants": [p.to_dict() for p in self.participants],
+            "runs": [r.to_dict() for r in self.runs]
+        }

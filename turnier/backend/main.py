@@ -254,7 +254,24 @@ class tournaments_of_club(Resource):
         db.session.delete(t)
         db.session.commit()
         return util.build_response("OK")
+    
+    def get(self,name):
+        """
+        Get all tournaments of a club
+        """
+        tournaments:List[Tournament]=db.session.query(Tournament).filter(Member.name==name,Tournament.member_id==Member.id).all()
+        tournaments=[t.to_dict() for t in tournaments]
+        return util.build_response({"name":name,"turnaments":tournaments})
 
+@api.route('/<string:name>')
+class organizer(Resource):
+        def get(self,name):
+            """
+            Get all data of an organizer
+            """
+            tournaments:List[Tournament]=db.session.query(Tournament).filter(Member.name==name,Tournament.member_id==Member.id).all()
+            tournaments=[t.to_dict() for t in tournaments]
+            return util.build_response({"name":name,"turnaments":tournaments})
 
 
 @api.route('/<string:name>/timer')
