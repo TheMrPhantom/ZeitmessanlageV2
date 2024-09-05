@@ -27,7 +27,8 @@ const initialState: CommonReducerType = {
         name: "",
         participants: [],
         runs: []
-    }
+    },
+    sendingFailed: false
 }
 
 export type CommonReducerType = {
@@ -43,7 +44,8 @@ export type CommonReducerType = {
     resultsToPrint: ResultToPrint,
     participantspToPrint: ParticipantToPrint,
     stickersToPrint: StickerInfo[],
-    userTurnament: Tournament
+    userTurnament: Tournament,
+    sendingFailed: boolean
 }
 
 export type ResultToPrint = Array<{
@@ -87,11 +89,9 @@ const reducer = (state = initialState, { type, payload }: any) => {
             newState.organization.turnaments = newTurnaments ? newTurnaments : []
             return newState
         case "LOAD_ORGANIZATION":
-            console.log("Loading organization")
             if (payload.name === "") {
                 return newState
             }
-            console.log(payload)
             newState.organization = payload
             return newState
         case "CHANGE_LENGTH":
@@ -127,7 +127,6 @@ const reducer = (state = initialState, { type, payload }: any) => {
             }
             newState.organization.turnaments.forEach((t) => {
                 if (dateToURLString(new Date(t.date)) === dateToURLString(payload.oldDate)) {
-                    console.log("Changing date")
                     t.date = payload.newDate
                 }
             })
@@ -187,13 +186,13 @@ const reducer = (state = initialState, { type, payload }: any) => {
             newState.stickersToPrint = []
             return newState
         case "UPDATE_USER_TURNAMENT":
-            console.log(payload)
             newState.userTurnament = { ...payload }
-            console.log(newState)
             return newState
         case "SET_LOGIN":
-            console.log(payload)
             newState.isLoggedIn = payload
+            return newState
+        case "SET_SENDING_FAILED":
+            newState.sendingFailed = payload
             return newState
         default:
             return state

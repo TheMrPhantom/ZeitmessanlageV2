@@ -90,7 +90,6 @@ const Printing = (props: Props) => {
                 if (currentTable !== null) {
                     currentPage.push(currentTable)
                 }
-                console.log(currentPage)
                 currentTable = null
 
             })

@@ -118,3 +118,10 @@ export const updateUserTurnament = (turnament: Tournament) => {
         payload: turnament
     }
 }
+
+export const setSendingFailed = (failed: boolean) => {
+    return {
+        type: "SET_SENDING_FAILED",
+        payload: failed
+    }
+}

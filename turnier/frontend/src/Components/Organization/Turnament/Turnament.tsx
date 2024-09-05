@@ -104,9 +104,9 @@ const Turnament = (props: Props) => {
     useEffect(() => {
 
         //get current turnament
-        updateDatabase(turnament, params.organization ? params.organization : "")
+        updateDatabase(turnament, params.organization ? params.organization : "", dispatch)
 
-    }, [turnament, params.organization])
+    }, [turnament, params.organization, dispatch])
 
 
     return (
@@ -125,7 +125,7 @@ const Turnament = (props: Props) => {
 
                                             dispatch(changeDate(date, new Date(value)))
                                             const t_organization = params.organization ? params.organization : ""
-                                            updateDatabase(turnament, t_organization)
+                                            updateDatabase(turnament, t_organization, dispatch)
                                             storePermanent(t_organization, common.organization)
 
                                             navigate(`/o/${params.organization}/${dateToURLString(new Date(value))}`)
@@ -146,7 +146,7 @@ const Turnament = (props: Props) => {
                                     dispatch(changeTurnamentName(new Date(turnamentDate ? turnamentDate : date), value.target.value))
 
                                     const t_organization = params.organization ? params.organization : ""
-                                    updateDatabase(turnament, t_organization)
+                                    updateDatabase(turnament, t_organization, dispatch)
                                     storePermanent(t_organization, common.organization)
 
                                 }}
@@ -161,7 +161,7 @@ const Turnament = (props: Props) => {
                                 onChange={(value) => {
                                     dispatch(changeJudge(new Date(turnamentDate ? turnamentDate : date), value.target.value))
                                     const t_organization = params.organization ? params.organization : ""
-                                    updateDatabase(turnament, t_organization)
+                                    updateDatabase(turnament, t_organization, dispatch)
                                     storePermanent(t_organization, common.organization)
                                 }}
                             />
@@ -225,7 +225,7 @@ const Turnament = (props: Props) => {
                                                             const t_organization = params.organization ? params.organization : ""
 
                                                             storePermanent(t_organization, common.organization)
-                                                            updateDatabase(common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date), t_organization)
+                                                            updateDatabase(common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date), t_organization, dispatch)
 
                                                         }}
                                                     />

@@ -5,10 +5,9 @@ import { useNavigate } from 'react-router-dom'
 
 import WarningIcon from '@mui/icons-material/Warning';
 import style from './useOffline.module.scss'
-import { doGetRequest } from '../../Common/StaticFunctions';
 import { useDispatch, useSelector } from 'react-redux';
 import { loadOrganization } from '../../../Actions/SampleAction';
-import { loadPermanent, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped';
+import { doGetRequest, loadPermanent, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped';
 import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 
@@ -48,20 +47,19 @@ const OfflineDialog = (props: Props) => {
                             const organization = JSON.parse(localValidationData).name
                             if (props.type === "online") {
                                 if (organization.name !== "") {
-                                    doGetRequest(`${organization}`).then((response) => {
+                                    doGetRequest(`${organization}`, dispatch).then((response) => {
                                         if (response.code === 200) {
                                             dispatch(loadOrganization(response.content))
                                             storePermanent(organization, response.content)
                                             props.close()
                                             navigate(`/o/${organization}`)
                                         }
-                                    })
+                                    }, dispatch)
                                 }
                             } else {
                                 const org = loadPermanent(organization, dispatch, common, true)
                                 org?.turnaments.forEach(turnament => {
-                                    console.log("muuh")
-                                    updateDatabase(turnament, organization)
+                                    updateDatabase(turnament, organization, dispatch)
                                 })
                                 props.close()
                                 navigate(`/o/${organization}`)

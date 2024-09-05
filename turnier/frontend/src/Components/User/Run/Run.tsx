@@ -2,19 +2,19 @@ import React, { useEffect, useRef, useState } from 'react'
 import style from './run.module.scss'
 import { Collapse, Divider, FormControlLabel, Paper, Rating, Stack, Switch, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material'
 import { useParams } from 'react-router-dom'
-import { checkIfFavorite, favoriteIdenfitier, getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, maximumTime, runTimeToString, runTimeToStringClock, standardTime } from '../../Common/StaticFunctionsTyped';
+import { checkIfFavorite, doGetRequest, favoriteIdenfitier, getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, maximumTime, runTimeToString, runTimeToStringClock, standardTime } from '../../Common/StaticFunctionsTyped';
 import { Run as RunType, SkillLevel, Participant, defaultParticipant, RunCategory, Tournament } from '../../../types/ResponseTypes';
 import { minSpeedA3 } from '../../Common/AgilityPO';
 import { useCallback } from 'react';
-import { doGetRequest } from '../../Common/StaticFunctions';
 import Spacer from '../../Common/Spacer';
+import { useDispatch } from 'react-redux';
 
 type Props = {}
 
 const Run = (props: Props) => {
     //const common: CommonReducerType = useSelector((state: RootState) => state.common);
     const [, setwebsocket] = useState<WebSocket | null>(null);
-    //const dispatch = useDispatch()
+    const dispatch = useDispatch()
 
     const params = useParams()
 
@@ -204,12 +204,12 @@ const Run = (props: Props) => {
 
     //changed
     useEffect(() => {
-        doGetRequest(`${params.organization}/tournament/${params.secret}/${params.date}`).then((data) => {
+        doGetRequest(`${params.organization}/tournament/${params.secret}/${params.date}`, dispatch).then((data) => {
             if (data.code === 200) {
                 setcommon(data.content as Tournament)
             }
-        })
-    }, [reload, params.date, params.organization, params.secret])
+        }, dispatch)
+    }, [reload, params.date, params.organization, params.secret, dispatch])
 
     useEffect(() => {
         if (!started) {
@@ -291,7 +291,7 @@ const Run = (props: Props) => {
                     //setreload(!reload)
                     break;
                 case "reload":
-                    doGetRequest(`${params.organization}/tournament/${params.secret}/${params.date}`).then((data) => {
+                    doGetRequest(`${params.organization}/tournament/${params.secret}/${params.date}`, dispatch).then((data) => {
                         if (data.code === 200) {
                             const t = data.content as Tournament
                             setcommon(t)
@@ -326,7 +326,7 @@ const Run = (props: Props) => {
 
         // This ignore is there because adding the missing dependencies makes that infinite ws connection are spawned
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [reload, params.date, params.organization])
+    }, [reload, params.date, params.organization, dispatch])
 
 
 

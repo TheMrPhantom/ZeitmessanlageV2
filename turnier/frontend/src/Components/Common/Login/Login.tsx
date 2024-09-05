@@ -5,7 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { openToast } from '../../../Actions/CommonAction';
 import { FALSCHES_PASSWORT, FEHLER, LOGIN, NAME, PASSWORT } from '../Internationalization/i18n';
 import Spacer from '../Spacer';
-import { doGetRequest, doPostRequest } from '../StaticFunctions';
+import { doGetRequest, doPostRequest } from '../StaticFunctionsTyped';
 import style from './login.module.scss'
 import { sha256 } from 'crypto-hash';
 import { verifySignature } from '../StaticFunctionsTyped';
@@ -40,8 +40,7 @@ const Login = (props: Props) => {
                 }
             }
         })();
-        doPostRequest("login", { name: username, password: password }).then((value) => {
-            console.log(value)
+        doPostRequest("login", { name: username, password: password }, dispatch).then((value) => {
             if (value.code === 200) {
                 //const searchParam = searchParams.get("originalPath")
                 //const notNullSeachParam = searchParam !== null ? searchParam : "/";
@@ -92,9 +91,8 @@ const Login = (props: Props) => {
 
     const loginOidc = async () => {
         setdisableLoginButton(true)
-        doGetRequest("start-oidc").then(value => {
+        doGetRequest("start-oidc", dispatch).then(value => {
             if (value.code === 200) {
-                console.log(value.content)
                 window.location.href = value.content
             }
             setdisableLoginButton(false)

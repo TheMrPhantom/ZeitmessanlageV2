@@ -3,7 +3,7 @@ import React, { useCallback, useEffect } from 'react'
 import { useDispatch } from 'react-redux';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { openToast, setLoginState } from '../../../Actions/CommonAction';
-import { doGetRequest } from '../StaticFunctions';
+import { doGetRequest } from '../StaticFunctionsTyped';
 import { verifySignature } from '../StaticFunctionsTyped';
 import { Verification } from '../../../types/ResponseTypes';
 
@@ -41,7 +41,7 @@ const LoginChecker = (props: Props) => {
             return
         }
         console.log(Cookies.get(window.globalTS.AUTH_COOKIE_PREFIX + "memberID"))
-        doGetRequest(requestString).then((value) => {
+        doGetRequest(requestString, dispatch).then((value) => {
             if (value.code !== 200 && value.code !== 503) {
                 // User needs to login
                 navigate("/login?originalPath=" + location.pathname)

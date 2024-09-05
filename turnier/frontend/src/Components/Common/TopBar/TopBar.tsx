@@ -1,11 +1,11 @@
 import { Person, SettingsOutlined } from '@mui/icons-material'
-import { AppBar, Button, IconButton, Slide, Stack, Toolbar, Typography } from '@mui/material'
-import React, { useEffect, useState } from 'react'
+import { AppBar, Avatar, Badge, Button, IconButton, Slide, Stack, Toolbar, Typography } from '@mui/material'
+import React, { useEffect, useRef, useState } from 'react'
 import Spacer from '../Spacer'
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
-import { doPostRequest } from '../StaticFunctions';
+import { doPostRequest, loadPermanent, updateDatabase, wait } from '../StaticFunctionsTyped';
 import Divider from '@mui/material/Divider';
 import ListItem from '@mui/material/ListItem';
 import ListItemButton from '@mui/material/ListItemButton';
@@ -28,6 +28,10 @@ import Cookies from 'js-cookie';
 import { setLoginState, setRequestDialogOpen, setTransferDialogOpen } from '../../../Actions/CommonAction';
 import { classToString, sizeToString } from '../StaticFunctionsTyped';
 import About from './About';
+import WifiIcon from '@mui/icons-material/Wifi';
+import WarningIcon from '@mui/icons-material/Warning';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import { setSendingFailed } from '../../../Actions/SampleAction';
 
 type Props = {}
 
@@ -67,6 +71,43 @@ const TopBar = (props: Props) => {
         }
     }, [location.pathname])
 
+    const lock = useRef(false);
+
+    useEffect(() => {
+        if (common.sendingFailed) {
+            if (lock.current) {
+                return;
+            }
+
+            lock.current = true;
+            const trySend = async () => {
+                while (common.sendingFailed) {
+                    const localValidationData = localStorage.getItem("validation");
+                    if (localValidationData) {
+                        const organization = JSON.parse(localValidationData).name;
+                        const org = loadPermanent(organization, dispatch, common, true);
+                        if (org) {
+                            const updatePromises = org.turnaments.map(turnament =>
+                                updateDatabase(turnament, organization, dispatch)
+                            );
+                            const results = await Promise.all(updatePromises);
+                            const success = results.every(result => result);
+
+                            if (success) {
+                                dispatch(setSendingFailed(false));
+
+                            }
+                        }
+                    }
+                    await wait(5000);
+                }
+                lock.current = false;
+            }
+
+            trySend();
+        }
+
+    }, [common.sendingFailed, dispatch, common]);
 
     const navigationButton = () => {
         if (location.pathname.startsWith("/admin")) {
@@ -224,7 +265,7 @@ const TopBar = (props: Props) => {
     if (location.pathname.includes("/print")) {
         return <></>
     }
-    console.log(common.isLoggedIn)
+
     return (
         <>
             <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, maxHeight: "77px" }}>
@@ -260,7 +301,21 @@ const TopBar = (props: Props) => {
                                 </Stack>
                             </> : <></>
                     }
-                    <div style={{ display: "flex" }}>
+                    <div style={{ display: "flex", alignItems: "center" }}>
+
+                        <Badge
+                            overlap="circular"
+                            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                            badgeContent={
+                                <Avatar sx={{ bgcolor: "#00000000", width: 20, height: 20 }}>
+                                    {!common.sendingFailed ? <CheckCircleIcon color='success' sx={{ width: 15, height: 15 }} /> :
+                                        <WarningIcon color='warning' sx={{ width: 15, height: 15 }} />}
+                                </Avatar>
+                            }
+                        >
+                            <WifiIcon />
+                        </Badge>
+                        <Spacer horizontal={20} />
                         {shouldDisplayAbout() ? <IconButton
                             color="inherit"
                             onClick={() => {
@@ -274,7 +329,7 @@ const TopBar = (props: Props) => {
                         <Spacer horizontal={20} />
                         <Button color="inherit" onClick={() => {
                             if (common.isLoggedIn) {
-                                doPostRequest("logout", "")
+                                doPostRequest("logout", "", dispatch)
                                 dispatch(setLoginState(null))
                             }
                             navigate("/login")

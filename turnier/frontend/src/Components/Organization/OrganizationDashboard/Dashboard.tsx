@@ -11,9 +11,9 @@ import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { addTurnament, removeTurnament } from '../../../Actions/SampleAction';
-import { dateToString, dateToURLString, doRequest } from '../../Common/StaticFunctions';
+import { dateToString, dateToURLString } from '../../Common/StaticFunctions';
 import { ALL_HEIGHTS, ALL_RUNS, RunInformation, Tournament } from '../../../types/ResponseTypes';
-import { loadPermanent, storePermanent } from '../../Common/StaticFunctionsTyped';
+import { doRequest, loadPermanent, storePermanent } from '../../Common/StaticFunctionsTyped';
 import { openToast } from '../../../Actions/CommonAction';
 
 type Props = {}
@@ -94,7 +94,7 @@ const Dashboard = (props: Props) => {
                                         organization.turnaments.push(turnament)
                                         storePermanent(t_organization, organization)
                                         dispatch(addTurnament(turnament))
-                                        doRequest("PUT", `${t_organization}/tournament`, { date: dateToURLString(turnamentDate), judge: judgeName, name: tournamentName })
+                                        doRequest("PUT", `${t_organization}/tournament`, { date: dateToURLString(turnamentDate), judge: judgeName, name: tournamentName }, dispatch)
                                     }
                                     setturnamentDate(null);
                                     setjudgeName("")
@@ -151,12 +151,11 @@ const Dashboard = (props: Props) => {
                                                     const item = window.localStorage.getItem(t_organization);
                                                     if (item !== null) {
                                                         const organization = JSON.parse(item)
-                                                        console.log(organization)
                                                         const newTurnaments = organization.turnaments.filter((t: any) => t.date !== turnament.date)
                                                         organization.turnaments = newTurnaments
                                                         storePermanent(t_organization, organization)
                                                         dispatch(removeTurnament(turnament))
-                                                        doRequest("DELETE", `${t_organization}/tournament`, { date: dateToURLString(turnament.date) })
+                                                        doRequest("DELETE", `${t_organization}/tournament`, { date: dateToURLString(turnament.date) }, dispatch)
                                                     }
                                                 }}>
                                                 <DeleteIcon />

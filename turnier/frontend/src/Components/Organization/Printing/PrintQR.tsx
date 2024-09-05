@@ -2,22 +2,22 @@ import React, { useEffect, useState } from 'react'
 import PrintingA4 from './PrintingA4'
 import { Stack, Typography } from '@mui/material'
 import QRCode from "react-qr-code";
-import { doGetRequest } from '../../Common/StaticFunctions';
 import { useParams } from 'react-router-dom';
+import { useDispatch } from 'react-redux';
+import { doGetRequest } from '../../Common/StaticFunctionsTyped';
 
 type Props = {}
 
 const PrintQR = (props: Props) => {
     const params = useParams()
-
+    const dispatch = useDispatch()
     const [qr, setqr] = useState("")
 
-    console.log()
     useEffect(() => {
-        doGetRequest(`${params.organization}/${params.date}/qr`).then((response) => {
+        doGetRequest(`${params.organization}/${params.date}/qr`, dispatch).then((response) => {
             setqr(`${window.location.origin}/u/${params.organization}/${params.date}/${response.content}`)
         })
-    }, [params.date, params.organization])
+    }, [params.date, params.organization, dispatch])
 
     return (
         <PrintingA4 generationType='QR-Code'>

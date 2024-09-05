@@ -7,14 +7,14 @@ import Spacer from '../../Common/Spacer';
 import { Participant, Size, SkillLevel, Tournament } from '../../../types/ResponseTypes';
 import { useNavigate, useParams } from 'react-router-dom';
 import Dog from './Dog';
-import { dateToString, doGetRequest } from '../../Common/StaticFunctions';
+import { dateToString } from '../../Common/StaticFunctions';
 import { useDispatch, useSelector } from 'react-redux';
 import { updateUserTurnament } from '../../../Actions/SampleAction';
 import SportsIcon from '@mui/icons-material/Sports';
 import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import StadiumIcon from '@mui/icons-material/Stadium';
-import { favoriteIdenfitier, getParticipantsForRun, getTimeFaults, standardTime } from '../../Common/StaticFunctionsTyped';
+import { doGetRequest, favoriteIdenfitier, getParticipantsForRun, getTimeFaults, standardTime } from '../../Common/StaticFunctionsTyped';
 
 type Props = {}
 
@@ -31,7 +31,7 @@ const RunSelection = (props: Props) => {
     const common: CommonReducerType = useSelector((state: RootState) => state.common);
 
     useEffect(() => {
-        doGetRequest(`${params.organization}/tournament/${params.secret}/${params.date}`).then((data) => {
+        doGetRequest(`${params.organization}/tournament/${params.secret}/${params.date}`, dispatch).then((data) => {
             if (data.code === 200) {
                 dispatch(updateUserTurnament(data.content as Tournament))
                 settournamentCurrent(data.content as Tournament)
@@ -41,12 +41,12 @@ const RunSelection = (props: Props) => {
 
     useEffect(() => {
         //Load org name
-        doGetRequest(`organization/${params.organization}`).then((data) => {
+        doGetRequest(`organization/${params.organization}`, dispatch).then((data) => {
             if (data.code === 200) {
                 setorgName(data.content.name)
             }
         })
-    }, [params.organization])
+    }, [params.organization, dispatch])
 
 
     const [tournamentCurrent, settournamentCurrent] = useState<Tournament>({ date: new Date(), judge: "", name: "", participants: [], runs: [] })
@@ -72,7 +72,7 @@ const RunSelection = (props: Props) => {
                 console.log(message)
                 switch (message.action) {
                     case "reload":
-                        doGetRequest(`${params.organization}/tournament/${params.secret}/${params.date}`).then((data) => {
+                        doGetRequest(`${params.organization}/tournament/${params.secret}/${params.date}`, dispatch).then((data) => {
                             if (data.code === 200) {
                                 dispatch(updateUserTurnament(data.content as Tournament))
                                 settournamentCurrent(data.content as Tournament)
@@ -143,10 +143,8 @@ const RunSelection = (props: Props) => {
                     dogsLeft={null}
                     unlike={() => {
                         let storage = window.localStorage.getItem("favorites")
-                        console.log(storage)
                         storage = storage ? storage : ""
                         storage = storage.replace(`${favoriteIdenfitier(participant)};`, "")
-                        console.log(storage)
                         window.localStorage.setItem("favorites", storage)
                         setreload(!reload)
                     }}

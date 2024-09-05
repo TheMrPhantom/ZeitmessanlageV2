@@ -10,8 +10,8 @@ import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom'
-import { getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, loadPermanent, maximumTime, moveParticipantInStartList, runTimeToString, runTimeToStringClock, standardTime, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped';
-import { dateToURLString, doPostRequest } from '../../Common/StaticFunctions';
+import { doPostRequest, getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, loadPermanent, maximumTime, moveParticipantInStartList, runTimeToString, runTimeToStringClock, standardTime, storePermanent, updateDatabase, wait } from '../../Common/StaticFunctionsTyped';
+import { dateToURLString } from '../../Common/StaticFunctions';
 import { Run as RunType, SkillLevel, Participant, defaultParticipant, RunCategory } from '../../../types/ResponseTypes';
 import { changeLength, changeParticipants, changeSpeed } from '../../../Actions/SampleAction';
 import { minSpeedA3 } from '../../Common/AgilityPO';
@@ -87,8 +87,8 @@ const Run = (props: Props) => {
     useEffect(() => {
         doPostRequest(`${common.organization.name}/current/participant`, {
             id: selectedParticipant.startNumber, faults: currentFaults, refusals: currentRefusals, started: started, time: initTime, currentRun: currentRun
-        })
-    }, [selectedParticipant.startNumber, currentFaults, currentRefusals, common.organization.name, started, initTime, currentRun]);
+        }, dispatch)
+    }, [selectedParticipant.startNumber, currentFaults, currentRefusals, common.organization.name, started, initTime, currentRun, dispatch]);
 
     const changeFaults = (value: number) => {
 
@@ -110,7 +110,7 @@ const Run = (props: Props) => {
             } else {
                 setnewFaults(value)
             }
-            doPostRequest(`${common.organization.name}/current/faults`, value)
+            doPostRequest(`${common.organization.name}/current/faults`, value, dispatch)
         }
     }
 
@@ -134,7 +134,7 @@ const Run = (props: Props) => {
             } else {
                 setnewRefusals(value)
             }
-            doPostRequest(`${common.organization.name}/current/refusals`, value)
+            doPostRequest(`${common.organization.name}/current/refusals`, value, dispatch)
         }
     }
 
@@ -216,11 +216,11 @@ const Run = (props: Props) => {
 
             doPostRequest(`${common.organization.name}/current/participant`, {
                 id: selectedParticipant.startNumber, faults: currentFaults, refusals: currentRefusals, started: started, time: initTime, currentRun: currentRun
-            })
+            }, dispatch)
 
         }, 3000);
         return () => clearInterval(id);
-    }, [selectedParticipant.startNumber, currentFaults, currentRefusals, common.organization.name, started, initTime, currentRun]);
+    }, [selectedParticipant.startNumber, currentFaults, currentRefusals, common.organization.name, started, initTime, currentRun, dispatch]);
 
 
 
@@ -229,9 +229,9 @@ const Run = (props: Props) => {
         if (currentTime === -2 || currentTime === 0) {
             setinitTime(new Date().getTime());
             setStarted(true)
-            doPostRequest(`${common.organization.name}/timer`, { action: "start" })
+            doPostRequest(`${common.organization.name}/timer`, { action: "start" }, dispatch)
         }
-    }, [currentTime, common.organization.name])
+    }, [currentTime, common.organization.name, dispatch])
 
 
     const stopTimer = useCallback((time?: number) => {
@@ -240,17 +240,17 @@ const Run = (props: Props) => {
         }
         setStarted(false)
         if (time === undefined) {
-            doPostRequest(`${common.organization.name}/timer`, { action: "stop", time: currentTime }).then(() => {
-                updateDatabase(turnament, common.organization.name)
+            doPostRequest(`${common.organization.name}/timer`, { action: "stop", time: currentTime }, dispatch).then(() => {
+                updateDatabase(turnament, common.organization.name, dispatch)
             })
         } else {
-            doPostRequest(`${common.organization.name}/timer`, { action: "stop", time: Math.floor(time / 10) / 100 }).then(() => {
-                updateDatabase(turnament, common.organization.name)
+            doPostRequest(`${common.organization.name}/timer`, { action: "stop", time: Math.floor(time / 10) / 100 }, dispatch).then(() => {
+                updateDatabase(turnament, common.organization.name, dispatch)
             })
             changeTime(Math.floor(time / 10) / 100)
         }
 
-    }, [currentTime, started, changeTime, turnament, common.organization.name])
+    }, [currentTime, started, changeTime, turnament, common.organization.name, dispatch])
 
     const [speedWarning, setspeedWarning] = useState(false)
     const [lengthWarning, setlengthWarning] = useState(false)
@@ -327,9 +327,6 @@ const Run = (props: Props) => {
         }
     }, [props, startTimer, stopTimer, changeTime, participants, selectedParticipantStartNumber, started, selectedParticipant.sorting])
 
-    const wait = async (ms: number) => {
-        return new Promise(r => setTimeout(r, ms));
-    }
 
     const showWarnings = () => {
         let warnings = []
@@ -482,11 +479,11 @@ const Run = (props: Props) => {
                             <Stack direction="row" justifyContent="space-evenly">
                                 <Button variant='outlined' className={style.btn} onClick={() => {
                                     changeFaults(currentFaults + 1)
-                                    updateDatabase(turnament, common.organization.name)
+                                    updateDatabase(turnament, common.organization.name, dispatch)
                                 }}>Fehler</Button>
                                 <Button variant='outlined' className={style.btn} onClick={() => {
                                     changeRefusals(currentRefusals + 1)
-                                    updateDatabase(turnament, common.organization.name)
+                                    updateDatabase(turnament, common.organization.name, dispatch)
                                 }}>Verweigerung</Button>
                             </Stack>
                         </Stack>
@@ -551,10 +548,10 @@ const Run = (props: Props) => {
                                 if (Number(value.target.value) > -1) {
                                     if (Number(value.target.value) === 0) {
                                         changeTime(-2)
-                                        updateDatabase(turnament, common.organization.name)
+                                        updateDatabase(turnament, common.organization.name, dispatch)
                                     } else {
                                         changeTime(Number(value.target.value))
-                                        updateDatabase(turnament, common.organization.name)
+                                        updateDatabase(turnament, common.organization.name, dispatch)
                                     }
 
                                 }
@@ -567,7 +564,7 @@ const Run = (props: Props) => {
                             onChange={(value) => {
                                 if (Number(value.target.value) > -1) {
                                     changeFaults(Number(value.target.value))
-                                    updateDatabase(turnament, common.organization.name)
+                                    updateDatabase(turnament, common.organization.name, dispatch)
                                 }
                             }} />
                         <TextField className={style.runStats} value={getResultFromParticipant(currentRun, selectedParticipant).refusals}
@@ -578,7 +575,7 @@ const Run = (props: Props) => {
                             onChange={(value) => {
                                 if (Number(value.target.value) > -1) {
                                     changeRefusals(Number(value.target.value))
-                                    updateDatabase(turnament, common.organization.name)
+                                    updateDatabase(turnament, common.organization.name, dispatch)
                                 }
                             }}
                         />
@@ -628,7 +625,7 @@ const Run = (props: Props) => {
                                                     <IconButton onClick={() => {
                                                         if (allParticipants) {
                                                             dispatch(changeParticipants(turnamentDate, moveParticipantInStartList("down", currentRun, currentSize, allParticipants, p.startNumber)))
-                                                            updateDatabase(turnament, common.organization.name)
+                                                            updateDatabase(turnament, common.organization.name, dispatch)
                                                             storePermanent(organization, common.organization)
                                                         }
                                                     }}>
@@ -638,7 +635,7 @@ const Run = (props: Props) => {
                                                         if (allParticipants) {
 
                                                             dispatch(changeParticipants(turnamentDate, moveParticipantInStartList("up", currentRun, currentSize, allParticipants, p.startNumber)))
-                                                            updateDatabase(turnament, common.organization.name)
+                                                            updateDatabase(turnament, common.organization.name, dispatch)
                                                             storePermanent(organization, common.organization)
                                                         }
                                                     }}>

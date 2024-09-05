@@ -1,9 +1,67 @@
-import { createOrganization, loadOrganization } from "../../Actions/SampleAction";
+import { createOrganization, loadOrganization, setSendingFailed } from "../../Actions/SampleAction";
 import { Member, Organization, Participant, Result, Run, SkillLevel, Size, RunCategory, KombiResult, ExtendedResult, Tournament } from "../../types/ResponseTypes"
 import { CommonReducerType } from '../../Reducer/CommonReducer';
 import { faultFactor, maxTimeFactorA0A1A2, maxTimeFactorA3, minSpeedA3, minSpeedJ3, offsetFactor, refusalFactor } from "./AgilityPO";
-import { doPostRequest } from "./StaticFunctions";
 import * as forge from 'node-forge';
+import { Dispatch } from "react";
+
+export const doRequest = async (method: string, path: string, data: any, dispatch: Dispatch<any>) => {
+    try {
+        const resp = await fetch(window.globalTS.DOMAIN + path,
+            {
+                credentials: 'include',
+                method: method,
+                headers: { "Content-type": "application/json", "Access-Control-Allow-Origin": "/*" },
+                body: method.toUpperCase() !== "GET" ? JSON.stringify(data) : null
+            });
+        const status_code = resp.status
+        if (status_code === 200) {
+            const userJson = await resp.json();
+
+            return { code: status_code, content: userJson }
+        } else if (status_code === 403) {
+            return { code: status_code }
+        } else {
+            return { code: status_code }
+        }
+    } catch (error) {
+        console.log(error)
+        dispatch(setSendingFailed(true))
+        return { code: 503 /*Service unavailable*/, content: {} }
+    }
+};
+
+export const doGetRequest = async (path: string, dispatch: Dispatch<any>) => {
+    return doRequest("GET", path, {}, dispatch)
+};
+export const doPostRequest = async (path: string, data: any, dispatch: Dispatch<any>) => {
+    return doRequest("POST", path, data, dispatch)
+};
+
+export const doPostRequestRawBody = async (path: string, body: any) => {
+    try {
+        const resp = await fetch(window.globalTS.DOMAIN + path,
+            {
+                credentials: 'include',
+                method: "POST",
+
+                body: body
+            });
+        const status_code = resp.status
+        if (status_code === 200) {
+            const userJson = await resp.json();
+
+            return { code: status_code, content: userJson }
+        } else if (status_code === 403) {
+            return { code: status_code }
+        } else {
+            return { code: status_code }
+        }
+    } catch (error) {
+        return { code: 503 /*Service unavailable*/, content: {} }
+    }
+};
+
 
 export const safeMemberName = (member: Member) => {
     return member.alias === "" ? member.name : member.alias
@@ -93,7 +151,6 @@ export const storePermanent = (organization: string, value: Organization) => {
     if (value.name === "") {
         value.name = organization
     }
-    console.log(value)
     window.localStorage.setItem(organization, JSON.stringify(value))
 }
 
@@ -443,14 +500,6 @@ export const setMaxTime = (currentRun: Run,
             }
             return p
         })
-
-
-        /*print new participants*/
-        console.log(tempParticipants)
-
-
-
-
     })
 
     return tempParticipants
@@ -483,15 +532,18 @@ export const fixDis = (currentRun: Run,
     return tempParticipants
 }
 
-export const updateDatabase = (turnament: Tournament | undefined, memberName: string) => {
+export const updateDatabase = async (turnament: Tournament | undefined, memberName: string, dispatch: Dispatch<any>) => {
     if (turnament) {
         const year = new Date(turnament?.date).getFullYear()
         const month = new Date(turnament?.date).getMonth() + 1
         const day = new Date(turnament?.date).getDate()
         const date = `${year}-${month < 10 ? "0" + month : month}-${day < 10 ? "0" + day : day}`
-        console.log(date)
-        doPostRequest(`${memberName}/tournament/${date}`, turnament ? turnament : null)//Updates the database
+        const resp = await doPostRequest(`${memberName}/tournament/${date}`, turnament ? turnament : null, dispatch)//Updates the database
+        if (resp.code === 503) {
+            return false
+        }
     }
+    return true
 }
 
 export const favoriteIdenfitier = (participant: Participant) => {
@@ -512,6 +564,10 @@ export const checkIfFavorite = (participant: Participant, favorites: string | un
         }
     })
     return isFavorite
+}
+
+export const wait = async (ms: number) => {
+    return new Promise(r => setTimeout(r, ms));
 }
 
 

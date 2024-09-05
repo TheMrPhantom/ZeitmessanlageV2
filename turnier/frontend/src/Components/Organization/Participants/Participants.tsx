@@ -71,8 +71,6 @@ const Participants = (props: Props) => {
         //Add 1 to the highest sorting
         participant.sorting = sorting + 1
 
-        console.log(participant)
-
         //Add the new participant to the participants
         dispatch(addParticipant(turnamentDate, participant))
 
@@ -86,7 +84,7 @@ const Participants = (props: Props) => {
         storePermanent(organization, common.organization)
         //Get turnament
         const t = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate))
-        updateDatabase(t, organization)
+        updateDatabase(t, organization, dispatch)
     }
 
     return (
@@ -182,7 +180,7 @@ const Participants = (props: Props) => {
                                                 dispatch(removeParticipant(turnamentDate, participant))
                                                 //Store the new participants in the local storage
                                                 storePermanent(organization, common.organization)
-                                                updateDatabase(common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate)), organization)
+                                                updateDatabase(common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate)), organization, dispatch)
                                             }}>
                                                 <DeleteIcon />
                                             </Button>
