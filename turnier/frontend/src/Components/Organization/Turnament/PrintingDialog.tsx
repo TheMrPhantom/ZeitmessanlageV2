@@ -9,6 +9,7 @@ import { addPrintParticipant, addPrintResult, addPrintSticker } from '../../../A
 import { useNavigate } from 'react-router-dom'
 import { ParticipantToPrint, ResultToPrint } from '../../../Reducer/CommonReducer'
 import { minSpeedA3, minSpeedJ3 } from '../../Common/AgilityPO'
+import { dateToURLString } from '../../Common/StaticFunctions'
 
 export enum ListType {
     result,
@@ -376,17 +377,14 @@ const PrintingDialog = (props: Props) => {
                         if (listType === ListType.participant) {
                             const toPrint = participantsList()
                             dispatch(addPrintParticipant(toPrint))
-                            navigate("/o/hsf/2024-08-13/print")
                         } else if (listType === ListType.result) {
                             const toPrint = resultLists()
                             dispatch(addPrintResult(toPrint))
-                            navigate("/o/hsf/2024-08-13/print")
                         } else if (listType === ListType.sticker) {
                             const toPrint = stickerList()
                             dispatch(addPrintSticker(toPrint))
-                            navigate("/o/hsf/2024-08-13/print")
                         }
-
+                        navigate(`/o/${props.organization.name}/${dateToURLString(new Date(props.turnament.date))}/print`)
                         props.close()
                     }} variant='contained'>Generieren</Button>
                 </Stack>
