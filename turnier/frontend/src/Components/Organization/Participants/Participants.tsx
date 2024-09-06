@@ -9,11 +9,14 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom'
 import { dateToURLString } from '../../Common/StaticFunctions';
 import { addParticipant, removeParticipant } from '../../../Actions/SampleAction';
-import { loadPermanent, runClassToString, sizeToString, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped';
+import { loadPermanent, runClassToString, sizeToString, storePermanent, stringToSize, stringToSkillLevel, updateDatabase } from '../../Common/StaticFunctionsTyped';
+import { usePapaParse } from 'react-papaparse';
+import ImportParticipants from './ImportParticipants';
 
 type Props = {}
 
 const Participants = (props: Props) => {
+    const { readString } = usePapaParse();
 
     const common: CommonReducerType = useSelector((state: RootState) => state.common);
     const dispatch = useDispatch()
@@ -30,6 +33,9 @@ const Participants = (props: Props) => {
     const [dog, setdog] = useState("")
     const [runclass, setrunclass] = useState(SkillLevel.A3)
     const [size, setsize] = useState(Size.Small)
+    const [file, setFile] = useState<null | File>(null);
+
+    const [parsedInputFile, setparsedInputFile] = useState<Array<{ date: string, participants: Participant[] }> | null>(null)
 
     loadPermanent(organization, dispatch, common)
 
@@ -87,17 +93,129 @@ const Participants = (props: Props) => {
         updateDatabase(t, organization, dispatch)
     }
 
-    return (
+    const handleFileChange: React.ChangeEventHandler<HTMLInputElement> = (event) => {
+        setFile(event.target.files !== null ? event.target.files[0] : null);
+    };
+
+    // Handle file upload and print CSV content
+    const handleUpload = () => {
+        if (!file) {
+            console.error('No file selected');
+            return;
+        }
+
+        const reader = new FileReader();
+
+        reader.onload = (event) => {
+            if (event.target !== null) {
+                const text = event.target.result;
+                readString(text as string, {
+                    worker: true,
+                    encoding: "windows-1252",
+                    complete: (results) => {
+                        const data = results.data as Array<Array<string>>
+                        /*Data structure of oma file:
+                            Tournament line
+                            Participant line
+                            Participant line
+                            ...
+                            Tournament line
+                            Participant line
+                            Participant line
+                            ...
+                        */
+                        console.log(data)
+                        const parsed: Array<{ date: string, participants: Participant[] }> = []
+
+                        let participants: Participant[] = []
+                        let date = ""
+                        data.forEach(line => {
+                            if (line.length === 1) {
+                                if (line[0].length > 0) {
+                                    //Tournament line
+                                    const dateOfTournament = line[0].split(",")[1]
+
+                                    //Parse the date from dd.mm.yyyy to yyyy-mm-dd
+                                    const dateArray = dateOfTournament.split(".")
+                                    date = `${dateArray[2]}-${dateArray[1]}-${dateArray[0]}`
+
+
+                                    parsed.push({ date: date, participants: [] })
+                                    if (parsed.length > 1) {
+                                        parsed[parsed.length - 2].participants = participants
+                                    }
+                                    participants = []
+                                }
+                            } else {
+                                if (line.length > 0 && line[0] !== "UeID") {
+                                    //Participant line
+
+                                    const skillLevel = stringToSkillLevel(line[42])
+                                    const size = stringToSize(line[41])
+
+                                    const participant: Participant = {
+                                        startNumber: 0,
+                                        sorting: 0,
+                                        name: `${line[2]} ${line[3]}`,
+                                        club: line[6],
+                                        dog: line[15],
+                                        skillLevel: skillLevel,
+                                        size: size,
+                                        resultA: {
+                                            time: -2,
+                                            faults: 0,
+                                            refusals: 0,
+                                            run: skillLevel * 2
+                                        },
+                                        resultJ: {
+                                            time: -2,
+                                            faults: 0,
+                                            refusals: 0,
+                                            run: skillLevel * 2 + 1
+                                        }
+                                    }
+                                    participants.push(participant)
+                                }
+                            }
+                        })
+
+                        if (participants.length > 0) {
+                            parsed[parsed.length - 1].participants = participants
+                        }
+                        setparsedInputFile(parsed)
+                    },
+                });
+
+
+
+                // Optionally parse and handle CSV data
+                // const lines = text.split('\n');
+                // lines.forEach(line => console.log(line));
+            }
+        };
+
+        reader.readAsText(file, 'windows-1252');
+    };
+
+
+    return (<>
         <Stack gap={2} className={style.paper}>
             <Stack direction="row" flexWrap="wrap" gap={3}>
                 <Paper className={style.paper}>
-                    <Stack gap={2}>
-                        <Typography variant='h6'>Teilnehmer aus Webmelden importieren</Typography>
-                        <input type="file" name="file" onChange={(value) => {
-                            // In drinklist nachschauen wie das tut
-                        }}
-                        />
-                        <Button variant="contained" color="primary">Hochladen</Button>
+                    <Stack>
+                        <Stack gap={2}>
+                            <Typography variant='h6'>Teilnehmer aus O.M.A importieren</Typography>
+                            <input
+                                type="file"
+                                name="file"
+                                onChange={handleFileChange}
+                            />
+                            <Button variant="contained" color="primary" onClick={handleUpload}>
+                                Hochladen
+                            </Button>
+                        </Stack>
+
+
                     </Stack>
                 </Paper>
                 <Paper className={style.paper}>
@@ -195,6 +313,8 @@ const Participants = (props: Props) => {
 
             </Stack>
         </Stack>
+        <ImportParticipants tournaments={parsedInputFile} close={() => { setparsedInputFile(null) }} />
+    </>
     )
 }
 

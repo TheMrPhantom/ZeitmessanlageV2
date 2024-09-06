@@ -649,3 +649,29 @@ export const moveParticipantInStartList = (direction: "up" | "down", run: Run, s
         return p
     })
 }
+
+export const stringToSkillLevel = (skillLevel: string) => {
+    if (skillLevel === "A0") {
+        return SkillLevel.A0
+    } else if (skillLevel === "A1") {
+        return SkillLevel.A1
+    } else if (skillLevel === "A2") {
+        return SkillLevel.A2
+    } else if (skillLevel === "A3") {
+        return SkillLevel.A3
+    }
+    return SkillLevel.A0
+}
+
+export const stringToSize = (size: string) => {
+    if (size === "Small") {
+        return Size.Small
+    } else if (size === "Medium") {
+        return Size.Medium
+    } else if (size === "Intermediate") {
+        return Size.Intermediate
+    } else if (size === "Large") {
+        return Size.Large
+    }
+    return Size.Small
+}
