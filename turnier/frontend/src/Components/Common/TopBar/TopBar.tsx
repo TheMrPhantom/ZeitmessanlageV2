@@ -1,5 +1,5 @@
 import { Person, SettingsOutlined } from '@mui/icons-material'
-import { AppBar, Avatar, Badge, Button, IconButton, Slide, Stack, Toolbar, Typography } from '@mui/material'
+import { AppBar, Avatar, Badge, Button, IconButton, Stack, Toolbar, Typography } from '@mui/material'
 import React, { useEffect, useRef, useState } from 'react'
 import Spacer from '../Spacer'
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -12,7 +12,6 @@ import ListItemButton from '@mui/material/ListItemButton';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import ListItemText from '@mui/material/ListItemText';
 import Box from '@mui/material/Box';
-import Drawer from '@mui/material/Drawer';
 import List from '@mui/material/List';
 import SportsBarIcon from '@mui/icons-material/SportsBar';
 import PersonIcon from '@mui/icons-material/Person';
@@ -39,10 +38,12 @@ type Props = {}
 const TopBar = (props: Props) => {
     const navigate = useNavigate();
     const location = useLocation();
+    // eslint-disable-next-line
     const drawerWidth = 240;
     const common: CommonReducerType = useSelector((state: RootState) => state.common);
     const dispatch = useDispatch()
     const [drawerOpen, setdrawerOpen] = useState(true)
+    // eslint-disable-next-line
     const [drawerVisible, setdrawerVisible] = useState(true)
     const [aboutDialogOpen, setaboutDialogOpen] = useState(false)
 
@@ -121,6 +122,7 @@ const TopBar = (props: Props) => {
         setTimeout(() => { setdrawerVisible(false) }, 250)
     }
 
+    // eslint-disable-next-line
     const getIcon = () => {
         if (showDrawerButton()) {
             return <IconButton
@@ -251,6 +253,7 @@ const TopBar = (props: Props) => {
         </Box>
     }
 
+    // eslint-disable-next-line
     const displayDrawer = () => {
         if (location.pathname.startsWith("/admin")) {
             return adminDrawer()
@@ -271,7 +274,7 @@ const TopBar = (props: Props) => {
             <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1, maxHeight: "77px" }}>
                 <Toolbar sx={{ justifyContent: "space-between" }}>
                     <div style={{ display: "flex" }}>
-                        {getIcon()}
+                        {/*getIcon() Disabled drawer*/}
                         <Button
                             size="large"
                             color="inherit"
@@ -337,6 +340,7 @@ const TopBar = (props: Props) => {
                     </div>
                 </Toolbar>
             </AppBar>
+            {/*
             <Slide direction="right" in={drawerOpen}>
                 <Drawer
                     variant="permanent"
@@ -351,6 +355,7 @@ const TopBar = (props: Props) => {
                     {displayDrawer()}
                 </Drawer>
             </Slide>
+            */}
 
         </>
     )

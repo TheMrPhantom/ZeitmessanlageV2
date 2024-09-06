@@ -73,7 +73,7 @@ class update_data(Resource):
         Update the data of a tournament
         """
 
-        t:Tournament=db.session.query(Tournament).filter(Tournament.date == date, Member.name==name,Tournament.member_id==Member.id).first()
+        t:Tournament|None=db.session.query(Tournament).filter(Tournament.date == date, Member.name==name,Tournament.member_id==Member.id).first()
         
         if t is None:
             # Create new tournament
@@ -363,13 +363,63 @@ class members(Resource):
 
         return util.build_response(members)
     
+    def put(self):
+        """
+        Add a member
+        """
+        post_data = request.json
+        member:Member|None=db.session.query(Member).filter(Member.name == post_data["name"]).first()
+        
+        if member is not None:
+            return util.build_response("Member already exists", 409)
+
+        pw,salt=authenticator.TokenManager.hashPassword(post_data["password"])
+        member=Member(name=post_data["name"],
+                      alias=post_data["alias"],
+                      password=pw,
+                      salt=salt,
+                      verified_until=datetime.fromisoformat(post_data["verifiedUntil"]),
+                      reference=post_data["reference"])
+        db.session.add(member)
+        db.session.commit()
+
+        members=db.session.query(Member).all()
+        # to dict array
+        members=[member.to_dict() for member in members]
+        
+        # fitler admin and moderator
+        members=[member for member in members if member["id"]!=1 and member["id"]!=2]
+
+        return util.build_response(members)
+
+    def delete(self):
+        """
+        Delete a member
+        """
+        post_data = request.json
+        member:Member|None=db.session.query(Member).filter(Member.name == post_data["name"]).first()
+        
+        if member is None:
+            return util.build_response("Member not found", 404)
+        
+        db.session.delete(member)
+        db.session.commit()
+
+        members=db.session.query(Member).all()
+        # to dict array
+        members=[member.to_dict() for member in members]
+        
+        # fitler admin and moderator
+        members=[member for member in members if member["id"]!=1 and member["id"]!=2]
+
+        return util.build_response(members)
+    
 @api.route('/member/<string:attribute>')
 class modify_member(Resource):
     def post(self,attribute):
         """
         Change an attribute of a user
         """
-        print(attribute)
         post_data = request.json
 
         # Get member name
