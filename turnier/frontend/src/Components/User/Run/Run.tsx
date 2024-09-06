@@ -241,7 +241,12 @@ const Run = (props: Props) => {
     const ref = useRef(true)
     useEffect(() => {
         const ws = new WebSocket(window.globalTS.WEBSOCKET)
-
+        ws.onopen = () => {
+            ws.send(JSON.stringify({
+                action: "subscribe",
+                organization: params.organization
+            }))
+        }
         const closeWs = () => {
             try {
                 if (ws !== null) {

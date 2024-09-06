@@ -14,22 +14,37 @@ class Websocket:
         self.server.set_fn_message_received(self.on_recieve)
         self.server.run_forever(threaded=True)
         self.active_connections = 0
+        self.connections={}
 
     def on_connect(self, client, server):
-        print(f"New Client with id {client['id']}")
         self.active_connections += 1
 
     def on_disconnect(self, client, server):
-        print(f"Client disconnect with id {client['id']}")
+        # Remove the clientid from the connections which is a mapping from organization to clientids
+        for organization in self.connections:
+            if client in self.connections[organization]:
+                self.connections[organization].remove(client)
+                print(client,"Unsubscribed from organization")
+
         self.active_connections -= 1
 
     def on_recieve(self, client, server, message):
-        print(f"Client with id {client['id']} sent: {message}")
-        self.server.send_message_to_all(message)
-
-    def send(self, message):
-        self.server.send_message_to_all(json.dumps(message))
-        print("Ws message sent:", message)
+        parsed = json.loads(message)
+        
+        # If the action is subscribe add the clientid to the connections which is a mapping from organization to client objects
+        if parsed["action"] == "subscribe":
+            print(client,"Subscribed to organization")
+            if parsed["organization"] not in self.connections:
+                self.connections[parsed["organization"]] = []
+            self.connections[parsed["organization"]].append(client)
+   
+    def send(self,organization, message):
+        if organization in self.connections:
+            for client in self.connections[organization]:
+                self.server.send_message(client, json.dumps(message))
+            
+        
+        print("Ws message sent:",organization,"->", message)
 
     def trigger_reload_queue(self):
         self.send({"action": "reload_queue"})

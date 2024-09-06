@@ -180,7 +180,7 @@ class update_data(Resource):
                 db.session.delete(p)
         db.session.commit()
 
-        socket.send({"action": "reload"})
+        socket.send(name,{"action": "reload"})
         return util.build_response("OK")
 
 @api.route('/organization/<string:name>')
@@ -296,10 +296,10 @@ class api_timer(Resource):
         action = post_data["action"]
         if action == "start":
             # send websocket message
-            socket.send({"action": "start_timer"})
+            socket.send(name,{"action": "start_timer"})
         if action == "stop":
             # send websocket message
-            socket.send({"action": "stop_timer","message":post_data["time"]})
+            socket.send(name,{"action": "stop_timer","message":post_data["time"]})
         return util.build_response("OK")
 
 @api.route('/<string:name>/current/participant')
@@ -310,7 +310,7 @@ class api_currentParticipant(Resource):
         """
 
         # send websocket message
-        socket.send({"action": "changed_current_participant","message":request.json})
+        socket.send(name,{"action": "changed_current_participant","message":request.json})
         return util.build_response("OK")
 
 @api.route('/<string:name>/current/faults')
@@ -321,7 +321,7 @@ class api_currentFaults(Resource):
         """
 
         # send websocket message
-        socket.send({"action": "changed_current_fault","message":request.json})
+        socket.send(name,{"action": "changed_current_fault","message":request.json})
         return util.build_response("OK")
 
 @api.route('/<string:name>/current/refusals')
@@ -332,7 +332,7 @@ class api_currentRefusal(Resource):
         """
 
         # send websocket message
-        socket.send({"action": "changed_current_refusal","message":request.json})
+        socket.send(name,{"action": "changed_current_refusal","message":request.json})
         return util.build_response("OK")
 
 @api.route('/<string:name>/<string:date>/qr')

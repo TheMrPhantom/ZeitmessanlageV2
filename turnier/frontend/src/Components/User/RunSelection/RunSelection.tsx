@@ -56,6 +56,13 @@ const RunSelection = (props: Props) => {
             ref.current = false;
             const ws = new WebSocket(window.globalTS.WEBSOCKET)
 
+            ws.onopen = () => {
+                ws.send(JSON.stringify({
+                    action: "subscribe",
+                    organization: params.organization
+                }))
+            }
+
             const closeWs = () => {
                 try {
                     if (ws !== null) {
