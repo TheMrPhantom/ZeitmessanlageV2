@@ -42,14 +42,19 @@ const Login = (props: Props) => {
         })();
         doPostRequest("login", { name: username, password: password }, dispatch).then((value) => {
             if (value.code === 200) {
-                //const searchParam = searchParams.get("originalPath")
-                //const notNullSeachParam = searchParam !== null ? searchParam : "/";
+                const searchParam = searchParams.get("originalPath")
+                const notNullSeachParam = searchParam !== null ? searchParam : "/";
+
+                if (notNullSeachParam.startsWith("/admin")) {
+                    navigate(notNullSeachParam)
+                    return
+                }
+
                 sha256(password).then((hash) => {
                     window.localStorage.setItem("pw", hash)
                 })
 
                 window.localStorage.setItem("validation", JSON.stringify(value.content))
-
                 navigate("/use-offline")
             } else if (value.code === 503) {
                 sha256(password).then((hash) => {

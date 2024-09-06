@@ -346,6 +346,64 @@ class qr_code(Resource):
         
         return util.build_response(t.secret)
 
+@api.route('/members')
+class members(Resource):
+    def get(self):
+        """
+        Get the organizers
+        """
+
+        members=db.session.query(Member).all()
+        
+        # to dict array
+        members=[member.to_dict() for member in members]
+        
+        # fitler admin and moderator
+        members=[member for member in members if member["id"]!=1 and member["id"]!=2]
+
+        return util.build_response(members)
+    
+@api.route('/member/<string:attribute>')
+class modify_member(Resource):
+    def post(self,attribute):
+        """
+        Change an attribute of a user
+        """
+        print(attribute)
+        post_data = request.json
+
+        # Get member name
+        member_name=post_data["name"]
+        member:Member=db.session.query(Member).filter(Member.name == member_name).first()
+
+        if member is None:
+            return util.build_response("Member not found", 404)
+        
+        
+        if attribute=="alias":
+            member.alias=post_data["value"]
+        elif attribute=="password":
+            pw,salt=authenticator.TokenManager.hashPassword(post_data["value"])
+            member.password=pw
+            member.salt=salt
+        elif attribute=="verifiedUntil":
+            member.verified_until=datetime.fromisoformat(post_data["value"])
+        elif attribute=="reference":
+            member.reference=post_data["value"]
+        else:
+            print("asdf")
+            return util.build_response("Attribute not found", 404)
+        
+        db.session.commit()
+
+        members=db.session.query(Member).all()
+        # to dict array
+        members=[member.to_dict() for member in members]
+        
+        # fitler admin and moderator
+        members=[member for member in members if member["id"]!=1 and member["id"]!=2]
+
+        return util.build_response(members)
 
 
 @api.route('/login/check')
@@ -454,6 +512,10 @@ class login(Resource):
         password = post_data["password"]
         member_id = db.checkPassword(name, password)
 
+        if member_id==1:
+            token = token_manager.create_token(member_id)
+            return util.build_response("OK", cookieToken=token, cookieMemberID=member_id)
+
         if member_id is not None:
             util.log("Login", "User logged in")
             token = token_manager.create_token(member_id)
@@ -463,6 +525,8 @@ class login(Resource):
             signed_validation=util.sign_message(valid_until+member.name)
 
             return util.build_response({"validUntil":valid_until,"signedValidation":signed_validation,"name":member.name,"alias":member.alias}, cookieToken=token, cookieMemberID=member_id)
+        
+        
         
         return util.build_response("Unauthorized", code=403)
 

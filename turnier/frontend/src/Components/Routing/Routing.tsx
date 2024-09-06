@@ -13,6 +13,7 @@ import { Toolbar } from '@mui/material';
 import { startSerial } from '../Common/StaticFunctionsTyped';
 import UseOffline from '../Organization/UseOffline/UseOffline';
 import PrintQR from '../Organization/Printing/PrintQR';
+import Admin from '../Admin/Dashboard/Admin';
 type Props = {}
 
 const Routing = (props: Props) => {
@@ -63,6 +64,8 @@ const Routing = (props: Props) => {
                 <Route path="/u/:organization/:date/:secret" element={<><Toolbar /><RunSelection /></>} />
                 <Route path="/u/:organization/:date/:secret/:class/:size" element={<><Toolbar /><UserRun /></>} />
 
+                {/*Admin pages*/}
+                <Route path="/admin" element={<><Toolbar /><Admin /></>} />
             </Routes>
         </>
     )

@@ -1,9 +1,9 @@
 export type Member = {
     id: number,
     name: string,
-    balance: number,
-    hidden: boolean,
-    alias: string
+    alias: string,
+    verifiedUntil: string,
+    reference: string
 }
 
 export type Participant = {

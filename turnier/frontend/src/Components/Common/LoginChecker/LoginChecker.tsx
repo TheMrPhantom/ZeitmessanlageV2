@@ -22,7 +22,7 @@ const LoginChecker = (props: Props) => {
         content?: undefined;
     }) => {
         dispatch(setLoginState(value.content))
-        if (!window.location.pathname.startsWith(`/o/${value.content.name}`)) {
+        if (!window.location.pathname.startsWith(`/o/${value.content.name}`) && !window.location.pathname.startsWith(`/admin`)) {
             navigate("/o/" + value.content.name)
         }
     }, [dispatch, navigate])
