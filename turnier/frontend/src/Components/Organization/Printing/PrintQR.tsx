@@ -25,6 +25,8 @@ const PrintQR = (props: Props) => {
                 <Typography variant="h3">Hier gehts zu den Live-Ergebnissen</Typography>
 
                 <QRCode value={qr} />
+                <Typography variant="h5">Scan den QR-Code oder gehe auf die folgende URL:</Typography>
+                <Typography >{qr}</Typography>
             </Stack>
         </PrintingA4>
     )
