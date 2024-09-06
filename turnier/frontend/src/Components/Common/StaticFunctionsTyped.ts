@@ -313,7 +313,7 @@ export const getRanking: (participants: Participant[] | undefined, run: Run, cal
             return result.time !== -2 && p.skillLevel === runToRunClass(run) && (p.size === size || size === undefined);
         });
 
-        return filteredParticipants?.sort((a, b) => {
+        const sorted = filteredParticipants?.sort((a, b) => {
             const resultA = getResultFromParticipant(run, a)
             const resultB = getResultFromParticipant(run, b)
             const totalFaultsA = getTotalFaults(resultA, calculatedStandardTime)
@@ -327,11 +327,42 @@ export const getRanking: (participants: Participant[] | undefined, run: Run, cal
                 return resultA.time - resultB.time
             }
             return totalFaultsA - totalFaultsB
-        }).map((p, index) => {
-            const result = getResultFromParticipant(run, p)
-
-            return { result: result, participant: p, rank: result.time !== -1 ? index + 1 : -1, timefaults: getTimeFaults(result, calculatedStandardTime) }
         })
+
+        if (filteredParticipants.length === 0) {
+            return []
+        }
+
+        //Participants with same time and total faults get the same rank
+        let currentrank = 1
+        let lastResult = getResultFromParticipant(run, sorted[0])
+        let lastTotalFaults = getTotalFaults(lastResult, calculatedStandardTime)
+        let lastTime = lastResult.time
+        let lastRank = 1
+        let sameCounter = -1
+        const results = sorted.map((p, index) => {
+            const result = getResultFromParticipant(run, p)
+            const totalFaults = getTotalFaults(result, calculatedStandardTime)
+            const time = result.time
+            if (time === -1) {
+                return { result: result, participant: p, rank: -1, timefaults: -1 }
+            }
+            if (totalFaults === lastTotalFaults && time === lastTime) {
+                sameCounter++
+                return { result: result, participant: p, rank: lastRank, timefaults: lastTotalFaults }
+            }
+            currentrank++
+            currentrank += sameCounter
+            sameCounter = 0
+            lastResult = result
+            lastTotalFaults = totalFaults
+            lastTime = time
+            lastRank = currentrank
+
+            return { result: result, participant: p, rank: currentrank, timefaults: totalFaults }
+        })
+        return results
+
     }
 
 export const getKombiRanking: (participants: Participant[], skill: SkillLevel, size: Size, standardTimeA: number, standardTimeJ: number) => KombiResult[] =
