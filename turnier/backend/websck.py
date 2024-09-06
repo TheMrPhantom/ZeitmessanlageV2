@@ -24,7 +24,7 @@ class Websocket:
         for organization in self.connections:
             if client in self.connections[organization]:
                 self.connections[organization].remove(client)
-                print(client,"Unsubscribed from organization")
+                print(client['id'],"Unsubscribed from organization")
 
         self.active_connections -= 1
 
@@ -33,7 +33,7 @@ class Websocket:
         
         # If the action is subscribe add the clientid to the connections which is a mapping from organization to client objects
         if parsed["action"] == "subscribe":
-            print(client,"Subscribed to organization")
+            print(client['id'],"Subscribed to organization")
             if parsed["organization"] not in self.connections:
                 self.connections[parsed["organization"]] = []
             self.connections[parsed["organization"]].append(client)

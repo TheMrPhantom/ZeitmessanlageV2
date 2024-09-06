@@ -15,7 +15,12 @@ export type Participant = {
     skillLevel: SkillLevel,
     size: Size,
     resultA: Result,
-    resultJ: Result
+    resultJ: Result,
+    mail?: string,
+    association?: string,
+    associationMemberNumber?: string,
+    chipNumber?: string,
+    measureDog?: boolean,
 }
 
 export enum RunCategory {

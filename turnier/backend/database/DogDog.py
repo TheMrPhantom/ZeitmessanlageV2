@@ -31,6 +31,11 @@ class Participant(db.Model):
     dog = sql.Column(sql.String, nullable=False)
     skill_level = sql.Column(sql.Integer, nullable=False)
     size = sql.Column(sql.Integer, nullable=False)
+    mail= sql.Column(sql.String, nullable=False)
+    association = sql.Column(sql.String, nullable=False)
+    association_member_number = sql.Column(sql.String, nullable=False)
+    chip_number = sql.Column(sql.String, nullable=False)
+    measure_dog = sql.Column(sql.Boolean,default=False, nullable=False)
     turnament_id = sql.Column(sql.Integer, sql.ForeignKey('tournament.id', ondelete='CASCADE'), nullable=True)
     result_a_id = sql.Column(sql.Integer, sql.ForeignKey('result.id', ondelete='SET NULL'), nullable=True)
     result_a = relationship('database.DogDog.Result',foreign_keys=[result_a_id], lazy="joined")
@@ -46,6 +51,24 @@ class Participant(db.Model):
             "dog": self.dog,
             "skillLevel": self.skill_level,
             "size": self.size,
+            "resultA": self.result_a.to_dict() if self.result_a else None,
+            "resultJ": self.result_j.to_dict() if self.result_j else None
+        }
+    
+    def to_admin_dict(self):
+        return {
+            "startNumber": self.start_number,
+            "sorting": self.sorting,
+            "name": self.name,
+            "club": self.club,
+            "dog": self.dog,
+            "skillLevel": self.skill_level,
+            "size": self.size,
+            "mail": self.mail,
+            "association": self.association,
+            "associationMemberNumber": self.association_member_number,
+            "chipNumber": self.chip_number,
+            "measureDog": self.measure_dog,
             "resultA": self.result_a.to_dict() if self.result_a else None,
             "resultJ": self.result_j.to_dict() if self.result_j else None
         }
@@ -84,5 +107,14 @@ class Tournament(db.Model):
             "judge": self.judge,
             "name": self.name,
             "participants": [p.to_dict() for p in self.participants],
+            "runs": [r.to_dict() for r in self.runs]
+        }
+
+    def to_admin_dict(self):
+        return {
+            "date": self.date,
+            "judge": self.judge,
+            "name": self.name,
+            "participants": [p.to_admin_dict() for p in self.participants],
             "runs": [r.to_dict() for r in self.runs]
         }

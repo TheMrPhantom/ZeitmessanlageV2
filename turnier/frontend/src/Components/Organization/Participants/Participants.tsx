@@ -161,6 +161,11 @@ const Participants = (props: Props) => {
                                         dog: line[15],
                                         skillLevel: skillLevel,
                                         size: size,
+                                        mail: line[5],
+                                        association: line[7],
+                                        associationMemberNumber: line[8],
+                                        chipNumber: line[21],
+                                        measureDog: line[44] === "1",
                                         resultA: {
                                             time: -2,
                                             faults: 0,

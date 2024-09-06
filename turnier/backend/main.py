@@ -127,6 +127,11 @@ class update_data(Resource):
                 participant_info.name=participant["name"]
                 participant_info.club=participant["club"]
                 participant_info.dog=participant["dog"]
+                participant_info.mail=participant["mail"]
+                participant_info.association=participant["association"]
+                participant_info.association_member_number=participant["associationMemberNumber"]
+                participant_info.chip_number=participant["chipNumber"]
+                participant_info.measure_dog=participant["measureDog"]
                 participant_info.skill_level=participant["skillLevel"]
                 participant_info.size=participant["size"]
                 db.session.add(participant_info)
@@ -280,6 +285,13 @@ class organizer(Resource):
             """
             Get all data of an organizer
             """
+
+            memberID=request.cookies.get(f"{util.auth_cookie_memberID}memberID")
+            
+            member=db.get_user(memberID)
+            if member.name!=name and memberID!="1":
+                return util.build_response("Unauthorized", 403)
+
             tournaments:List[Tournament]=db.session.query(Tournament).filter(Member.name==name,Tournament.member_id==Member.id).all()
             tournaments=[t.to_dict() for t in tournaments]
             return util.build_response({"name":name,"turnaments":tournaments})

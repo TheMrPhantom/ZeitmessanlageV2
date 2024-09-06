@@ -43,7 +43,7 @@ class Queries:
 
     def get_user(self, member_id)->Member:
         member: Member = self.session.query(
-            Member).filter_by(id=member_id).first()
+            Member).filter_by(id=int(member_id)).first()
         return member
 
 
