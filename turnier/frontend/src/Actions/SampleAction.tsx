@@ -71,6 +71,13 @@ export const addParticipant = (date: Date, participant: Participant) => {
     }
 }
 
+export const updateParticipant = (date: Date, participant: Participant) => {
+    return {
+        type: "UPDATE_PARTICIPANT",
+        payload: { date: date, participant: participant }
+    }
+}
+
 export const removeParticipant = (date: Date, participant: Participant) => {
     return {
         type: "REMOVE_PARTICIPANT",

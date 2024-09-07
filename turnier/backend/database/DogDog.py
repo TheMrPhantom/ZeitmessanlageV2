@@ -36,6 +36,9 @@ class Participant(db.Model):
     association_member_number = sql.Column(sql.String, nullable=False)
     chip_number = sql.Column(sql.String, nullable=False)
     measure_dog = sql.Column(sql.Boolean,default=False, nullable=False)
+    registered = sql.Column(sql.Boolean, default=False, nullable=False)
+    ready = sql.Column(sql.Boolean, default=False, nullable=False)
+    paid = sql.Column(sql.Boolean, nullable=False)
     turnament_id = sql.Column(sql.Integer, sql.ForeignKey('tournament.id', ondelete='CASCADE'), nullable=True)
     result_a_id = sql.Column(sql.Integer, sql.ForeignKey('result.id', ondelete='SET NULL'), nullable=True)
     result_a = relationship('database.DogDog.Result',foreign_keys=[result_a_id], lazy="joined")
@@ -69,6 +72,9 @@ class Participant(db.Model):
             "associationMemberNumber": self.association_member_number,
             "chipNumber": self.chip_number,
             "measureDog": self.measure_dog,
+            "registered": self.registered,
+            "ready": self.ready,
+            "paid": self.paid,
             "resultA": self.result_a.to_dict() if self.result_a else None,
             "resultJ": self.result_j.to_dict() if self.result_j else None
         }

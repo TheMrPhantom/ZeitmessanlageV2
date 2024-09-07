@@ -21,6 +21,9 @@ export type Participant = {
     associationMemberNumber?: string,
     chipNumber?: string,
     measureDog?: boolean,
+    registered?: boolean,
+    ready?: boolean,
+    paid?: boolean,
 }
 
 export enum RunCategory {

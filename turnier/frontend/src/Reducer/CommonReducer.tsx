@@ -194,6 +194,21 @@ const reducer = (state = initialState, { type, payload }: any) => {
         case "SET_SENDING_FAILED":
             newState.sendingFailed = payload
             return newState
+        case "UPDATE_PARTICIPANT":
+            newState.organization.turnaments.forEach((t) => {
+                console.log("asdas")
+                if (dateToURLString(new Date(t.date)) === dateToURLString(payload.date)) {
+                    const participant = t.participants.find((p) => p.startNumber === payload.participant.startNumber)
+                    console.log(participant)
+                    //Replace participant with new one
+                    if (participant) {
+                        const index = t.participants.indexOf(participant)
+                        t.participants[index] = payload.participant
+                    }
+                }
+            })
+            console.log(newState)
+            return newState
         default:
             return state
     }

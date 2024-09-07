@@ -1,4 +1,4 @@
-import { Button, FormControl, InputLabel, MenuItem, Paper, Select, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
+import { Button, Checkbox, FormControl, InputLabel, MenuItem, Paper, Select, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
 import React, { useState } from 'react'
 import DeleteIcon from '@mui/icons-material/Delete';
 import style from './participants.module.scss'
@@ -8,10 +8,13 @@ import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom'
 import { dateToURLString } from '../../Common/StaticFunctions';
-import { addParticipant, removeParticipant } from '../../../Actions/SampleAction';
+import { addParticipant, removeParticipant, updateParticipant } from '../../../Actions/SampleAction';
 import { loadPermanent, runClassToString, sizeToString, storePermanent, stringToSize, stringToSkillLevel, updateDatabase } from '../../Common/StaticFunctionsTyped';
 import { usePapaParse } from 'react-papaparse';
 import ImportParticipants from './ImportParticipants';
+import HowToRegIcon from '@mui/icons-material/HowToReg';
+import AlarmOnIcon from '@mui/icons-material/AlarmOn';
+import PaidIcon from '@mui/icons-material/Paid';
 
 type Props = {}
 
@@ -166,6 +169,9 @@ const Participants = (props: Props) => {
                                         associationMemberNumber: line[8],
                                         chipNumber: line[21],
                                         measureDog: line[44] === "1",
+                                        registered: false,
+                                        ready: false,
+                                        paid: line[31] === "1",
                                         resultA: {
                                             time: -2,
                                             faults: 0,
@@ -284,6 +290,9 @@ const Participants = (props: Props) => {
                                 <TableCell>Hund</TableCell>
                                 <TableCell>Klasse</TableCell>
                                 <TableCell>Größe</TableCell>
+                                <TableCell align="center"><PaidIcon /></TableCell>
+                                <TableCell align="center"><HowToRegIcon /></TableCell>
+                                <TableCell align="center"><AlarmOnIcon /></TableCell>
                                 <TableCell>Entfernen</TableCell>
                             </TableRow>
                         </TableHead>
@@ -298,6 +307,30 @@ const Participants = (props: Props) => {
                                         <TableCell>{participant.dog}</TableCell>
                                         <TableCell>{runClassToString(participant.skillLevel)}</TableCell>
                                         <TableCell>{sizeToString(participant.size)}</TableCell>
+                                        <TableCell align="center">
+                                            <Checkbox checked={participant.paid} onChange={(value) => {
+                                                participant.paid = value.target.checked
+                                                dispatch(updateParticipant(turnamentDate, participant))
+                                                storePermanent(organization, common.organization)
+                                                updateDatabase(common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate)), organization, dispatch)
+                                            }} />
+                                        </TableCell>
+                                        <TableCell align="center">
+                                            <Checkbox checked={participant.registered} onChange={(value) => {
+                                                participant.registered = value.target.checked
+                                                dispatch(updateParticipant(turnamentDate, participant))
+                                                storePermanent(organization, common.organization)
+                                                updateDatabase(common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate)), organization, dispatch)
+                                            }} />
+                                        </TableCell>
+                                        <TableCell align="center">
+                                            <Checkbox checked={participant.ready} onChange={(value) => {
+                                                participant.ready = value.target.checked
+                                                dispatch(updateParticipant(turnamentDate, participant))
+                                                storePermanent(organization, common.organization)
+                                                updateDatabase(common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate)), organization, dispatch)
+                                            }} />
+                                        </TableCell>
                                         <TableCell>
                                             <Button color='error' variant="outlined" onClick={() => {
                                                 dispatch(removeParticipant(turnamentDate, participant))

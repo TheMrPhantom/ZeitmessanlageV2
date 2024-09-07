@@ -134,6 +134,9 @@ class update_data(Resource):
                 participant_info.measure_dog=participant["measureDog"]
                 participant_info.skill_level=participant["skillLevel"]
                 participant_info.size=participant["size"]
+                participant_info.registered=participant["registered"]
+                participant_info.ready=participant["ready"]
+                participant_info.paid=participant["paid"]
                 db.session.add(participant_info)
                 
                 # Add result_a
@@ -161,6 +164,9 @@ class update_data(Resource):
                 participant_info.dog=participant["dog"]
                 participant_info.skill_level=participant["skillLevel"]
                 participant_info.size=participant["size"]
+                participant_info.registered=participant["registered"]
+                participant_info.ready=participant["ready"]
+                participant_info.paid=participant["paid"]
 
                 participant_info.result_a.time=participant["resultA"]["time"]
                 participant_info.result_a.faults=participant["resultA"]["faults"]
