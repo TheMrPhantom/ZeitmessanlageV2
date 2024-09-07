@@ -15,8 +15,173 @@ import ImportParticipants from './ImportParticipants';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
 import AlarmOnIcon from '@mui/icons-material/AlarmOn';
 import PaidIcon from '@mui/icons-material/Paid';
+import { ArrowUpward, ArrowDownward } from '@mui/icons-material';
 
 type Props = {}
+type TableProps = {
+    common: CommonReducerType,
+    turnamentDate: Date,
+    organization: string
+}
+
+const ParticipantTable = (props: TableProps) => {
+    const dispatch = useDispatch();
+    const [sortConfig, setSortConfig] = useState<{ key: string | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
+
+    const participants = props.common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(props.turnamentDate))?.participants || [];
+
+    // Sorting function
+    const sortedParticipants = [...participants].sort((a: any, b: any) => {
+        if (sortConfig.key) {
+            const aValue = a[sortConfig.key];
+            const bValue = b[sortConfig.key];
+
+            if (aValue === bValue) return 0;
+
+            const sortDirection = sortConfig.direction === 'asc' ? 1 : -1;
+            return aValue > bValue ? sortDirection : -sortDirection;
+        }
+        // Default sorting by startNumber when no column is actively sorted
+        return a.startNumber - b.startNumber;
+    });
+
+    // Handle sorting with three states: asc, desc, and default (unsorted)
+    const handleSort = (key: string) => {
+        // Prevent sorting on "Startnummer" and "Entfernen" columns
+        if (key === 'startNumber' || key === 'delete') return;
+
+        if (sortConfig.key === key) {
+            if (sortConfig.direction === 'asc') {
+                // Change from asc to desc
+                setSortConfig({ key, direction: 'desc' });
+            } else if (sortConfig.direction === 'desc') {
+                // Change from desc to default (startNumber sorting)
+                setSortConfig({ key: null, direction: null });
+            } else {
+                // Reset to asc
+                setSortConfig({ key, direction: 'asc' });
+            }
+        } else {
+            // Initial sort is ascending
+            setSortConfig({ key, direction: 'asc' });
+        }
+    };
+
+    // Helper to render sorting arrows
+    const renderSortIcon = (key: string) => {
+        if (sortConfig.key === key) {
+            if (sortConfig.direction === 'asc') {
+                return <ArrowUpward fontSize="small" />;
+            } else if (sortConfig.direction === 'desc') {
+                return <ArrowDownward fontSize="small" />;
+            }
+        }
+        return null;
+    };
+
+    return (
+        <TableContainer component={Paper}>
+            <Table size="small">
+                <TableHead>
+                    <TableRow>
+                        <TableCell>Startnummer</TableCell>
+                        <TableCell onClick={() => handleSort('name')} style={{ cursor: 'pointer' }}>
+                            Name
+                            {renderSortIcon('name')}
+                        </TableCell>
+                        <TableCell onClick={() => handleSort('club')} style={{ cursor: 'pointer' }}>
+                            Verein
+                            {renderSortIcon('club')}
+                        </TableCell>
+                        <TableCell onClick={() => handleSort('dog')} style={{ cursor: 'pointer' }}>
+                            Hund
+                            {renderSortIcon('dog')}
+                        </TableCell>
+                        <TableCell onClick={() => handleSort('skillLevel')} style={{ cursor: 'pointer' }}>
+                            Klasse
+                            {renderSortIcon('skillLevel')}
+                        </TableCell>
+                        <TableCell onClick={() => handleSort('size')} style={{ cursor: 'pointer' }}>
+                            Größe
+                            {renderSortIcon('size')}
+                        </TableCell>
+                        <TableCell align="center" onClick={() => handleSort('paid')} style={{ cursor: 'pointer' }}>
+                            <PaidIcon />
+                            {renderSortIcon('paid')}
+                        </TableCell>
+                        <TableCell align="center" onClick={() => handleSort('registered')} style={{ cursor: 'pointer' }}>
+                            <HowToRegIcon />
+                            {renderSortIcon('registered')}
+                        </TableCell>
+                        <TableCell align="center" onClick={() => handleSort('ready')} style={{ cursor: 'pointer' }}>
+                            <AlarmOnIcon />
+                            {renderSortIcon('ready')}
+                        </TableCell>
+                        <TableCell>Entfernen</TableCell>
+                    </TableRow>
+                </TableHead>
+                <TableBody>
+                    {sortedParticipants.map((participant, index) => (
+                        <TableRow key={index}>
+                            <TableCell>{participant.startNumber}</TableCell>
+                            <TableCell>{participant.name}</TableCell>
+                            <TableCell>{participant.club}</TableCell>
+                            <TableCell>{participant.dog}</TableCell>
+                            <TableCell>{runClassToString(participant.skillLevel)}</TableCell>
+                            <TableCell>{sizeToString(participant.size)}</TableCell>
+                            <TableCell align="center">
+                                <Checkbox
+                                    checked={participant.paid}
+                                    onChange={(value) => {
+                                        participant.paid = value.target.checked;
+                                        dispatch(updateParticipant(props.turnamentDate, participant));
+                                        storePermanent(props.organization, props.common.organization);
+                                        updateDatabase(props.common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(props.turnamentDate)), props.organization, dispatch);
+                                    }}
+                                />
+                            </TableCell>
+                            <TableCell align="center">
+                                <Checkbox
+                                    checked={participant.registered}
+                                    onChange={(value) => {
+                                        participant.registered = value.target.checked;
+                                        dispatch(updateParticipant(props.turnamentDate, participant));
+                                        storePermanent(props.organization, props.common.organization);
+                                        updateDatabase(props.common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(props.turnamentDate)), props.organization, dispatch);
+                                    }}
+                                />
+                            </TableCell>
+                            <TableCell align="center">
+                                <Checkbox
+                                    checked={participant.ready}
+                                    onChange={(value) => {
+                                        participant.ready = value.target.checked;
+                                        dispatch(updateParticipant(props.turnamentDate, participant));
+                                        storePermanent(props.organization, props.common.organization);
+                                        updateDatabase(props.common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(props.turnamentDate)), props.organization, dispatch);
+                                    }}
+                                />
+                            </TableCell>
+                            <TableCell>
+                                <Button
+                                    color="error"
+                                    variant="outlined"
+                                    onClick={() => {
+                                        dispatch(removeParticipant(props.turnamentDate, participant));
+                                        storePermanent(props.organization, props.common.organization);
+                                        updateDatabase(props.common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(props.turnamentDate)), props.organization, dispatch);
+                                    }}
+                                >
+                                    <DeleteIcon />
+                                </Button>
+                            </TableCell>
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>
+        </TableContainer>
+    );
+};
 
 const Participants = (props: Props) => {
     const { readString } = usePapaParse();
@@ -280,74 +445,7 @@ const Participants = (props: Props) => {
             </Stack>
             <Stack gap={2}>
                 <Typography variant='h5'>Starter</Typography>
-                <TableContainer component={Paper} className={style.participantTable}>
-                    <Table size="small">
-                        <TableHead>
-                            <TableRow>
-                                <TableCell>Startnummer</TableCell>
-                                <TableCell>Name</TableCell>
-                                <TableCell>Verein</TableCell>
-                                <TableCell>Hund</TableCell>
-                                <TableCell>Klasse</TableCell>
-                                <TableCell>Größe</TableCell>
-                                <TableCell align="center"><PaidIcon /></TableCell>
-                                <TableCell align="center"><HowToRegIcon /></TableCell>
-                                <TableCell align="center"><AlarmOnIcon /></TableCell>
-                                <TableCell>Entfernen</TableCell>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-
-                            {common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate))?.participants.map((participant, index) => {
-                                return (
-                                    <TableRow key={index}>
-                                        <TableCell>{participant.startNumber}</TableCell>
-                                        <TableCell>{participant.name}</TableCell>
-                                        <TableCell>{participant.club}</TableCell>
-                                        <TableCell>{participant.dog}</TableCell>
-                                        <TableCell>{runClassToString(participant.skillLevel)}</TableCell>
-                                        <TableCell>{sizeToString(participant.size)}</TableCell>
-                                        <TableCell align="center">
-                                            <Checkbox checked={participant.paid} onChange={(value) => {
-                                                participant.paid = value.target.checked
-                                                dispatch(updateParticipant(turnamentDate, participant))
-                                                storePermanent(organization, common.organization)
-                                                updateDatabase(common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate)), organization, dispatch)
-                                            }} />
-                                        </TableCell>
-                                        <TableCell align="center">
-                                            <Checkbox checked={participant.registered} onChange={(value) => {
-                                                participant.registered = value.target.checked
-                                                dispatch(updateParticipant(turnamentDate, participant))
-                                                storePermanent(organization, common.organization)
-                                                updateDatabase(common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate)), organization, dispatch)
-                                            }} />
-                                        </TableCell>
-                                        <TableCell align="center">
-                                            <Checkbox checked={participant.ready} onChange={(value) => {
-                                                participant.ready = value.target.checked
-                                                dispatch(updateParticipant(turnamentDate, participant))
-                                                storePermanent(organization, common.organization)
-                                                updateDatabase(common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate)), organization, dispatch)
-                                            }} />
-                                        </TableCell>
-                                        <TableCell>
-                                            <Button color='error' variant="outlined" onClick={() => {
-                                                dispatch(removeParticipant(turnamentDate, participant))
-                                                //Store the new participants in the local storage
-                                                storePermanent(organization, common.organization)
-                                                updateDatabase(common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate)), organization, dispatch)
-                                            }}>
-                                                <DeleteIcon />
-                                            </Button>
-                                        </TableCell>
-                                    </TableRow>
-                                )
-                            })
-                            }
-                        </TableBody>
-                    </Table>
-                </TableContainer>
+                <ParticipantTable common={common} turnamentDate={turnamentDate} organization={organization} />
 
             </Stack>
         </Stack>
