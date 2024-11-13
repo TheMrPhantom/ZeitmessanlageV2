@@ -469,7 +469,7 @@ const Participants = (props: Props) => {
 
             </Stack>
         </Stack>
-        <ImportParticipants tournaments={parsedInputFile} close={() => { setparsedInputFile(null) }} />
+        <ImportParticipants parsedInput={parsedInputFile} close={() => { setparsedInputFile(null) }} />
     </>
     )
 }

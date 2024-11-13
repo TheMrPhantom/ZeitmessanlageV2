@@ -11,7 +11,7 @@ import style from './participants.module.scss'
 import { dateToString, dateToURLString } from '../../Common/StaticFunctions';
 
 type Props = {
-    tournaments: Array<{ date: string, participants: Participant[] }> | null,
+    parsedInput: Array<{ date: string, participants: Participant[] }> | null,
     close: () => void
 }
 
@@ -30,7 +30,7 @@ const ImportParticipants = (props: Props) => {
     const generateNewParticipantsList = useCallback(() => {
         let participantsToOverrite: Participant[] = []
 
-        const t = props.tournaments
+        const t = props.parsedInput
         if (t === null) {
             return
         }
@@ -81,31 +81,37 @@ const ImportParticipants = (props: Props) => {
 
         } else if (selectedVariant === 1) {
             participantsToOverrite = newParticipants
-            /*Add old participants that are not part of new participants */
-            const oldParticipantsToAdd = oldParticipants.filter((oldParticipant) => {
-                return !newParticipants.some((newParticipant) => {
+            /*Get participants from the new participants that are not part of the old participants */
+            const toAdd = newParticipants.filter((newParticipant) => {
+                return !oldParticipants.some((oldParticipant) => {
                     return oldParticipant.name === newParticipant.name && oldParticipant.dog === newParticipant.dog
                 })
             })
 
-            participantsToOverrite = [...participantsToOverrite, ...oldParticipantsToAdd]
+            participantsToOverrite = [...oldParticipants, ...toAdd]
 
         } else if (selectedVariant === 2) {
-            participantsToOverrite = newParticipants
-            /*Add old participants that are not part of new participants */
-            const oldParticipantsToAdd = oldParticipants.filter((oldParticipant) => {
-                return !newParticipants.some((newParticipant) => {
+            /*Get participants from the new participants that are not part of the old participants */
+            const toAdd = newParticipants.filter((newParticipant) => {
+                return !oldParticipants.some((oldParticipant) => {
                     return oldParticipant.name === newParticipant.name && oldParticipant.dog === newParticipant.dog
                 })
             })
 
+
+
             /*Set all old participants to DIS */
-            oldParticipantsToAdd.forEach((participant) => {
-                participant.resultA.time = -1;
-                participant.resultJ.time = -1;
+            oldParticipants.forEach((participant) => {
+                if (!newParticipants.some((newParticipant) => {
+                    return participant.name === newParticipant.name && participant.dog === newParticipant.dog
+                }
+                )) {
+                    participant.resultA.time = -1;
+                    participant.resultJ.time = -1;
+                }
             })
 
-            participantsToOverrite = [...participantsToOverrite, ...oldParticipantsToAdd]
+            participantsToOverrite = [...oldParticipants, ...toAdd]
         }
 
         participantsToOverrite = participantsToOverrite.map((participant, index) => {
@@ -136,7 +142,7 @@ const ImportParticipants = (props: Props) => {
         console.log(participantsToOverrite)
         setparticipantsToUpload(participantsToOverrite)
 
-    }, [common.organization?.turnaments, params.date, props.tournaments, selectedDate, selectedVariant])
+    }, [common.organization?.turnaments, params.date, props.parsedInput, selectedDate, selectedVariant])
 
     useEffect(() => {
         generateNewParticipantsList()
@@ -198,7 +204,7 @@ const ImportParticipants = (props: Props) => {
     }).length
 
     return (
-        <Dialog open={props.tournaments !== null} onClose={props.close}  >
+        <Dialog open={props.parsedInput !== null} onClose={props.close}  >
             <DialogTitle>
                 <Stack direction="row" gap={2} flexWrap="wrap">
                     <Typography variant='h4'>Teilnehmer des Turniertags:</Typography>
@@ -211,7 +217,7 @@ const ImportParticipants = (props: Props) => {
             </DialogTitle>
             <DialogContent >
                 <Stack direction="column" gap={3}>
-                    <Typography variant='h5'>{props.tournaments?.length} Turnier(e) Erkannt</Typography>
+                    <Typography variant='h5'>{props.parsedInput?.length} Turnier(e) Erkannt</Typography>
                     <FormControl fullWidth>
                         <InputLabel >Turniertag</InputLabel>
                         <Select
@@ -221,7 +227,7 @@ const ImportParticipants = (props: Props) => {
                                 setselectedDate(Number(e.target.value))
                             }}
                         >
-                            {props.tournaments?.map((tournament, index) => {
+                            {props.parsedInput?.map((tournament, index) => {
                                 return <MenuItem key={index} value={index}>{dateToString(new Date(tournament.date))}</MenuItem>
                             })
                             }
