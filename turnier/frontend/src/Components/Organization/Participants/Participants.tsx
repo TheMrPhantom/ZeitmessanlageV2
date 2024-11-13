@@ -86,37 +86,54 @@ const ParticipantTable = (props: TableProps) => {
                     <TableRow>
                         <TableCell>Startnummer</TableCell>
                         <TableCell onClick={() => handleSort('name')} style={{ cursor: 'pointer' }}>
-                            Name
-                            {renderSortIcon('name')}
+                            <Stack flexDirection="row" alignItems="center" gap={1}>
+                                <div>Name</div>
+                                {renderSortIcon('name')}
+                            </Stack>
                         </TableCell>
                         <TableCell onClick={() => handleSort('club')} style={{ cursor: 'pointer' }}>
-                            Verein
-                            {renderSortIcon('club')}
+                            <Stack flexDirection="row" alignItems="center" gap={1}>
+                                <div>Verein</div>
+                                {renderSortIcon('club')}
+                            </Stack>
                         </TableCell>
                         <TableCell onClick={() => handleSort('dog')} style={{ cursor: 'pointer' }}>
-                            Hund
-                            {renderSortIcon('dog')}
+                            <Stack flexDirection="row" alignItems="center" gap={1}>
+                                <div>Hund</div>
+                                {renderSortIcon('dog')}
+                            </Stack>
                         </TableCell>
                         <TableCell onClick={() => handleSort('skillLevel')} style={{ cursor: 'pointer' }}>
-                            Klasse
-                            {renderSortIcon('skillLevel')}
+                            <Stack flexDirection="row" alignItems="center" gap={1}>
+                                <div>Klasse</div>
+                                {renderSortIcon('skillLevel')}
+                            </Stack>
                         </TableCell>
                         <TableCell onClick={() => handleSort('size')} style={{ cursor: 'pointer' }}>
-                            Größe
-                            {renderSortIcon('size')}
+                            <Stack flexDirection="row" alignItems="center" gap={1}>
+                                <div>Größe</div>
+                                {renderSortIcon('size')}
+                            </Stack>
                         </TableCell>
                         <TableCell align="center" onClick={() => handleSort('paid')} style={{ cursor: 'pointer' }}>
-                            <PaidIcon />
-                            {renderSortIcon('paid')}
+                            <Stack flexDirection="row" alignItems="center" gap={1}>
+                                <PaidIcon />
+                                {renderSortIcon('paid')}
+                            </Stack>
                         </TableCell>
                         <TableCell align="center" onClick={() => handleSort('registered')} style={{ cursor: 'pointer' }}>
-                            <HowToRegIcon />
-                            {renderSortIcon('registered')}
+                            <Stack flexDirection="row" alignItems="center" gap={1}>
+                                <HowToRegIcon />
+                                {renderSortIcon('registered')}
+                            </Stack>
                         </TableCell>
                         <TableCell align="center" onClick={() => handleSort('ready')} style={{ cursor: 'pointer' }}>
-                            <AlarmOnIcon />
-                            {renderSortIcon('ready')}
+                            <Stack flexDirection="row" alignItems="center" gap={1}>
+                                <AlarmOnIcon />
+                                {renderSortIcon('ready')}
+                            </Stack>
                         </TableCell>
+
                         <TableCell>Entfernen</TableCell>
                     </TableRow>
                 </TableHead>
