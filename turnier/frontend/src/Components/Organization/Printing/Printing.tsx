@@ -78,12 +78,12 @@ const Printing = (props: Props) => {
                         currentPageSize = 0
                         //Create new Table
 
-                        currentTable = { header: { ...run, listtype: ListType.result }, rows: [{ ...result, timeFaults: result.timeFaults, place: index + 1 }] }
+                        currentTable = { header: { ...run, listtype: ListType.result }, rows: [{ ...result, timeFaults: result.timeFaults, place: result.result.time > 0 ? index + 1 : undefined }] }
                         currentPageSize += infoHeight + tableHeader + rowHeight
 
                     } else {
                         /*We want to create a new row and have to space to do so*/
-                        currentTable?.rows.push({ ...result, timeFaults: result.timeFaults, place: index + 1 })
+                        currentTable?.rows.push({ ...result, timeFaults: result.timeFaults, place: result.result.time > 0 ? index + 1 : undefined })
                         currentPageSize += rowHeight
                     }
                 })

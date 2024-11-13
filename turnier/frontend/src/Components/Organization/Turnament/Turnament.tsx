@@ -8,7 +8,7 @@ import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useParams } from 'react-router-dom'
-import { dateToURLString, getAndStore } from '../../Common/StaticFunctions'
+import { dateToURLString } from '../../Common/StaticFunctions'
 import { changeDate, changeJudge, changeLength, changeParticipants, changeSpeed, changeTurnamentName, clearPrints, } from '../../../Actions/SampleAction'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider/LocalizationProvider'
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'

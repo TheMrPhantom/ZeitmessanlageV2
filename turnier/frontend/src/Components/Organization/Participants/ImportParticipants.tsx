@@ -112,6 +112,28 @@ const ImportParticipants = (props: Props) => {
             return { ...participant, startNumber: index + 1 }
         })
 
+        //Set ordering for each skill level from 1 to n
+        const skillLevels = [SkillLevel.A0, SkillLevel.A1, SkillLevel.A2, SkillLevel.A3]
+        const sizes = [Size.Small, Size.Medium, Size.Intermediate, Size.Large]
+        skillLevels.forEach((skillLevel) => {
+            sizes.forEach((size) => {
+                const participantsOfSkillLevel = participantsToOverrite.filter((participant) => {
+                    return participant.skillLevel === skillLevel && participant.size === size
+                })
+
+                participantsOfSkillLevel.forEach((participant, index) => {
+                    const oldParticipant = participantsToOverrite.find((oldParticipant) => {
+                        return oldParticipant.name === participant.name && oldParticipant.dog === participant.dog
+                    })
+                    if (oldParticipant) {
+                        oldParticipant.sorting = index
+                        console.log(index + 1)
+                    }
+                })
+            })
+        }
+        )
+        console.log(participantsToOverrite)
         setparticipantsToUpload(participantsToOverrite)
 
     }, [common.organization?.turnaments, params.date, props.tournaments, selectedDate, selectedVariant])
