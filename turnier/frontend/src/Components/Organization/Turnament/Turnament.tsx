@@ -2,13 +2,13 @@ import { Button, InputAdornment, Paper, Stack, Table, TableBody, TableCell, Tabl
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import style from './turnament.module.scss'
 import { ALL_HEIGHTS, ALL_RUNS, Run, Size } from '../../../types/ResponseTypes'
-import { classToString, fixDis, getNumberOfParticipantsForRun, getNumberOfParticipantsForRunWithResult, getRanking, loadPermanent, setMaxTime, sizeToString, standardTime, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped'
+import { classToString, doGetRequest, fixDis, getNumberOfParticipantsForRun, getNumberOfParticipantsForRunWithResult, getRanking, loadPermanent, setMaxTime, sizeToString, standardTime, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped'
 
 import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useParams } from 'react-router-dom'
-import { dateToURLString } from '../../Common/StaticFunctions'
+import { dateToURLString, getAndStore } from '../../Common/StaticFunctions'
 import { changeDate, changeJudge, changeLength, changeParticipants, changeSpeed, changeTurnamentName, clearPrints, } from '../../../Actions/SampleAction'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider/LocalizationProvider'
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
@@ -41,6 +41,8 @@ const Turnament = (props: Props) => {
     const judgeName = turnament?.judge
     const turnamentName = turnament?.name
     const allParticipants = turnament?.participants
+
+    const [orgName, setorgName] = useState("")
 
     const [printDialogOpen, setprintDialogOpen] = useState(false)
 
@@ -107,6 +109,14 @@ const Turnament = (props: Props) => {
         updateDatabase(turnament, params.organization ? params.organization : "", dispatch)
 
     }, [turnament, params.organization, dispatch])
+
+    useEffect(() => {
+
+        doGetRequest("organization/" + t_organization, dispatch).then((value) => {
+            setorgName(value.content.name)
+        })
+
+    }, [dispatch, t_organization])
 
 
     return (
@@ -280,6 +290,7 @@ const Turnament = (props: Props) => {
                     organization={common.organization
                     }
                     turnament={turnament}
+                    orgName={orgName}
                     close={() => { setprintDialogOpen(false) }}
                 /> : <></ >}
 

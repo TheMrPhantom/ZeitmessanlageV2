@@ -109,7 +109,8 @@ export type StickerInfo = {
     organization: Organization,
     turnament: Tournament,
     participant: Participant,
-    finalResult: FinalResult
+    finalResult: FinalResult,
+    orgName: string
 }
 
 
