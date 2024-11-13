@@ -334,6 +334,9 @@ const Participants = (props: Props) => {
                             } else {
                                 if (line.length > 0 && line[0] !== "UeID") {
                                     //Participant line
+                                    if (line[29] !== "1") {
+                                        return
+                                    }
 
                                     const skillLevel = stringToSkillLevel(line[42])
                                     const size = stringToSize(line[41])
