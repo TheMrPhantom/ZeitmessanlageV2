@@ -79,6 +79,11 @@ const ParticipantTable = (props: TableProps) => {
         return null;
     };
 
+    const updateParticipantFromTable = (participant: Participant) => {
+        dispatch(updateParticipant(props.turnamentDate, participant));
+        storePermanent(props.organization, props.common.organization);
+        updateDatabase(props.common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(props.turnamentDate)), props.organization, dispatch);
+    }
     return (
         <TableContainer component={Paper}>
             <Table size="small">
@@ -150,16 +155,52 @@ const ParticipantTable = (props: TableProps) => {
                             <TableCell>{participant.name}</TableCell>
                             <TableCell>{participant.club}</TableCell>
                             <TableCell>{participant.dog}</TableCell>
-                            <TableCell>{runClassToString(participant.skillLevel)}</TableCell>
-                            <TableCell>{sizeToString(participant.size)}</TableCell>
+                            <TableCell>
+                                <FormControl className={style.picker}>
+                                    <InputLabel id="demo-simple-select-label" >Klasse</InputLabel>
+                                    <Select
+                                        labelId="demo-simple-select-label"
+                                        id="demo-simple-select"
+                                        value={participant.skillLevel}
+                                        label="Klasse"
+                                        onChange={(value) => {
+                                            participant.skillLevel = value.target.value as SkillLevel;
+                                            updateParticipantFromTable(participant)
+                                        }}
+                                    >
+                                        <MenuItem value={SkillLevel.A0}>A0</MenuItem>
+                                        <MenuItem value={SkillLevel.A1}>A1</MenuItem>
+                                        <MenuItem value={SkillLevel.A2}>A2</MenuItem>
+                                        <MenuItem value={SkillLevel.A3}>A3</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            </TableCell>
+                            <TableCell>
+                                <FormControl className={style.picker}>
+                                    <InputLabel id="demo-simple-select-label" >Größe</InputLabel>
+                                    <Select
+                                        labelId="demo-simple-select-label"
+                                        id="demo-simple-select"
+                                        value={participant.size}
+                                        label="Größe"
+                                        onChange={(value) => {
+                                            participant.size = value.target.value as Size;
+                                            updateParticipantFromTable(participant)
+                                        }}
+                                    >
+                                        <MenuItem value={Size.Small}>Small</MenuItem>
+                                        <MenuItem value={Size.Medium}>Medium</MenuItem>
+                                        <MenuItem value={Size.Intermediate}>Intermediate</MenuItem>
+                                        <MenuItem value={Size.Large}>Large</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            </TableCell>
                             <TableCell align="center">
                                 <Checkbox
                                     checked={participant.paid}
                                     onChange={(value) => {
                                         participant.paid = value.target.checked;
-                                        dispatch(updateParticipant(props.turnamentDate, participant));
-                                        storePermanent(props.organization, props.common.organization);
-                                        updateDatabase(props.common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(props.turnamentDate)), props.organization, dispatch);
+                                        updateParticipantFromTable(participant)
                                     }}
                                 />
                             </TableCell>
@@ -168,9 +209,7 @@ const ParticipantTable = (props: TableProps) => {
                                     checked={participant.registered}
                                     onChange={(value) => {
                                         participant.registered = value.target.checked;
-                                        dispatch(updateParticipant(props.turnamentDate, participant));
-                                        storePermanent(props.organization, props.common.organization);
-                                        updateDatabase(props.common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(props.turnamentDate)), props.organization, dispatch);
+                                        updateParticipantFromTable(participant)
                                     }}
                                 />
                             </TableCell>
@@ -179,9 +218,7 @@ const ParticipantTable = (props: TableProps) => {
                                     checked={participant.ready}
                                     onChange={(value) => {
                                         participant.ready = value.target.checked;
-                                        dispatch(updateParticipant(props.turnamentDate, participant));
-                                        storePermanent(props.organization, props.common.organization);
-                                        updateDatabase(props.common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(props.turnamentDate)), props.organization, dispatch);
+                                        updateParticipantFromTable(participant)
                                     }}
                                 />
                             </TableCell>
