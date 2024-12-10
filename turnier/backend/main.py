@@ -618,7 +618,10 @@ class login(Resource):
 
         if member_id == 1:
             token = token_manager.create_token(member_id)
-            return util.build_response("OK", cookieToken=token, cookieMemberID=member_id)
+            member = db.get_user(member_id)
+            valid_until = (datetime.now()+timedelta(days=90)).isoformat()
+            signed_validation = util.sign_message(valid_until+member.name)
+            return util.build_response({"validUntil": valid_until, "signedValidation": signed_validation, "name": member.name, "alias": member.alias}, cookieToken=token, cookieMemberID=member_id)
 
         if member_id is not None:
             util.log("Login", "User logged in")
