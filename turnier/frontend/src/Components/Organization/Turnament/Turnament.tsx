@@ -31,7 +31,9 @@ const Turnament = (props: Props) => {
 
     const t_organization = params.organization ? params.organization : ""
 
-    loadPermanent(t_organization, dispatch, common)
+    loadPermanent(t_organization, dispatch, common, false)
+
+    //loadPermanent(t_organization, dispatch, common, true)
 
     const date = useMemo(() => params.date ? new Date(params.date) : new Date(), [params.date])
     const turnamentDate = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(date))?.date
@@ -53,6 +55,7 @@ const Turnament = (props: Props) => {
 
         /* Fix max time and 3 dis */
 
+        if (!allParticipants || allParticipants.length === 0) { return }
 
         var tempParticipants = allParticipants ? allParticipants : []
         /* For each run execute setmaxtime */

@@ -9,7 +9,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom'
 import { dateToURLString } from '../../Common/StaticFunctions';
 import { addParticipant, removeParticipant, updateParticipant } from '../../../Actions/SampleAction';
-import { loadPermanent, runClassToString, sizeToString, storePermanent, stringToSize, stringToSkillLevel, updateDatabase } from '../../Common/StaticFunctionsTyped';
+import { loadPermanent, storePermanent, stringToSize, stringToSkillLevel, updateDatabase } from '../../Common/StaticFunctionsTyped';
 import { usePapaParse } from 'react-papaparse';
 import ImportParticipants from './ImportParticipants';
 import HowToRegIcon from '@mui/icons-material/HowToReg';

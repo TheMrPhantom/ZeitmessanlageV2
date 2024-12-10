@@ -2,7 +2,7 @@ import style from './print.module.scss'
 import { Stack, Typography } from '@mui/material'
 import React, { useEffect, useState } from 'react'
 import { doGetRequest } from '../../Common/StaticFunctionsTyped'
-import { dateToString, dateToURLString } from '../../Common/StaticFunctions'
+import { dateToString } from '../../Common/StaticFunctions'
 import { useParams } from 'react-router-dom'
 import { useDispatch } from 'react-redux'
 
