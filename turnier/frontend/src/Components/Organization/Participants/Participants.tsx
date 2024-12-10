@@ -222,6 +222,9 @@ const Participants = (props: Props) => {
     const [name, setname] = useState("")
     const [club, setclub] = useState("")
     const [dog, setdog] = useState("")
+    const [association, setassociation] = useState("")
+    const [associationMemberNumber, setassociationMemberNumber] = useState("")
+    const [chipNumber, setchipNumber] = useState("")
     const [runclass, setrunclass] = useState(SkillLevel.A3)
     const [size, setsize] = useState(Size.Small)
     const [file, setFile] = useState<null | File>(null);
@@ -230,7 +233,7 @@ const Participants = (props: Props) => {
 
     loadPermanent(organization, dispatch, common)
 
-    const addParticipantToTurnament = (name: string, club: string, dog: string, runclass: SkillLevel, size: Size) => {
+    const addParticipantToTurnament = (name: string, club: string, dog: string, runclass: SkillLevel, size: Size, association: string, associationMemberNumber: string, chipNumber: string) => {
 
         const participant: Participant = {
             startNumber: 0,
@@ -240,6 +243,9 @@ const Participants = (props: Props) => {
             dog: dog,
             skillLevel: runclass,
             size: size,
+            association: association,
+            associationMemberNumber: associationMemberNumber,
+            chipNumber: chipNumber,
             resultA: {
                 time: -2,
                 faults: 0,
@@ -274,6 +280,9 @@ const Participants = (props: Props) => {
         setname("")
         setclub("")
         setdog("")
+        setassociation("")
+        setassociationMemberNumber("")
+        setchipNumber("")
         setrunclass(SkillLevel.A3)
         setsize(Size.Small)
 
@@ -457,13 +466,15 @@ const Participants = (props: Props) => {
                                     <MenuItem value={Size.Large}>Large</MenuItem>
                                 </Select>
                             </FormControl>
-
+                            <TextField value={association} label="Verband" onChange={(value) => setassociation(value.target.value)} />
+                            <TextField value={associationMemberNumber} label="Mitgliedsnummer" onChange={(value) => setassociationMemberNumber(value.target.value)} />
+                            <TextField value={chipNumber} label="Chipnummer" onChange={(value) => setchipNumber(value.target.value)} />
 
                         </Stack>
                         <Button variant="contained"
                             color="primary"
                             onClick={() => {
-                                addParticipantToTurnament(name, club, dog, runclass, size)
+                                addParticipantToTurnament(name, club, dog, runclass, size, association, associationMemberNumber, chipNumber)
                             }}
                         >Hinzufügen</Button>
                     </Stack>

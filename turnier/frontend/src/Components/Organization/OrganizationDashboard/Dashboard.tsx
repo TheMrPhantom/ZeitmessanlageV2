@@ -35,7 +35,7 @@ const Dashboard = (props: Props) => {
             }
         }
         )
-    }, [])
+    }, [dispatch, t_organization])
 
 
     const [organizerAlias, setorganizerAlias] = useState("")

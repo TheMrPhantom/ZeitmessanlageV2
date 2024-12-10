@@ -132,16 +132,16 @@ class update_data(Resource):
                 participant_info.name = participant["name"]
                 participant_info.club = participant["club"]
                 participant_info.dog = participant["dog"]
-                participant_info.mail = participant["mail"]
+                participant_info.mail = participant["mail"] if "mail" in participant else ""
                 participant_info.association = participant["association"]
                 participant_info.association_member_number = participant["associationMemberNumber"]
                 participant_info.chip_number = participant["chipNumber"]
-                participant_info.measure_dog = participant["measureDog"]
+                participant_info.measure_dog = participant["measureDog"] if "measureDog" in participant else False
                 participant_info.skill_level = participant["skillLevel"]
                 participant_info.size = participant["size"]
-                participant_info.registered = participant["registered"]
-                participant_info.ready = participant["ready"]
-                participant_info.paid = participant["paid"]
+                participant_info.registered = participant["registered"] if "registered" in participant else False
+                participant_info.ready = participant["ready"] if "ready" in participant else False
+                participant_info.paid = participant["paid"] if "paid" in participant else False
                 db.session.add(participant_info)
 
                 # Add result_a
@@ -169,9 +169,9 @@ class update_data(Resource):
                 participant_info.dog = participant["dog"]
                 participant_info.skill_level = participant["skillLevel"]
                 participant_info.size = participant["size"]
-                participant_info.registered = participant["registered"]
-                participant_info.ready = participant["ready"]
-                participant_info.paid = participant["paid"]
+                participant_info.registered = participant["registered"] if "registered" in participant else False
+                participant_info.ready = participant["ready"] if "ready" in participant else False
+                participant_info.paid = participant["paid"] if "paid" in participant else False
 
                 participant_info.result_a.time = participant["resultA"]["time"]
                 participant_info.result_a.faults = participant["resultA"]["faults"]
