@@ -1,5 +1,5 @@
 import { Button, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import style from './dashboard.module.scss'
 import DeleteIcon from '@mui/icons-material/Delete';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -13,7 +13,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { addTurnament, removeTurnament } from '../../../Actions/SampleAction';
 import { dateToString, dateToURLString } from '../../Common/StaticFunctions';
 import { ALL_HEIGHTS, ALL_RUNS, RunInformation, Tournament } from '../../../types/ResponseTypes';
-import { doRequest, loadPermanent, storePermanent } from '../../Common/StaticFunctionsTyped';
+import { doGetRequest, doRequest, loadPermanent, storePermanent } from '../../Common/StaticFunctionsTyped';
 import { openToast } from '../../../Actions/CommonAction';
 
 type Props = {}
@@ -27,7 +27,18 @@ const Dashboard = (props: Props) => {
     const t_organization = params.organization ? params.organization : ""
     loadPermanent(t_organization, dispatch, common)
 
+    useEffect(() => {
 
+        doGetRequest("organization/" + t_organization, dispatch).then((data) => {
+            if (data.code === 200) {
+                setorganizerAlias(data.content.name)
+            }
+        }
+        )
+    }, [])
+
+
+    const [organizerAlias, setorganizerAlias] = useState("")
     const [turnamentDate, setturnamentDate] = useState<Date | null>(new Date())
     const [judgeName, setjudgeName] = useState("")
     const [tournamentName, settournamentName] = useState("")
@@ -35,7 +46,7 @@ const Dashboard = (props: Props) => {
     return (
         <Stack gap={2} className={style.paper}>
             <Stack direction="row" flexWrap="wrap" gap={3}>
-                <Typography variant='h5'>Wilkommen zurück HSF!</Typography>
+                <Typography variant='h5'>Wilkommen zurück {organizerAlias}!</Typography>
             </Stack>
             <Stack direction="row" flexWrap="wrap" gap={3}>
                 <Paper className={style.paper}>

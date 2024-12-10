@@ -1,4 +1,4 @@
-import { Button, Checkbox, FormControl, InputLabel, MenuItem, Paper, Select, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
+import { Button, Checkbox, FormControl, InputLabel, MenuItem, Paper, Select, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography } from '@mui/material'
 import React, { useState } from 'react'
 import DeleteIcon from '@mui/icons-material/Delete';
 import style from './participants.module.scss'
@@ -115,24 +115,30 @@ const ParticipantTable = (props: TableProps) => {
                                 {renderSortIcon('size')}
                             </Stack>
                         </TableCell>
-                        <TableCell align="center" onClick={() => handleSort('paid')} style={{ cursor: 'pointer' }}>
-                            <Stack flexDirection="row" alignItems="center" gap={1}>
-                                <PaidIcon />
-                                {renderSortIcon('paid')}
-                            </Stack>
-                        </TableCell>
-                        <TableCell align="center" onClick={() => handleSort('registered')} style={{ cursor: 'pointer' }}>
-                            <Stack flexDirection="row" alignItems="center" gap={1}>
-                                <HowToRegIcon />
-                                {renderSortIcon('registered')}
-                            </Stack>
-                        </TableCell>
-                        <TableCell align="center" onClick={() => handleSort('ready')} style={{ cursor: 'pointer' }}>
-                            <Stack flexDirection="row" alignItems="center" gap={1}>
-                                <AlarmOnIcon />
-                                {renderSortIcon('ready')}
-                            </Stack>
-                        </TableCell>
+                        <Tooltip title="Meldung bezahlt?" arrow placement='top'>
+                            <TableCell align="center" onClick={() => handleSort('paid')} style={{ cursor: 'pointer' }}>
+                                <Stack flexDirection="row" alignItems="center" gap={1}>
+                                    <PaidIcon />
+                                    {renderSortIcon('paid')}
+                                </Stack>
+                            </TableCell>
+                        </Tooltip>
+                        <Tooltip title="Teilnehmer gemeldet?" arrow placement='top'>
+                            <TableCell align="center" onClick={() => handleSort('registered')} style={{ cursor: 'pointer' }}>
+                                <Stack flexDirection="row" alignItems="center" gap={1}>
+                                    <HowToRegIcon />
+                                    {renderSortIcon('registered')}
+                                </Stack>
+                            </TableCell>
+                        </Tooltip>
+                        <Tooltip title="Teilnehmer am Start?" arrow placement='top'>
+                            <TableCell align="center" onClick={() => handleSort('ready')} style={{ cursor: 'pointer' }}>
+                                <Stack flexDirection="row" alignItems="center" gap={1}>
+                                    <AlarmOnIcon />
+                                    {renderSortIcon('ready')}
+                                </Stack>
+                            </TableCell>
+                        </Tooltip>
 
                         <TableCell>Entfernen</TableCell>
                     </TableRow>
