@@ -1,4 +1,3 @@
-import xlrd
 from difflib import SequenceMatcher
 from datetime import datetime, timedelta
 import os
@@ -388,6 +387,26 @@ class qr_code(Resource):
             Tournament.date == date, Member.name == name, Tournament.member_id == Member.id).first()
 
         return util.build_response(t.secret)
+
+
+@api.route('/<string:name>/<string:date>/info')
+class printing_info(Resource):
+    def get(self, name, date):
+        """
+        Get the tournament infos for a tournament
+        """
+        org: Member = db.session.query(Member).filter(
+            Member.name == name).first()
+
+        t: Tournament = db.session.query(Tournament).filter(
+            Tournament.date == date, Member.name == name, Tournament.member_id == Member.id).first()
+
+        return util.build_response({
+            "tournamentName": t.name,
+            "judge": t.judge,
+            "date": t.date,
+            "organization": org.alias
+        })
 
 
 @api.route('/members')
