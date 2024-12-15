@@ -26,6 +26,7 @@
 #include "Network.h"
 #include "main.h"
 #include "Keyboard.h"
+#include "LED.h"
 
 QueueHandle_t sensorInterputQueue;
 QueueHandle_t networkQueue;
@@ -37,6 +38,9 @@ void app_main(void)
 
     sensorInterputQueue = xQueueCreate(1, sizeof(int));
     init_keyboard();
+    init_led();
+
+    set_led(0, 0, 10);
 
     xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 8192, NULL, 1, NULL);
     xTaskCreate(Network_Task, "Network_Task", 8192, NULL, 2, NULL);
