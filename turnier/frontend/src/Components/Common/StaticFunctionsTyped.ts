@@ -508,9 +508,6 @@ export const setMaxTime = (currentRun: Run,
 ) => {
     const maxTime = maximumTime(currentRun, calculatedStandardTime)
 
-    /*Print max time with what run */
-    if (participantsForRun.length > 0)
-        console.log(`Max time for ${classToString(currentRun)} ${sizeToString(participantsForRun[0].size)} is ${maxTime}`)
 
     let tempParticipants = allParticipants
 
@@ -524,8 +521,6 @@ export const setMaxTime = (currentRun: Run,
                 if (getRunCategory(currentRun) === RunCategory.A) {
                     return { ...p, resultA: { ...p.resultA, time: (p.resultA.time > maxTime) ? -1 : p.resultA.time } }
                 } else {
-                    console.log(`Max time for ${classToString(currentRun)} ${sizeToString(participantsForRun[0].size)} is ${maxTime}`)
-                    console.log({ ...p, resultJ: { ...p.resultJ, time: (p.resultJ.time > maxTime) ? -1 : p.resultJ.time } })
                     return { ...p, resultJ: { ...p.resultJ, time: (p.resultJ.time > maxTime) ? -1 : p.resultJ.time } }
                 }
             }

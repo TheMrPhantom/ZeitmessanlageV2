@@ -2,7 +2,7 @@ import { Button, InputAdornment, Paper, Stack, Table, TableBody, TableCell, Tabl
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import style from './turnament.module.scss'
 import { ALL_HEIGHTS, ALL_RUNS, Run, Size } from '../../../types/ResponseTypes'
-import { classToString, fixDis, getNumberOfParticipantsForRun, getNumberOfParticipantsForRunWithResult, getRanking, loadPermanent, setMaxTime, sizeToString, standardTime, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped'
+import { classToString, doGetRequest, fixDis, getNumberOfParticipantsForRun, getNumberOfParticipantsForRunWithResult, getRanking, loadPermanent, setMaxTime, sizeToString, standardTime, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped'
 
 import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
@@ -31,7 +31,9 @@ const Turnament = (props: Props) => {
 
     const t_organization = params.organization ? params.organization : ""
 
-    loadPermanent(t_organization, dispatch, common)
+    loadPermanent(t_organization, dispatch, common, false)
+
+    //loadPermanent(t_organization, dispatch, common, true)
 
     const date = useMemo(() => params.date ? new Date(params.date) : new Date(), [params.date])
     const turnamentDate = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(date))?.date
@@ -42,6 +44,8 @@ const Turnament = (props: Props) => {
     const turnamentName = turnament?.name
     const allParticipants = turnament?.participants
 
+    const [orgName, setorgName] = useState("")
+
     const [printDialogOpen, setprintDialogOpen] = useState(false)
 
     const runsDialog = [Run.A3, Run.J3, Run.A2, Run.J2, Run.A1, Run.J1, Run.A0, Run.J0]
@@ -51,6 +55,7 @@ const Turnament = (props: Props) => {
 
         /* Fix max time and 3 dis */
 
+        if (!allParticipants || allParticipants.length === 0) { return }
 
         var tempParticipants = allParticipants ? allParticipants : []
         /* For each run execute setmaxtime */
@@ -107,6 +112,14 @@ const Turnament = (props: Props) => {
         updateDatabase(turnament, params.organization ? params.organization : "", dispatch)
 
     }, [turnament, params.organization, dispatch])
+
+    useEffect(() => {
+
+        doGetRequest("organization/" + t_organization, dispatch).then((value) => {
+            setorgName(value.content.name)
+        })
+
+    }, [dispatch, t_organization])
 
 
     return (
@@ -280,6 +293,7 @@ const Turnament = (props: Props) => {
                     organization={common.organization
                     }
                     turnament={turnament}
+                    orgName={orgName}
                     close={() => { setprintDialogOpen(false) }}
                 /> : <></ >}
 

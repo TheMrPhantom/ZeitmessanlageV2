@@ -279,7 +279,7 @@ const TopBar = (props: Props) => {
                             size="large"
                             color="inherit"
                             onClick={() =>
-                                navigate(isUser() !== 1 && isUser() !== 2 ? "/user/" + isUser() : "/")
+                                navigate(isUser() !== 1 && isUser() !== 2 ? "/o/" + common.organization.name : "/")
                             }
                             sx={{ display: "inline-flex", maxHeight: "77px" }}
                             variant="text">

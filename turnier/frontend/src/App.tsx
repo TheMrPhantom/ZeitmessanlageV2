@@ -37,8 +37,14 @@ declare global {
 }
 
 function App() {
+
+  const composeEnhancers = composeWithDevTools({
+    trace: false, // Enable trace
+    traceLimit: 25, // Optional: Limit the stack trace to 25 steps
+  });
+
   const [themeCookie, setthemeCookie] = useState(0)
-  const store = createStore(allReducer, composeWithDevTools())
+  const store = createStore(allReducer, composeEnhancers())
 
   useEffect(() => {
     setthemeCookie(Cookies.get("theme") !== undefined ? Number(Cookies.get("theme")) : 3)

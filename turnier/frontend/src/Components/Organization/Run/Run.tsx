@@ -222,7 +222,13 @@ const Run = (props: Props) => {
         return () => clearInterval(id);
     }, [selectedParticipant.startNumber, currentFaults, currentRefusals, common.organization.name, started, initTime, currentRun, dispatch]);
 
-
+    useEffect(() => {
+        if (selectedParticipant === defaultParticipant) {
+            // Set the selected participant as the first without result
+            const startNumber = participants?.find(p => getResultFromParticipant(currentRun, p).time === -2)
+            setselectedParticipantStartNumber(!startNumber ? 0 : startNumber.startNumber)
+        }
+    }, [currentRun, participants, selectedParticipant])
 
 
     const startTimer = useCallback(() => {

@@ -41,6 +41,7 @@ type Props = {
     participants: Participant[],
     organization: Organization,
     turnament: Tournament,
+    orgName: string,
     isOpen: boolean,
     close: () => void
 }
@@ -242,7 +243,8 @@ const PrintingDialog = (props: Props) => {
                         totalTime: -1,
                         kombi: -1
                     }
-                }
+                },
+                orgName: props.orgName
             }
 
             toPrint.push(stickerInfo)

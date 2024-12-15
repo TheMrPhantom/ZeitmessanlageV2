@@ -43,7 +43,7 @@ const Sticker = (props: Props) => {
                 </Stack>
                 <Stack className={style.turnamentText}>
                     <Typography fontWeight={700}>{props.infos.turnament.name}</Typography>
-                    <Typography>Neue Hundesporthalle e.V.</Typography>
+                    <Typography>{props.infos.orgName}</Typography>
                     <Typography>{dateToString(new Date(props.infos.turnament.date))}</Typography>
                     <Typography>dogdog-zeitmessung.de</Typography>
                 </Stack>
@@ -80,7 +80,7 @@ const Sticker = (props: Props) => {
                         </TableCell>
                     </TableRow>
                     <TableRow className={style.tableRow}>
-                        <TableCell className={style.tableRow}>FCI J3 Intermediate</TableCell>
+                        <TableCell className={style.tableRow}>{`FCI ${classToString(props.infos.finalResult.resultJ.run)} ${sizeToString(props.infos.finalResult.resultJ.size)}`}</TableCell>
                         <TableCell className={style.tableRow}>{runTimeToString(props.infos.finalResult.resultJ.time)}</TableCell>
                         <TableCell className={style.tableRow}>{checkDis(timeJ, props.infos.finalResult.resultJ.speed.toFixed(2))}</TableCell>
                         <TableCell className={style.tableRow}>{checkDis(timeJ, props.infos.finalResult.resultJ.faults)}</TableCell>
@@ -92,7 +92,7 @@ const Sticker = (props: Props) => {
                     </TableRow>
 
                 </Table>
-                <Typography className={style.starterText}> {`${props.infos.participant.name.split(" ")[0].toUpperCase()}, ${props.infos.participant.name.split(" ")[0]} - 0351308130 ${props.infos.participant.dog} (Lang ${props.infos.participant.dog})`}</Typography>
+                <Typography className={style.starterText}> {`${props.infos.participant.name.split(" ")[0].toUpperCase()}, ${props.infos.participant.name.split(" ")[1]} - ${props.infos.participant.club} - ${props.infos.participant.associationMemberNumber} - mit ${props.infos.participant.dog}`}</Typography>
             </Stack>
             <Stack className={style.judgeContainer}>
                 <Stack className={style.turnamentText}>

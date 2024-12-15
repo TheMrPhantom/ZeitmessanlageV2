@@ -1,4 +1,4 @@
-import { Button, Checkbox, FormControl, InputLabel, MenuItem, Paper, Select, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
+import { Button, Checkbox, FormControl, InputLabel, MenuItem, Paper, Select, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography } from '@mui/material'
 import React, { useState } from 'react'
 import DeleteIcon from '@mui/icons-material/Delete';
 import style from './participants.module.scss'
@@ -9,7 +9,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom'
 import { dateToURLString } from '../../Common/StaticFunctions';
 import { addParticipant, removeParticipant, updateParticipant } from '../../../Actions/SampleAction';
-import { loadPermanent, runClassToString, sizeToString, storePermanent, stringToSize, stringToSkillLevel, updateDatabase } from '../../Common/StaticFunctionsTyped';
+import { loadPermanent, storePermanent, stringToSize, stringToSkillLevel, updateDatabase } from '../../Common/StaticFunctionsTyped';
 import { usePapaParse } from 'react-papaparse';
 import ImportParticipants from './ImportParticipants';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
@@ -79,6 +79,11 @@ const ParticipantTable = (props: TableProps) => {
         return null;
     };
 
+    const updateParticipantFromTable = (participant: Participant) => {
+        dispatch(updateParticipant(props.turnamentDate, participant));
+        storePermanent(props.organization, props.common.organization);
+        updateDatabase(props.common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(props.turnamentDate)), props.organization, dispatch);
+    }
     return (
         <TableContainer component={Paper}>
             <Table size="small">
@@ -86,37 +91,60 @@ const ParticipantTable = (props: TableProps) => {
                     <TableRow>
                         <TableCell>Startnummer</TableCell>
                         <TableCell onClick={() => handleSort('name')} style={{ cursor: 'pointer' }}>
-                            Name
-                            {renderSortIcon('name')}
+                            <Stack flexDirection="row" alignItems="center" gap={1}>
+                                <div>Name</div>
+                                {renderSortIcon('name')}
+                            </Stack>
                         </TableCell>
                         <TableCell onClick={() => handleSort('club')} style={{ cursor: 'pointer' }}>
-                            Verein
-                            {renderSortIcon('club')}
+                            <Stack flexDirection="row" alignItems="center" gap={1}>
+                                <div>Verein</div>
+                                {renderSortIcon('club')}
+                            </Stack>
                         </TableCell>
                         <TableCell onClick={() => handleSort('dog')} style={{ cursor: 'pointer' }}>
-                            Hund
-                            {renderSortIcon('dog')}
+                            <Stack flexDirection="row" alignItems="center" gap={1}>
+                                <div>Hund</div>
+                                {renderSortIcon('dog')}
+                            </Stack>
                         </TableCell>
                         <TableCell onClick={() => handleSort('skillLevel')} style={{ cursor: 'pointer' }}>
-                            Klasse
-                            {renderSortIcon('skillLevel')}
+                            <Stack flexDirection="row" alignItems="center" gap={1}>
+                                <div>Klasse</div>
+                                {renderSortIcon('skillLevel')}
+                            </Stack>
                         </TableCell>
                         <TableCell onClick={() => handleSort('size')} style={{ cursor: 'pointer' }}>
-                            Größe
-                            {renderSortIcon('size')}
+                            <Stack flexDirection="row" alignItems="center" gap={1}>
+                                <div>Größe</div>
+                                {renderSortIcon('size')}
+                            </Stack>
                         </TableCell>
-                        <TableCell align="center" onClick={() => handleSort('paid')} style={{ cursor: 'pointer' }}>
-                            <PaidIcon />
-                            {renderSortIcon('paid')}
-                        </TableCell>
-                        <TableCell align="center" onClick={() => handleSort('registered')} style={{ cursor: 'pointer' }}>
-                            <HowToRegIcon />
-                            {renderSortIcon('registered')}
-                        </TableCell>
-                        <TableCell align="center" onClick={() => handleSort('ready')} style={{ cursor: 'pointer' }}>
-                            <AlarmOnIcon />
-                            {renderSortIcon('ready')}
-                        </TableCell>
+                        <Tooltip title="Meldung bezahlt?" arrow placement='top'>
+                            <TableCell align="center" onClick={() => handleSort('paid')} style={{ cursor: 'pointer' }}>
+                                <Stack flexDirection="row" alignItems="center" gap={1}>
+                                    <PaidIcon />
+                                    {renderSortIcon('paid')}
+                                </Stack>
+                            </TableCell>
+                        </Tooltip>
+                        <Tooltip title="Teilnehmer gemeldet?" arrow placement='top'>
+                            <TableCell align="center" onClick={() => handleSort('registered')} style={{ cursor: 'pointer' }}>
+                                <Stack flexDirection="row" alignItems="center" gap={1}>
+                                    <HowToRegIcon />
+                                    {renderSortIcon('registered')}
+                                </Stack>
+                            </TableCell>
+                        </Tooltip>
+                        <Tooltip title="Teilnehmer am Start?" arrow placement='top'>
+                            <TableCell align="center" onClick={() => handleSort('ready')} style={{ cursor: 'pointer' }}>
+                                <Stack flexDirection="row" alignItems="center" gap={1}>
+                                    <AlarmOnIcon />
+                                    {renderSortIcon('ready')}
+                                </Stack>
+                            </TableCell>
+                        </Tooltip>
+
                         <TableCell>Entfernen</TableCell>
                     </TableRow>
                 </TableHead>
@@ -127,16 +155,52 @@ const ParticipantTable = (props: TableProps) => {
                             <TableCell>{participant.name}</TableCell>
                             <TableCell>{participant.club}</TableCell>
                             <TableCell>{participant.dog}</TableCell>
-                            <TableCell>{runClassToString(participant.skillLevel)}</TableCell>
-                            <TableCell>{sizeToString(participant.size)}</TableCell>
+                            <TableCell>
+                                <FormControl className={style.picker}>
+                                    <InputLabel id="demo-simple-select-label" >Klasse</InputLabel>
+                                    <Select
+                                        labelId="demo-simple-select-label"
+                                        id="demo-simple-select"
+                                        value={participant.skillLevel}
+                                        label="Klasse"
+                                        onChange={(value) => {
+                                            participant.skillLevel = value.target.value as SkillLevel;
+                                            updateParticipantFromTable(participant)
+                                        }}
+                                    >
+                                        <MenuItem value={SkillLevel.A0}>A0</MenuItem>
+                                        <MenuItem value={SkillLevel.A1}>A1</MenuItem>
+                                        <MenuItem value={SkillLevel.A2}>A2</MenuItem>
+                                        <MenuItem value={SkillLevel.A3}>A3</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            </TableCell>
+                            <TableCell>
+                                <FormControl className={style.picker}>
+                                    <InputLabel id="demo-simple-select-label" >Größe</InputLabel>
+                                    <Select
+                                        labelId="demo-simple-select-label"
+                                        id="demo-simple-select"
+                                        value={participant.size}
+                                        label="Größe"
+                                        onChange={(value) => {
+                                            participant.size = value.target.value as Size;
+                                            updateParticipantFromTable(participant)
+                                        }}
+                                    >
+                                        <MenuItem value={Size.Small}>Small</MenuItem>
+                                        <MenuItem value={Size.Medium}>Medium</MenuItem>
+                                        <MenuItem value={Size.Intermediate}>Intermediate</MenuItem>
+                                        <MenuItem value={Size.Large}>Large</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            </TableCell>
                             <TableCell align="center">
                                 <Checkbox
                                     checked={participant.paid}
                                     onChange={(value) => {
                                         participant.paid = value.target.checked;
-                                        dispatch(updateParticipant(props.turnamentDate, participant));
-                                        storePermanent(props.organization, props.common.organization);
-                                        updateDatabase(props.common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(props.turnamentDate)), props.organization, dispatch);
+                                        updateParticipantFromTable(participant)
                                     }}
                                 />
                             </TableCell>
@@ -145,9 +209,7 @@ const ParticipantTable = (props: TableProps) => {
                                     checked={participant.registered}
                                     onChange={(value) => {
                                         participant.registered = value.target.checked;
-                                        dispatch(updateParticipant(props.turnamentDate, participant));
-                                        storePermanent(props.organization, props.common.organization);
-                                        updateDatabase(props.common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(props.turnamentDate)), props.organization, dispatch);
+                                        updateParticipantFromTable(participant)
                                     }}
                                 />
                             </TableCell>
@@ -156,9 +218,7 @@ const ParticipantTable = (props: TableProps) => {
                                     checked={participant.ready}
                                     onChange={(value) => {
                                         participant.ready = value.target.checked;
-                                        dispatch(updateParticipant(props.turnamentDate, participant));
-                                        storePermanent(props.organization, props.common.organization);
-                                        updateDatabase(props.common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(props.turnamentDate)), props.organization, dispatch);
+                                        updateParticipantFromTable(participant)
                                     }}
                                 />
                             </TableCell>
@@ -199,6 +259,9 @@ const Participants = (props: Props) => {
     const [name, setname] = useState("")
     const [club, setclub] = useState("")
     const [dog, setdog] = useState("")
+    const [association, setassociation] = useState("")
+    const [associationMemberNumber, setassociationMemberNumber] = useState("")
+    const [chipNumber, setchipNumber] = useState("")
     const [runclass, setrunclass] = useState(SkillLevel.A3)
     const [size, setsize] = useState(Size.Small)
     const [file, setFile] = useState<null | File>(null);
@@ -207,7 +270,7 @@ const Participants = (props: Props) => {
 
     loadPermanent(organization, dispatch, common)
 
-    const addParticipantToTurnament = (name: string, club: string, dog: string, runclass: SkillLevel, size: Size) => {
+    const addParticipantToTurnament = (name: string, club: string, dog: string, runclass: SkillLevel, size: Size, association: string, associationMemberNumber: string, chipNumber: string) => {
 
         const participant: Participant = {
             startNumber: 0,
@@ -217,6 +280,9 @@ const Participants = (props: Props) => {
             dog: dog,
             skillLevel: runclass,
             size: size,
+            association: association,
+            associationMemberNumber: associationMemberNumber,
+            chipNumber: chipNumber,
             resultA: {
                 time: -2,
                 faults: 0,
@@ -251,6 +317,9 @@ const Participants = (props: Props) => {
         setname("")
         setclub("")
         setdog("")
+        setassociation("")
+        setassociationMemberNumber("")
+        setchipNumber("")
         setrunclass(SkillLevel.A3)
         setsize(Size.Small)
 
@@ -317,6 +386,9 @@ const Participants = (props: Props) => {
                             } else {
                                 if (line.length > 0 && line[0] !== "UeID") {
                                     //Participant line
+                                    if (line[29] !== "1") {
+                                        return
+                                    }
 
                                     const skillLevel = stringToSkillLevel(line[42])
                                     const size = stringToSize(line[41])
@@ -431,13 +503,15 @@ const Participants = (props: Props) => {
                                     <MenuItem value={Size.Large}>Large</MenuItem>
                                 </Select>
                             </FormControl>
-
+                            <TextField value={association} label="Verband" onChange={(value) => setassociation(value.target.value)} />
+                            <TextField value={associationMemberNumber} label="Mitgliedsnummer" onChange={(value) => setassociationMemberNumber(value.target.value)} />
+                            <TextField value={chipNumber} label="Chipnummer" onChange={(value) => setchipNumber(value.target.value)} />
 
                         </Stack>
                         <Button variant="contained"
                             color="primary"
                             onClick={() => {
-                                addParticipantToTurnament(name, club, dog, runclass, size)
+                                addParticipantToTurnament(name, club, dog, runclass, size, association, associationMemberNumber, chipNumber)
                             }}
                         >Hinzufügen</Button>
                     </Stack>
@@ -449,7 +523,7 @@ const Participants = (props: Props) => {
 
             </Stack>
         </Stack>
-        <ImportParticipants tournaments={parsedInputFile} close={() => { setparsedInputFile(null) }} />
+        <ImportParticipants parsedInput={parsedInputFile} close={() => { setparsedInputFile(null) }} />
     </>
     )
 }

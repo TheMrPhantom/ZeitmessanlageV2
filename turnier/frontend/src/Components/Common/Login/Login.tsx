@@ -55,7 +55,10 @@ const Login = (props: Props) => {
                 })
 
                 window.localStorage.setItem("validation", JSON.stringify(value.content))
-                navigate("/use-offline")
+
+                checkValidation(() => {
+                    navigate("/use-offline")
+                })
             } else if (value.code === 503) {
                 sha256(password).then((hash) => {
                     if (window.localStorage.getItem("pw") === hash) {
@@ -63,25 +66,15 @@ const Login = (props: Props) => {
 
                         //PW matched check if license is still valid
 
-                        const verificationString: string | null = window.localStorage.getItem("validation")
-                        const verification: Verification = verificationString !== null ? JSON.parse(verificationString) : null
+                        checkValidation(() => {
+                            const searchParam = searchParams.get("originalPath")
+                            const verificationString: string | null = window.localStorage.getItem("validation")
+                            const verification: Verification = verificationString !== null ? JSON.parse(verificationString) : null
+                            const notNullSeachParam = searchParam !== null ? searchParam : "/o/" + verification.name;
+                            navigate(notNullSeachParam)
+                            dispatch(openToast({ message: "Keine Internetverbindung, die Lokalen dateien werden geladen und bei bestehender Internetverbindung hochgeladen", type: "warning", headline: "Server nicht erreichbar", duration: 10000 }))
 
-                        if (verification !== null) {
-                            if (verifySignature(verification.validUntil + verification.name, verification.signedValidation)) {
-                                if (new Date(verification.validUntil) < new Date()) {
-                                    dispatch(openToast({ message: "Lizenz ist abgelaufen, bitte verlängern", type: "error", headline: "Lizenz abgelaufen", duration: 10000 }))
-                                } else {
-                                    const searchParam = searchParams.get("originalPath")
-                                    const notNullSeachParam = searchParam !== null ? searchParam : "/o/" + verification.name;
-                                    navigate(notNullSeachParam)
-                                    dispatch(openToast({ message: "Keine Internetverbindung, die Lokalen dateien werden geladen und bei bestehender Internetverbindung hochgeladen", type: "warning", headline: "Server nicht erreichbar", duration: 10000 }))
-                                }
-                            } else {
-                                dispatch(openToast({ message: "Die Verifikationdatei wurde manipuliert, bitte versuche es später erneut mit Internetverbindung", type: "error", headline: "Server nicht erreichbar", duration: 10000 }))
-                            }
-                        } else {
-                            dispatch(openToast({ message: "Kein Account lokal hinterlegt, probiere es später erneut mit Internetverbindung", type: "error", headline: "Server nicht erreichbar", duration: 10000 }))
-                        }
+                        })
                     } else {
                         dispatch(openToast({ message: "Kein Account lokal hinterlegt oder Passwort falsch, probiere es erneut oder später mit Internetverbindung", type: "error", headline: "Server nicht erreichbar", duration: 10000 }))
                     }
@@ -92,6 +85,26 @@ const Login = (props: Props) => {
             }
             setdisableLoginButton(false)
         })
+    }
+
+    const checkValidation = (redirect: () => void) => {
+        const verificationString: string | null = window.localStorage.getItem("validation")
+        const verification: Verification = verificationString !== null ? JSON.parse(verificationString) : null
+        console.log(verification)
+        if (verification !== null) {
+            if (verifySignature(verification.validUntil + verification.name, verification.signedValidation)) {
+                console.log(new Date(verification.validUntil))
+                if (new Date(verification.validUntil) < new Date()) {
+                    dispatch(openToast({ message: "Lizenz ist abgelaufen, bitte verlängern", type: "error", headline: "Lizenz abgelaufen", duration: 10000 }))
+                } else {
+                    redirect()
+                }
+            } else {
+                dispatch(openToast({ message: "Die Verifikationdatei wurde manipuliert, bitte versuche es später erneut mit Internetverbindung", type: "error", headline: "Server nicht erreichbar", duration: 10000 }))
+            }
+        } else {
+            dispatch(openToast({ message: "Kein Account lokal hinterlegt, probiere es später erneut mit Internetverbindung", type: "error", headline: "Server nicht erreichbar", duration: 10000 }))
+        }
     }
 
     const loginOidc = async () => {
