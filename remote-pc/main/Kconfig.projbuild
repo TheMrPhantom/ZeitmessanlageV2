@@ -1,0 +1,12 @@
+menu "EDIT HERE: Zeitmessanlage configuration"
+    choice STATION_TYPE
+        prompt "What is the station type?"
+        default START
+        help
+            Choose if the compiled code is for the start or the stop station
+        config START
+            bool "START"
+        config STOP
+            bool "STOP"
+    endchoice
+endmenu
