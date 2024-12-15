@@ -27,6 +27,7 @@
 #include "main.h"
 #include "Keyboard.h"
 #include "LED.h"
+#include "Button.h"
 
 QueueHandle_t sensorInterputQueue;
 QueueHandle_t networkQueue;
@@ -44,6 +45,8 @@ void app_main(void)
 
     xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 8192, NULL, 1, NULL);
     xTaskCreate(Network_Task, "Network_Task", 8192, NULL, 2, NULL);
+    xTaskCreate(Button_Task, "Button_Glow_Task", 8192, NULL, 3, NULL);
+
     while (1)
     {
         vTaskDelay(pdMS_TO_TICKS(100));

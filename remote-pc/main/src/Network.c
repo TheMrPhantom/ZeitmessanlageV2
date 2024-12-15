@@ -13,6 +13,7 @@
 #include <esp_flash.h>
 #include <nvs_flash.h>
 #include "Keyboard.h"
+#include "Button.h"
 
 #define min(x, y) (((x) < (y)) ? (x) : (y))
 
@@ -22,8 +23,10 @@
 #define STATION_TYPE 1
 #endif
 
-const char *NETWORK_TAG = "NETWORK";
+static const char *NETWORK_TAG = "NETWORK";
 QueueHandle_t receivedTimeQueue;
+extern QueueHandle_t buttonQueue;
+extern bool sensors_active;
 
 void init_wifi(void)
 {
@@ -56,13 +59,25 @@ void receiveCallback(const uint8_t *macAddr, const uint8_t *data, int dataLen)
     buffer[msgLen] = 0;
 
     ESP_LOGI(NETWORK_TAG, "Received Package: %s", buffer);
-    if (strncmp(buffer, "timer-time", 10) == 0)
+    if (strncmp(buffer, "timer-time", 10) == 0 && sensors_active)
     {
         // Extract the rest of the message without the command
         char *message = buffer + 10;
         ESP_LOGI(NETWORK_TAG, "Received timer-time: %s", message);
         int time = atoi(message);
         xQueueSend(receivedTimeQueue, &time, 0);
+
+        glow_state_t glow_state;
+        glow_state.state = 0;
+        glow_state.pinNumber = BUTTON_GLOW_TYPE_RESET;
+        xQueueSend(buttonQueue, &glow_state, 0);
+    }
+    else if (strncmp(buffer, "timer-start", 11) == 0)
+    {
+        glow_state_t glow_state;
+        glow_state.state = 1;
+        glow_state.pinNumber = BUTTON_GLOW_TYPE_RESET;
+        xQueueSend(buttonQueue, &glow_state, 0);
     }
 }
 
