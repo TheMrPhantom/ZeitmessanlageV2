@@ -38,8 +38,38 @@ void init_glow_pins()
 
 void Button_Task(void *params)
 {
-    buttonQueue = xQueueCreate(10, sizeof(glow_state_t));
+    buttonQueue = xQueueCreate(15, sizeof(glow_state_t));
     init_glow_pins();
+
+    gpio_set_level(BUTTON_GLOW_TYPE_ACTIVATE, 0);
+    gpio_set_level(BUTTON_GLOW_TYPE_RESET, 0);
+    gpio_set_level(BUTTON_GLOW_TYPE_FAULT, 0);
+    gpio_set_level(BUTTON_GLOW_TYPE_DIS, 0);
+    gpio_set_level(BUTTON_GLOW_TYPE_REFUSAL, 0);
+
+    vTaskDelay(1);
+
+    gpio_set_level(BUTTON_GLOW_TYPE_ACTIVATE, 1);
+    gpio_set_level(BUTTON_GLOW_TYPE_RESET, 1);
+    vTaskDelay(pdMS_TO_TICKS(400));
+
+    gpio_set_level(BUTTON_GLOW_TYPE_FAULT, 1);
+    gpio_set_level(BUTTON_GLOW_TYPE_DIS, 1);
+    vTaskDelay(pdMS_TO_TICKS(400));
+
+    gpio_set_level(BUTTON_GLOW_TYPE_REFUSAL, 1);
+    vTaskDelay(pdMS_TO_TICKS(400));
+
+    gpio_set_level(BUTTON_GLOW_TYPE_REFUSAL, 0);
+    vTaskDelay(pdMS_TO_TICKS(400));
+
+    gpio_set_level(BUTTON_GLOW_TYPE_FAULT, 0);
+    gpio_set_level(BUTTON_GLOW_TYPE_DIS, 0);
+    vTaskDelay(pdMS_TO_TICKS(400));
+
+    gpio_set_level(BUTTON_GLOW_TYPE_ACTIVATE, 0);
+    gpio_set_level(BUTTON_GLOW_TYPE_RESET, 0);
+    vTaskDelay(pdMS_TO_TICKS(400));
 
     while (1)
     {

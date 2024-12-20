@@ -71,6 +71,9 @@ void Sensor_Interrupt_Task(void *params)
 
     int pinNumber = 0;
 
+    timeval_t last_button_interrupt;
+    gettimeofday(&last_button_interrupt, NULL);
+
     while (true)
     {
         if (xQueueReceive(sensorInterputQueue, &pinNumber, pdMS_TO_TICKS(500)))
@@ -78,9 +81,13 @@ void Sensor_Interrupt_Task(void *params)
             ESP_LOGI(TAG, "Checking interrupt of Pin: %i", pinNumber);
 
             vTaskDelay(pdMS_TO_TICKS(3));
+            timeval_t now;
+            gettimeofday(&now, NULL);
 
-            if (gpio_get_level(pinNumber) == 0)
+            if (gpio_get_level(pinNumber) == 0 && (TIME_US(now) - TIME_US(last_button_interrupt) > 100000))
             {
+                gettimeofday(&last_button_interrupt, NULL);
+
                 ESP_LOGI(TAG, "Confirmed interrupt of Pin: %i", pinNumber);
 
                 if (pinNumber == BUTTON_TYPE_ACTIVATE)

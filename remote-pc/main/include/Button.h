@@ -13,10 +13,10 @@ typedef struct
     int state;
 } glow_state_t;
 
-#define BUTTON_GLOW_TYPE_FAULT 36
-#define BUTTON_GLOW_TYPE_REFUSAL 37
-#define BUTTON_GLOW_TYPE_DIS 38
-#define BUTTON_GLOW_TYPE_RESET 39
+#define BUTTON_GLOW_TYPE_FAULT 37
+#define BUTTON_GLOW_TYPE_REFUSAL 36
+#define BUTTON_GLOW_TYPE_DIS 39   // 39
+#define BUTTON_GLOW_TYPE_RESET 38 // 38
 #define BUTTON_GLOW_TYPE_ACTIVATE 35
 
 void Button_Task(void *params);

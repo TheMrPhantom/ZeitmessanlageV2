@@ -31,7 +31,7 @@
 
 QueueHandle_t sensorInterputQueue;
 QueueHandle_t networkQueue;
-
+extern QueueHandle_t buttonQueue;
 void app_main(void)
 {
     const char *TAG = "MAIN";
