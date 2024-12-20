@@ -15,10 +15,10 @@ typedef struct
 
 #define BUTTON_GLOW_TYPE_FAULT 37
 #define BUTTON_GLOW_TYPE_REFUSAL 36
-#define BUTTON_GLOW_TYPE_DIS 39   // 39
-#define BUTTON_GLOW_TYPE_RESET 38 // 38
+#define BUTTON_GLOW_TYPE_DIS 39
+#define BUTTON_GLOW_TYPE_RESET 38
 #define BUTTON_GLOW_TYPE_ACTIVATE 35
 
 void Button_Task(void *params);
-
+void init_glow_pins();
 #endif

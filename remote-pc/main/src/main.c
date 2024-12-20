@@ -36,8 +36,10 @@ void app_main(void)
 {
     const char *TAG = "MAIN";
     ESP_LOGI(TAG, "Starting...");
+    init_glow_pins();
 
     sensorInterputQueue = xQueueCreate(1, sizeof(int));
+
     init_keyboard();
     init_led();
 

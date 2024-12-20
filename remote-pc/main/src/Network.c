@@ -79,6 +79,13 @@ void receiveCallback(const uint8_t *macAddr, const uint8_t *data, int dataLen)
         glow_state.pinNumber = BUTTON_GLOW_TYPE_RESET;
         xQueueSend(buttonQueue, &glow_state, 0);
     }
+    else if (strncmp(buffer, "timer-reset", 11) == 0)
+    {
+        glow_state_t glow_state;
+        glow_state.state = 0;
+        glow_state.pinNumber = BUTTON_GLOW_TYPE_RESET;
+        xQueueSend(buttonQueue, &glow_state, 0);
+    }
 }
 
 void sentCallback(const uint8_t *macAddr, esp_now_send_status_t status)

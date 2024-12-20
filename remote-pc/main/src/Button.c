@@ -31,6 +31,7 @@ void init_glow_pins()
         io_conf.mode = GPIO_MODE_OUTPUT;                  // input mode
         io_conf.intr_type = GPIO_INTR_DISABLE;
         gpio_config(&io_conf);
+        gpio_set_level(sensorGlowPins[i], 0);
     }
 
     ESP_LOGI(TAG, "Done configuring IO");
@@ -39,15 +40,6 @@ void init_glow_pins()
 void Button_Task(void *params)
 {
     buttonQueue = xQueueCreate(15, sizeof(glow_state_t));
-    init_glow_pins();
-
-    gpio_set_level(BUTTON_GLOW_TYPE_ACTIVATE, 0);
-    gpio_set_level(BUTTON_GLOW_TYPE_RESET, 0);
-    gpio_set_level(BUTTON_GLOW_TYPE_FAULT, 0);
-    gpio_set_level(BUTTON_GLOW_TYPE_DIS, 0);
-    gpio_set_level(BUTTON_GLOW_TYPE_REFUSAL, 0);
-
-    vTaskDelay(1);
 
     gpio_set_level(BUTTON_GLOW_TYPE_ACTIVATE, 1);
     gpio_set_level(BUTTON_GLOW_TYPE_RESET, 1);
