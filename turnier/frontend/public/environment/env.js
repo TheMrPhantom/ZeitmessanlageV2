@@ -1,4 +1,4 @@
-const drinklistName = "DogDog-Zeitmessung-DEV";
+const drinklistName = "DogDog-Turnier-DEV";
 
 window.globalTS = {
     "DOMAIN": "http://127.0.0.1:5000/api/",

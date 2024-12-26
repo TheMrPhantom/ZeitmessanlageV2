@@ -140,7 +140,7 @@ const Login = (props: Props) => {
         <Stack direction="column" alignItems="center">
             <Paper className={style.paper}>
                 <Stack direction="column" gap={3} alignItems="center">
-                    <Typography variant="h3">DogDog Zeitmessung</Typography>
+                    <Typography variant="h3">DogDog Turnier</Typography>
                     <Typography variant="h5">Bitte melde dich an</Typography>
                     <img
                         src={`/Logo.svg`}

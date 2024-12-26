@@ -42,7 +42,7 @@ const PageHeader = (props: Props) => {
                     alt="Logo"
                 />
                 <Typography align="center" className={style.text}>
-                    DogDog Zeitmessung
+                    DogDog Turnier
                 </Typography>
             </Stack >
             <Stack direction="column" alignItems="center" gap={1}>
