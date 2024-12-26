@@ -11,7 +11,7 @@ import style from './participants.module.scss'
 import { dateToString, dateToURLString } from '../../Common/StaticFunctions';
 
 type Props = {
-    parsedInput: Array<{ date: string, participants: Participant[] }> | null,
+    parsedInput: Array<{ date?: string, participants: Participant[] }> | null,
     close: () => void
 }
 
@@ -46,7 +46,8 @@ const ImportParticipants = (props: Props) => {
         })
 
         //Get new participants
-        const newParticipants = t[selectedDate].participants
+        const newParticipants = t[0].date !== undefined ? t[selectedDate].participants : t[0].participants
+
 
         /* Merge the participants lists */
         if (selectedVariant === 0) {
@@ -217,22 +218,24 @@ const ImportParticipants = (props: Props) => {
             </DialogTitle>
             <DialogContent >
                 <Stack direction="column" gap={3}>
-                    <Typography variant='h5'>{props.parsedInput?.length} Turnier(e) Erkannt</Typography>
-                    <FormControl fullWidth>
-                        <InputLabel >Turniertag</InputLabel>
-                        <Select
-                            label="Turniertag"
-                            value={selectedDate}
-                            onChange={(e) => {
-                                setselectedDate(Number(e.target.value))
-                            }}
-                        >
-                            {props.parsedInput?.map((tournament, index) => {
-                                return <MenuItem key={index} value={index}>{dateToString(new Date(tournament.date))}</MenuItem>
-                            })
-                            }
-                        </Select>
-                    </FormControl>
+                    {props.parsedInput && props.parsedInput?.length > 1 && props.parsedInput[0].date !== undefined ?
+                        <>
+                            <Typography variant='h5'>{props.parsedInput?.length} Turnier(e) Erkannt</Typography>
+                            <FormControl fullWidth>
+                                <InputLabel >Turniertag</InputLabel>
+                                <Select
+                                    label="Turniertag"
+                                    value={selectedDate}
+                                    onChange={(e) => {
+                                        setselectedDate(Number(e.target.value))
+                                    }}
+                                >
+                                    {props.parsedInput?.map((tournament, index) => {
+                                        return <MenuItem key={index} value={index}>{dateToString(new Date(tournament.date ? tournament.date : ""))}</MenuItem>
+                                    })}
+                                </Select>
+                            </FormControl>
+                        </> : <></>}
                     <FormControl>
                         <Typography variant='h6'>Wie möchtest du die Teilnehmer importieren?</Typography>
                         <RadioGroup

@@ -126,18 +126,19 @@ class update_data(Resource):
                 # Create new participant
                 participant_info = Participant()
                 participant_info.turnament_id = t.id
-                participant_info.start_number = participant["startNumber"]
-                participant_info.sorting = participant["sorting"]
-                participant_info.name = participant["name"]
-                participant_info.club = participant["club"]
-                participant_info.dog = participant["dog"]
+                participant_info.start_number = participant["startNumber"] if "startNumber" in participant else 0
+                participant_info.sorting = participant["sorting"] if "sorting" in participant else 0
+                participant_info.name = participant["name"] if "name" in participant else ""
+                participant_info.club = participant["club"] if "club" in participant else ""
+                participant_info.dog = participant["dog"] if "dog" in participant else ""
                 participant_info.mail = participant["mail"] if "mail" in participant else ""
-                participant_info.association = participant["association"]
-                participant_info.association_member_number = participant["associationMemberNumber"]
-                participant_info.chip_number = participant["chipNumber"]
+                participant_info.association = participant["association"] if "association" in participant else ""
+                participant_info.association_member_number = participant[
+                    "associationMemberNumber"] if "associationMemberNumber" in participant else ""
+                participant_info.chip_number = participant["chipNumber"] if "chipNumber" in participant else ""
                 participant_info.measure_dog = participant["measureDog"] if "measureDog" in participant else False
-                participant_info.skill_level = participant["skillLevel"]
-                participant_info.size = participant["size"]
+                participant_info.skill_level = participant["skillLevel"] if "skillLevel" in participant else 0
+                participant_info.size = participant["size"] if "size" in participant else 0
                 participant_info.registered = participant["registered"] if "registered" in participant else False
                 participant_info.ready = participant["ready"] if "ready" in participant else False
                 participant_info.paid = participant["paid"] if "paid" in participant else False
@@ -161,13 +162,19 @@ class update_data(Resource):
                 db.session.add(result_j)
                 participant_info.result_j = result_j
             else:
-                participant_info.start_number = participant["startNumber"]
-                participant_info.sorting = participant["sorting"]
-                participant_info.name = participant["name"]
-                participant_info.club = participant["club"]
-                participant_info.dog = participant["dog"]
-                participant_info.skill_level = participant["skillLevel"]
-                participant_info.size = participant["size"]
+                participant_info.start_number = participant["startNumber"] if "startNumber" in participant else 0
+                participant_info.sorting = participant["sorting"] if "sorting" in participant else 0
+                participant_info.name = participant["name"] if "name" in participant else ""
+                participant_info.club = participant["club"] if "club" in participant else ""
+                participant_info.dog = participant["dog"] if "dog" in participant else ""
+                participant_info.mail = participant["mail"] if "mail" in participant else ""
+                participant_info.association = participant["association"] if "association" in participant else ""
+                participant_info.association_member_number = participant[
+                    "associationMemberNumber"] if "associationMemberNumber" in participant else ""
+                participant_info.chip_number = participant["chipNumber"] if "chipNumber" in participant else ""
+                participant_info.measure_dog = participant["measureDog"] if "measureDog" in participant else False
+                participant_info.skill_level = participant["skillLevel"] if "skillLevel" in participant else 0
+                participant_info.size = participant["size"] if "size" in participant else 0
                 participant_info.registered = participant["registered"] if "registered" in participant else False
                 participant_info.ready = participant["ready"] if "ready" in participant else False
                 participant_info.paid = participant["paid"] if "paid" in participant else False

@@ -266,7 +266,7 @@ const Participants = (props: Props) => {
     const [size, setsize] = useState(Size.Small)
     const [file, setFile] = useState<null | File>(null);
 
-    const [parsedInputFile, setparsedInputFile] = useState<Array<{ date: string, participants: Participant[] }> | null>(null)
+    const [parsedInputFile, setparsedInputFile] = useState<Array<{ date?: string, participants: Participant[] }> | null>(null)
 
     loadPermanent(organization, dispatch, common)
 
@@ -335,7 +335,7 @@ const Participants = (props: Props) => {
     };
 
     // Handle file upload and print CSV content
-    const handleUpload = () => {
+    const handleUploadOMA = () => {
         if (!file) {
             console.error('No file selected');
             return;
@@ -439,33 +439,136 @@ const Participants = (props: Props) => {
                 // Optionally parse and handle CSV data
                 // const lines = text.split('\n');
                 // lines.forEach(line => console.log(line));
+                setFile(null);
             }
         };
 
         reader.readAsText(file, 'windows-1252');
     };
 
+    const handleUploadWebmelden = () => {
+        if (!file) {
+            console.error('No file selected');
+            return;
+        }
+
+        const reader = new FileReader();
+
+        reader.onload = (event) => {
+            if (event.target !== null) {
+                const text = event.target.result;
+                readString(text as string, {
+                    worker: true,
+                    encoding: "utf-8",
+                    delimiter: "\t",
+                    complete: (results) => {
+                        const data = results.data as Array<Array<string>>
+                        /*Webmelden has only the participants of one turnament*/
+
+                        console.log(data)
+
+                        let participants: Participant[] = []
+
+                        let lineIndex = 0
+                        data.forEach(line => {
+                            lineIndex++;
+                            if (lineIndex === 1 || (line[0] === "" && line[1] === "")) {
+                                return;
+                            }
+
+                            const skillLevel = stringToSkillLevel(line[21])
+                            const size = stringToSize(line[22])
+
+                            const lastname = line[0]
+                            //The last name is like MÜLLER make it Müller
+                            const lastnameCapitalized = lastname.charAt(0).toUpperCase() + lastname.slice(1).toLowerCase()
+
+                            const participant: Participant = {
+                                startNumber: 0,
+                                sorting: 0,
+                                name: `${line[1]} ${lastnameCapitalized}`,
+                                club: line[10],
+                                dog: line[11],
+                                skillLevel: skillLevel,
+                                size: size,
+                                mail: line[32],
+                                association: line[9],
+                                associationMemberNumber: line[8],
+                                chipNumber: line[18],
+                                measureDog: line[33] === "1",
+                                registered: false,
+                                ready: false,
+                                paid: line[30] === line[31],
+                                resultA: {
+                                    time: -2,
+                                    faults: 0,
+                                    refusals: 0,
+                                    run: skillLevel * 2
+                                },
+                                resultJ: {
+                                    time: -2,
+                                    faults: 0,
+                                    refusals: 0,
+                                    run: skillLevel * 2 + 1
+                                }
+                            }
+                            console.log(participant)
+                            participants.push(participant)
+
+                        })
+
+                        setparsedInputFile([{ participants: participants }])
+
+                    },
+                });
+
+
+
+                // Optionally parse and handle CSV data
+                // const lines = text.split('\n');
+                // lines.forEach(line => console.log(line));
+                setFile(null);
+            }
+        };
+
+        reader.readAsText(file, 'utf-8');
+    };
+
 
     return (<>
         <Stack gap={2} className={style.paper}>
             <Stack direction="row" flexWrap="wrap" gap={3}>
-                <Paper className={style.paper}>
-                    <Stack>
+
+                <Stack flexDirection={"row"} flexWrap={'wrap'} gap={2}>
+                    <Paper className={style.paper}>
                         <Stack gap={2}>
-                            <Typography variant='h6'>Teilnehmer aus O.M.A importieren</Typography>
+                            <Typography variant='h6'>Teilnehmer aus O.M.A. importieren</Typography>
                             <input
                                 type="file"
                                 name="file"
                                 onChange={handleFileChange}
                             />
-                            <Button variant="contained" color="primary" onClick={handleUpload}>
+                            <Button variant="contained" color="primary" onClick={handleUploadOMA}>
                                 Hochladen
                             </Button>
                         </Stack>
+                    </Paper>
+                    <Paper className={style.paper}>
+                        <Stack gap={2}>
+                            <Typography variant='h6'>Teilnehmer aus Webmelden importieren</Typography>
+                            <input
+                                type="file"
+                                name="file"
+                                onChange={handleFileChange}
+                            />
+                            <Button variant="contained" color="primary" onClick={handleUploadWebmelden}>
+                                Hochladen
+                            </Button>
+                        </Stack>
+                    </Paper>
 
+                </Stack>
 
-                    </Stack>
-                </Paper>
                 <Paper className={style.paper}>
                     <Stack gap={2}>
                         <Typography variant='h6'>Teilnehmer manuell hinzufügen</Typography>
