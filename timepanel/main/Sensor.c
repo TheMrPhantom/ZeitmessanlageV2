@@ -17,6 +17,7 @@
 #include "freertos/queue.h"
 #include "driver/gpio.h"
 #include "Sensor.h"
+#include "SevenSegment.h"
 
 #if CONFIG_START
 #define STATION_TYPE 0
@@ -27,6 +28,7 @@
 extern QueueHandle_t sensorInterputQueue;
 extern QueueHandle_t resetQueue;
 extern QueueHandle_t triggerQueue;
+extern QueueHandle_t sevenSegmentQueue;
 
 char *TAG = "SENSOR";
 const int sensorPins[] = {17};
@@ -83,6 +85,7 @@ void Sensor_Interrupt_Task(void *params)
                 ESP_LOGI(TAG, "Interrupt of Pin: %i", pinNumber);
 
                 xQueueSend(resetQueue, &cause, 0);
+                resetCountdown();
             }
         }
     }

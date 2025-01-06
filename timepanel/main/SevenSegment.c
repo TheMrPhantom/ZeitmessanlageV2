@@ -49,6 +49,36 @@ void Seven_Segment_Task(void *params)
                     setMilliseconds(0);
                 }
             }
+            else if (toDisplay.type == SEVEN_SEGMENT_COUNTDOWN)
+            {
+                int startTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
+                int endTime = startTime + toDisplay.time;
+                int remainingTime = endTime - (int)pdTICKS_TO_MS(xTaskGetTickCount());
+
+                while (remainingTime > 0)
+                {
+                    setSeconds(remainingTime / 1000);
+                    remainingTime = endTime - (int)pdTICKS_TO_MS(xTaskGetTickCount());
+
+                    if (xQueueReceive(sevenSegmentQueue, &toDisplay, pdMS_TO_TICKS(200)))
+                    {
+                        if (toDisplay.type == SEVEN_SEGMENT_COUNTDOWN_RESET)
+                        {
+                            break;
+                        }
+                        else if (toDisplay.type == SEVEN_SEGMENT_COUNTDOWN)
+                        {
+                            startTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
+                            endTime = startTime + toDisplay.time * 1000;
+                            remainingTime = endTime - (int)pdTICKS_TO_MS(xTaskGetTickCount());
+                        }
+                        else if (toDisplay.type == SEVEN_SEGMENT_NETWORK_FAULT)
+                        {
+                            networkFault = toDisplay.startFault || toDisplay.stopFault;
+                        }
+                    }
+                }
+            }
             if (!networkFault)
             {
                 if (toDisplay.type == SEVEN_SEGMENT_SET_TIME)
@@ -241,7 +271,7 @@ void setMilliseconds(long timeToSet)
 {
     float sec = timeToSet / 1000.0;
     char numberString[6];
-    numberString[6] = 0x00;
+    numberString[5] = 0x00;
 
     int len = snprintf(NULL, 0, "%f", sec);
     char *longResult = malloc(len + 1);
@@ -268,6 +298,56 @@ void setMilliseconds(long timeToSet)
         setNumber(atoi(toConvert), dot);
     }
     setSevenSegment();
+}
+
+/*
+    Will be displayed as minute:seconds
+*/
+void setSeconds(long timeToSet)
+{
+
+    int minutes = timeToSet / 60;
+    int seconds = timeToSet % 60;
+    char numberString[6];
+    numberString[5] = 0x00;
+
+    int len = snprintf(NULL, 0, "%02d.%02d", minutes, seconds);
+    char *longResult = malloc(len + 1);
+    snprintf(longResult, len + 1, "%02d.%02d", minutes, seconds);
+
+    strncpy(numberString, longResult, 5);
+    ESP_LOGI(SEVEN_SEGMENT_TAG, "Setting time: %s, %s", numberString, longResult);
+    free(longResult);
+
+    for (int i = 0; i < 5; i++)
+    {
+        int dot = 0;
+        if (numberString[i + 1] == '.')
+        {
+            dot = 1;
+        }
+        if (numberString[i] == '.')
+        {
+            continue;
+        }
+        if (numberString[0] == '0' && i == 0)
+        {
+            shiftSevenSegmentNumber(0, 0, 0, 0, 0, 0, 0, 0);
+            continue;
+        }
+
+        const char toConvert[2] = {numberString[i], 0x00};
+        // ESP_LOGI(SEVEN_SEGMENT_TAG, "Characters: %s Dot:%i", toConvert, atoi(toConvert));
+        setNumber(atoi(toConvert), dot);
+    }
+    setSevenSegment();
+}
+
+void resetCountdown()
+{
+    SevenSegmentDisplay reset;
+    reset.type = SEVEN_SEGMENT_COUNTDOWN_RESET;
+    xQueueSend(sevenSegmentQueue, &reset, 0);
 }
 
 void displayFault(int start, int stop, int dots)

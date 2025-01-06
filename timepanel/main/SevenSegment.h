@@ -16,7 +16,9 @@ void setNine(int dot);
 void setNumber(int i, int dot);
 void clearSevenSegment();
 void setMilliseconds(long timeToSet);
+void setSeconds(long timeToSet);
 void displayFault(int start, int stop, int dots);
+void resetCountdown();
 
 typedef struct SevenSegmentDisplay
 {
@@ -28,3 +30,5 @@ typedef struct SevenSegmentDisplay
 
 #define SEVEN_SEGMENT_SET_TIME 0
 #define SEVEN_SEGMENT_NETWORK_FAULT 1
+#define SEVEN_SEGMENT_COUNTDOWN 2
+#define SEVEN_SEGMENT_COUNTDOWN_RESET 3

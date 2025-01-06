@@ -18,6 +18,7 @@
 #include <string.h>
 #include <esp_system.h>
 #include "NetworkFault.h"
+#include "SevenSegment.h"
 
 #define min(x, y) (((x) < (y)) ? (x) : (y))
 
@@ -40,6 +41,7 @@ extern QueueHandle_t resetQueue;
 extern QueueHandle_t triggerQueue;
 extern QueueHandle_t networkFaultQueue;
 extern QueueHandle_t timeQueue;
+extern QueueHandle_t sevenSegmentQueue;
 
 extern QueueSetHandle_t networkAndResetQueue;
 
@@ -110,6 +112,14 @@ void receiveCallback(const uint8_t *macAddr, const uint8_t *data, int dataLen)
     {
         int toSend = 0;
         xQueueSend(resetQueue, &toSend, 0);
+        resetCountdown();
+    }
+    else if (strncmp(buffer, "countdown-7", 12) == 0)
+    {
+        SevenSegmentDisplay toSend;
+        toSend.type = SEVEN_SEGMENT_COUNTDOWN;
+        toSend.time = 60 * 7 * 1000;
+        xQueueSend(sevenSegmentQueue, &toSend, 0);
     }
 }
 
