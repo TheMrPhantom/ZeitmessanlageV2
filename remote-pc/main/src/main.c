@@ -38,7 +38,7 @@ void app_main(void)
     ESP_LOGI(TAG, "Starting...");
     init_glow_pins();
 
-    sensorInterputQueue = xQueueCreate(1, sizeof(int));
+    sensorInterputQueue = xQueueCreate(1, sizeof(sensor_interrupt_t));
 
     init_keyboard();
     init_led();

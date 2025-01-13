@@ -51,9 +51,19 @@ void Seven_Segment_Task(void *params)
             }
             else if (toDisplay.type == SEVEN_SEGMENT_COUNTDOWN)
             {
+
                 int startTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
                 int endTime = startTime + toDisplay.time;
                 int remainingTime = endTime - (int)pdTICKS_TO_MS(xTaskGetTickCount());
+
+                setSeconds(remainingTime / 1000);
+                vTaskDelay(pdMS_TO_TICKS(2000));
+
+                startTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
+                endTime = startTime + toDisplay.time;
+                remainingTime = endTime - (int)pdTICKS_TO_MS(xTaskGetTickCount());
+
+                int skip_zero = 0;
 
                 while (remainingTime > 0)
                 {
@@ -64,6 +74,7 @@ void Seven_Segment_Task(void *params)
                     {
                         if (toDisplay.type == SEVEN_SEGMENT_COUNTDOWN_RESET)
                         {
+                            skip_zero = 1;
                             break;
                         }
                         else if (toDisplay.type == SEVEN_SEGMENT_COUNTDOWN)
@@ -77,6 +88,18 @@ void Seven_Segment_Task(void *params)
                             networkFault = toDisplay.startFault || toDisplay.stopFault;
                         }
                     }
+                }
+                if (skip_zero == 0)
+                {
+                    for (int i = 0; i < 4 && skip_zero == 0; i++)
+                    {
+                        vTaskDelay(pdMS_TO_TICKS(500));
+                        clearSevenSegment();
+                        setSevenSegment();
+                        vTaskDelay(pdMS_TO_TICKS(500));
+                        setSeconds(0);
+                    }
+                    vTaskDelay(pdMS_TO_TICKS(2000));
                 }
             }
             if (!networkFault)

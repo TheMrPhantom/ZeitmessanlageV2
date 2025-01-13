@@ -33,7 +33,11 @@ bool sensors_active = false;
 static void IRAM_ATTR gpio_interrupt_handler(void *args)
 {
     int pinNumber = (int)args;
-    xQueueSendFromISR(sensorInterputQueue, &pinNumber, NULL);
+    int edge = gpio_get_level(pinNumber) == 0 ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE;
+    sensor_interrupt_t sensor_interrupt;
+    sensor_interrupt.pinNumber = pinNumber;
+    sensor_interrupt.edge = edge;
+    xQueueSendFromISR(sensorInterputQueue, &sensor_interrupt, NULL);
 }
 
 void init_button_pins()
@@ -43,7 +47,7 @@ void init_button_pins()
     {
 
         gpio_config_t io_conf;
-        io_conf.intr_type = GPIO_INTR_NEGEDGE;              // falling edge
+        io_conf.intr_type = GPIO_INTR_ANYEDGE;              // any edge
         io_conf.pin_bit_mask = 1ULL << sensorButtonPins[i]; // select pin
         io_conf.mode = GPIO_MODE_INPUT;                     // input mode
         io_conf.pull_up_en = GPIO_PULLUP_ENABLE;            // enable pull-up mode
@@ -69,28 +73,31 @@ void Sensor_Interrupt_Task(void *params)
     ESP_LOGI(TAG, "Setting up Sensors");
     init_button_pins();
 
-    int pinNumber = 0;
+    sensor_interrupt_t sensor_interrupt;
 
     timeval_t last_button_interrupt;
+    timeval_t reset_pressed;
     gettimeofday(&last_button_interrupt, NULL);
+    gettimeofday(&reset_pressed, NULL);
+    int countdown_sent = 1;
 
     while (true)
     {
-        if (xQueueReceive(sensorInterputQueue, &pinNumber, pdMS_TO_TICKS(500)))
+        if (xQueueReceive(sensorInterputQueue, &sensor_interrupt, pdMS_TO_TICKS(500)))
         {
-            ESP_LOGI(TAG, "Checking interrupt of Pin: %i", pinNumber);
+            ESP_LOGI(TAG, "Checking interrupt of Pin: %i with state %i", sensor_interrupt.pinNumber, sensor_interrupt.edge);
 
             vTaskDelay(pdMS_TO_TICKS(3));
             timeval_t now;
             gettimeofday(&now, NULL);
 
-            if (gpio_get_level(pinNumber) == 0 && (TIME_US(now) - TIME_US(last_button_interrupt) > 100000))
+            if (gpio_get_level(sensor_interrupt.pinNumber) == 0 && (TIME_US(now) - TIME_US(last_button_interrupt) > 100000))
             {
                 gettimeofday(&last_button_interrupt, NULL);
 
-                ESP_LOGI(TAG, "Confirmed interrupt of Pin: %i", pinNumber);
+                ESP_LOGI(TAG, "Confirmed interrupt of Pin: %i", sensor_interrupt.pinNumber);
 
-                if (pinNumber == BUTTON_TYPE_ACTIVATE)
+                if (sensor_interrupt.pinNumber == BUTTON_TYPE_ACTIVATE)
                 {
                     sensors_active = !sensors_active;
 
@@ -116,11 +123,15 @@ void Sensor_Interrupt_Task(void *params)
                     glow_state.pinNumber = BUTTON_GLOW_TYPE_DIS;
                     xQueueSend(buttonQueue, &glow_state, pdMS_TO_TICKS(50));
                 }
-                else if (pinNumber == BUTTON_TYPE_RESET)
+                else if (sensor_interrupt.pinNumber == BUTTON_TYPE_RESET)
                 {
                     glow_state_t glow_state;
                     glow_state.state = 0;
                     glow_state.pinNumber = BUTTON_GLOW_TYPE_RESET;
+
+                    gettimeofday(&reset_pressed, NULL);
+                    countdown_sent = 0;
+
                     xQueueSend(buttonQueue, &glow_state, pdMS_TO_TICKS(50));
                     broadcast("reset");
                 }
@@ -128,17 +139,17 @@ void Sensor_Interrupt_Task(void *params)
                 {
                     if (sensors_active)
                     {
-                        if (pinNumber == BUTTON_TYPE_FAULT)
+                        if (sensor_interrupt.pinNumber == BUTTON_TYPE_FAULT)
                         {
                             BaseType_t result = sendKey(HID_KEY_F);
                             ESP_LOGI(TAG, "Result of sending key: %i", result);
                         }
-                        else if (pinNumber == BUTTON_TYPE_REFUSAL)
+                        else if (sensor_interrupt.pinNumber == BUTTON_TYPE_REFUSAL)
                         {
                             BaseType_t result = sendKey(HID_KEY_V);
                             ESP_LOGI(TAG, "Result of sending key: %i", result);
                         }
-                        else if (pinNumber == BUTTON_TYPE_DIS)
+                        else if (sensor_interrupt.pinNumber == BUTTON_TYPE_DIS)
                         {
                             BaseType_t result = sendKey(HID_KEY_D);
                             ESP_LOGI(TAG, "Result of sending key: %i", result);
@@ -150,6 +161,17 @@ void Sensor_Interrupt_Task(void *params)
                     }
                 }
             }
+        }
+
+        timeval_t now;
+        gettimeofday(&now, NULL);
+
+        if (gpio_get_level(BUTTON_TYPE_RESET) == 0 && (TIME_US(now) - TIME_US(reset_pressed) > 1000000) && countdown_sent == 0)
+        {
+            countdown_sent = 1;
+            broadcast("countdown-7");
+            gettimeofday(&reset_pressed, NULL);
+            ESP_LOGI(TAG, "Countdown started");
         }
     }
 }

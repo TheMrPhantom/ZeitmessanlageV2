@@ -3,6 +3,12 @@
 void Sensor_Interrupt_Task(void *params);
 void init_Pins();
 
+typedef struct sensor_interrupt_t
+{
+    int pinNumber;
+    int edge;
+} sensor_interrupt_t;
+
 #define BUTTON_TYPE_FAULT 16
 #define BUTTON_TYPE_REFUSAL 8
 #define BUTTON_TYPE_DIS 18
