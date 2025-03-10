@@ -204,6 +204,18 @@ const ImportParticipants = (props: Props) => {
         return (oldSize !== undefined && (oldSize !== participant.size)) || (oldSkillLevel !== undefined && (oldSkillLevel !== participant.skillLevel))
     }).length
 
+
+    const overrideDisabled = () => {
+        const participants = common.organization?.turnaments.find((tournament) => dateToURLString(new Date(tournament.date)) === dateToURLString(new Date(dateParam ? dateParam : "")))?.participants
+        if (participants === undefined) {
+            return
+        }
+
+        return participants.find((participant) => {
+            return participant.resultA.time !== -1 || participant.resultJ.time !== -1;
+        }) !== undefined
+    }
+
     return (
         <Dialog open={props.parsedInput !== null} onClose={props.close}  >
             <DialogTitle>
@@ -246,7 +258,7 @@ const ImportParticipants = (props: Props) => {
                                 setselectedVariant(Number(e.target.value))
                             }}
                         >
-                            <FormControlLabel value={0} control={<Radio />} label="Daten überschreiben" />
+                            <FormControlLabel disabled={overrideDisabled()} value={0} control={<Radio />} label="Daten überschreiben" />
                             <FormControlLabel value={1} control={<Radio />} label="Nur neue Meldungen importieren" />
                             <FormControlLabel value={2} control={<Radio />} label="Neue Meldungen hinzufügen + nicht mehr vorhandene auf DIS setzen" />
                         </RadioGroup>
