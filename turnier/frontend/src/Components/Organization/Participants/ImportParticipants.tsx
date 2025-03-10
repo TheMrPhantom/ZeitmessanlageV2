@@ -15,6 +15,31 @@ type Props = {
     close: () => void
 }
 
+const fillStartNumbers = (participants: Participant[]) => {
+    for (let i = 0; i < participants.length; i++) {
+        const participant = participants[i]
+
+        if (participant.startNumber === -1) {
+            // Calculate the first unused start number
+            let foundFreeNumber = false
+            let numberToCheck = 1
+
+            while (!foundFreeNumber) {
+                foundFreeNumber = true
+                for (let j = 0; j < participants.length; j++) {
+                    if (participants[j].startNumber === numberToCheck) {
+                        foundFreeNumber = false
+                        numberToCheck++
+                        break
+                    }
+                }
+            }
+
+            participants[i].startNumber = numberToCheck
+        }
+    }
+}
+
 const ImportParticipants = (props: Props) => {
     const params = useParams();
     const dateParam = params.date
@@ -48,9 +73,14 @@ const ImportParticipants = (props: Props) => {
         //Get new participants
         const newParticipants = t[0].date !== undefined ? t[selectedDate].participants : t[0].participants
 
+        // Set the start number of the new participants to -1
+        newParticipants.forEach((participant) => {
+            participant.startNumber = -1
+        })
 
         /* Merge the participants lists */
         if (selectedVariant === 0) {
+            /* Override with new */
 
             /* Get new participants list that contains only the new participants */
             participantsToOverrite = newParticipants.filter((newParticipant) => {
@@ -80,7 +110,12 @@ const ImportParticipants = (props: Props) => {
             participantsToOverrite = [...participantsToOverrite, ...oldParticipantsToKeep]
 
 
+            participantsToOverrite = participantsToOverrite.map((participant, index) => {
+                return { ...participant, startNumber: index + 1 }
+            })
+
         } else if (selectedVariant === 1) {
+            /* Only add new */
             participantsToOverrite = newParticipants
             /*Get participants from the new participants that are not part of the old participants */
             const toAdd = newParticipants.filter((newParticipant) => {
@@ -91,7 +126,12 @@ const ImportParticipants = (props: Props) => {
 
             participantsToOverrite = [...oldParticipants, ...toAdd]
 
+            fillStartNumbers(participantsToOverrite)
+
+
+
         } else if (selectedVariant === 2) {
+            /* Add new and set old to DIS */
             /*Get participants from the new participants that are not part of the old participants */
             const toAdd = newParticipants.filter((newParticipant) => {
                 return !oldParticipants.some((oldParticipant) => {
@@ -113,11 +153,12 @@ const ImportParticipants = (props: Props) => {
             })
 
             participantsToOverrite = [...oldParticipants, ...toAdd]
+
+
+            fillStartNumbers(participantsToOverrite)
         }
 
-        participantsToOverrite = participantsToOverrite.map((participant, index) => {
-            return { ...participant, startNumber: index + 1 }
-        })
+
 
         //Set ordering for each skill level from 1 to n
         const skillLevels = [SkillLevel.A0, SkillLevel.A1, SkillLevel.A2, SkillLevel.A3]
@@ -140,7 +181,7 @@ const ImportParticipants = (props: Props) => {
             })
         }
         )
-        console.log(participantsToOverrite)
+
         setparticipantsToUpload(participantsToOverrite)
 
     }, [common.organization?.turnaments, params.date, props.parsedInput, selectedDate, selectedVariant])
