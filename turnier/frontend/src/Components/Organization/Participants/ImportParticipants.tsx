@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux';
 import { changeParticipants } from '../../../Actions/SampleAction';
-import { runClassToString, sizeToString, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped';
+import { compareParticipants, runClassToString, sizeToString, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped';
 import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { Participant, Size, SkillLevel } from '../../../types/ResponseTypes';
@@ -55,21 +55,21 @@ const ImportParticipants = (props: Props) => {
             /* Get new participants list that contains only the new participants */
             participantsToOverrite = newParticipants.filter((newParticipant) => {
                 return !oldParticipants.some((oldParticipant) => {
-                    return oldParticipant.name === newParticipant.name && oldParticipant.dog === newParticipant.dog
+                    return compareParticipants(oldParticipant, newParticipant)
                 })
             })
 
             /* Get the old participants list that contains only the new participants */
             const oldParticipantsToKeep = oldParticipants.filter((oldParticipant) => {
                 return newParticipants.some((newParticipant) => {
-                    return oldParticipant.name === newParticipant.name && oldParticipant.dog === newParticipant.dog
+                    return compareParticipants(oldParticipant, newParticipant)
                 })
             })
 
             /* change skill and size of old participants to new skill and size */
             oldParticipantsToKeep.forEach((oldParticipant) => {
                 const newParticipant = newParticipants.find((newParticipant) => {
-                    return oldParticipant.name === newParticipant.name && oldParticipant.dog === newParticipant.dog
+                    return compareParticipants(oldParticipant, newParticipant)
                 })
                 const newSkillLevel = newParticipant?.skillLevel
                 const newSize = newParticipant?.size
@@ -85,7 +85,7 @@ const ImportParticipants = (props: Props) => {
             /*Get participants from the new participants that are not part of the old participants */
             const toAdd = newParticipants.filter((newParticipant) => {
                 return !oldParticipants.some((oldParticipant) => {
-                    return oldParticipant.name === newParticipant.name && oldParticipant.dog === newParticipant.dog
+                    return compareParticipants(oldParticipant, newParticipant)
                 })
             })
 
@@ -95,7 +95,7 @@ const ImportParticipants = (props: Props) => {
             /*Get participants from the new participants that are not part of the old participants */
             const toAdd = newParticipants.filter((newParticipant) => {
                 return !oldParticipants.some((oldParticipant) => {
-                    return oldParticipant.name === newParticipant.name && oldParticipant.dog === newParticipant.dog
+                    return compareParticipants(oldParticipant, newParticipant)
                 })
             })
 

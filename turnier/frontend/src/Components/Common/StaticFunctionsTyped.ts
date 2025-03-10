@@ -215,6 +215,20 @@ export const getNumberOfParticipantsForRunWithResult = (participants: Participan
     return filteredParticipants.filter(p => getResultFromParticipant(run, p).time > -2).length
 }
 
+export const compareParticipants = (oldParticipant: Participant, newParticipant: Participant) => {
+    let oldName = String(oldParticipant.name).trim()
+    let newName = String(newParticipant.name).trim()
+    let oldDog = String(oldParticipant.dog).trim()
+    let newDog = String(newParticipant.dog).trim()
+
+    oldName = oldName.replace("undefined", "")
+    newName = newName.replace("undefined", "")
+    oldDog = oldDog.replace("undefined", "")
+    newDog = newDog.replace("undefined", "")
+
+    return oldName === newName && oldDog === newDog
+}
+
 export const runToRunClass = (run: Run) => {
     return Math.floor(run / 2)
 }
