@@ -3,8 +3,9 @@
 $width: 210mm;
 
 .sticker {
-    width: 190mm;
+    width: 200mm;
     height: 15mm;
+    position: relative;
 }
 
 .turnamentInfo {
@@ -13,6 +14,8 @@ $width: 210mm;
     white-space: nowrap;
     overflow: hidden;
     width: 40mm;
+    position: absolute;
+    left: 0mm;
 }
 
 .turnamentText {
@@ -21,21 +24,25 @@ $width: 210mm;
 }
 
 .tableContainer {
-    width: 124mm;
+    width: 120mm;
     position: relative;
+    left: 40mm;
 }
 
 .judgeContainer {
-    width: calc(190mm - 124mm - 40mm - 4mm);
+    position: absolute;
+    left: 163mm;
     white-space: nowrap;
     overflow: hidden;
+    width: 37mm;
 }
 
 .stickerTable {
-    transform: scale(0.58);
+    transform: scale(0.5);
     transform-origin: top left;
     white-space: nowrap;
     height: 12mm;
+    width: 240mm !important;
 }
 
 .tableRow {
@@ -43,20 +50,19 @@ $width: 210mm;
 }
 
 .starterText {
-    padding-left: 3.5mm;
-    width: 150mm;
-    transform: scale(0.58);
-    transform-origin: bottom left;
+    width: 240mm !important;
+    transform: scale(0.5);
+    transform-origin: top left;
     position: absolute;
-    bottom: 0;
-    left: 0;
+    left: 3mm;
+    top:11mm;
 }
 
 .a4Page {
     width: $width;
     height: 297mm;
     margin: 0;
-    padding: $padding;
+    padding: 5mm;
     font-family: Arial, sans-serif;
 }
 

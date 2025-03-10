@@ -147,13 +147,13 @@ const PrintingPage = (props: Props) => {
             </>
         )
     } else if (props.type === ListType.sticker) {
-        return <>{props.stickers!.map((element) => {
+        return <Stack className={style.a4Page}>{props.stickers!.map((element) => {
             if ((element.finalResult.resultA.time === -1 && element.finalResult.resultJ.time === -1) ||
                 (element.finalResult.resultA.time === -2 && element.finalResult.resultJ.time === -2)) {
                 return <></>
             }
             return <Sticker infos={element} />
-        })}</>
+        })}</Stack>
     }
 
     return <></>
