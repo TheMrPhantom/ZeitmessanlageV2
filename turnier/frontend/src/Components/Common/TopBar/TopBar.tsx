@@ -31,6 +31,7 @@ import WifiIcon from '@mui/icons-material/Wifi';
 import WarningIcon from '@mui/icons-material/Warning';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { setSendingFailed } from '../../../Actions/SampleAction';
+import CloudSyncIcon from '@mui/icons-material/CloudSync';
 
 type Props = {}
 
@@ -305,7 +306,10 @@ const TopBar = (props: Props) => {
                             </> : <></>
                     }
                     <div style={{ display: "flex", alignItems: "center" }}>
-
+                        <IconButton style={{ color: "white" }} onClick={() => { navigate("/use-offline") }}>
+                            <CloudSyncIcon />
+                        </IconButton>
+                        <Spacer horizontal={20} />
                         <Badge
                             overlap="circular"
                             anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
