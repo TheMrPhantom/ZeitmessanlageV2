@@ -128,7 +128,7 @@ const ImportParticipants = (props: Props) => {
                     return participant.skillLevel === skillLevel && participant.size === size
                 })
 
-                participantsOfSkillLevel.forEach((participant, index) => {
+                participantsOfSkillLevel.sort((a, b) => { return 0.5 - Math.random() }).forEach((participant, index) => {
                     const oldParticipant = participantsToOverrite.find((oldParticipant) => {
                         return oldParticipant.name === participant.name && oldParticipant.dog === participant.dog
                     })
