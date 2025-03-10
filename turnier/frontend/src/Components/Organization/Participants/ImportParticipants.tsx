@@ -15,7 +15,7 @@ type Props = {
     close: () => void
 }
 
-const fillStartNumbers = (participants: Participant[]) => {
+export const fillStartNumbers = (participants: Participant[]) => {
     for (let i = 0; i < participants.length; i++) {
         const participant = participants[i]
 
@@ -253,7 +253,7 @@ const ImportParticipants = (props: Props) => {
         }
 
         return participants.find((participant) => {
-            return participant.resultA.time !== -1 || participant.resultJ.time !== -1;
+            return participant.resultA.time !== -2 || participant.resultJ.time !== -2;
         }) !== undefined
     }
 
