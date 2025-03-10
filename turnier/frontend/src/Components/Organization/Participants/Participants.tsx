@@ -16,6 +16,7 @@ import HowToRegIcon from '@mui/icons-material/HowToReg';
 import AlarmOnIcon from '@mui/icons-material/AlarmOn';
 import PaidIcon from '@mui/icons-material/Paid';
 import { ArrowUpward, ArrowDownward } from '@mui/icons-material';
+import HelpIcon from '@mui/icons-material/Help';
 
 type Props = {}
 type TableProps = {
@@ -555,7 +556,12 @@ const Participants = (props: Props) => {
                     </Paper>
                     <Paper className={style.paper}>
                         <Stack gap={2}>
-                            <Typography variant='h6'>Teilnehmer aus Webmelden importieren</Typography>
+                            <Stack gap={1} flexDirection={"row"} alignItems="center">
+                                <Typography variant='h6'>Teilnehmer aus Webmelden importieren</Typography>
+                                <Tooltip title='Verwende den Export für "Simple Agiltiy" in Webmelden' arrow placement='top' >
+                                    <HelpIcon color='warning' />
+                                </Tooltip>
+                            </Stack>
                             <input
                                 type="file"
                                 name="file"

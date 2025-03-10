@@ -122,7 +122,7 @@ const PrintingDialog = (props: Props) => {
             runAndHeight.heights.forEach((height) => {
                 if (height.selected) {
                     /*Get all participants for this run and height*/
-                    const participants = props.participants.filter((participant) => participant.skillLevel === Math.floor(runAndHeight.run / 2) && participant.size === height.height).sort((a, b) => a.sorting - b.sorting)
+                    const participants = props.participants.filter((participant) => participant.skillLevel === Math.floor(runAndHeight.run / 2) && participant.size === height.height && participant.registered).sort((a, b) => a.sorting - b.sorting)
                     toPrint.push({
                         run: runAndHeight.run,
                         size: height.height,

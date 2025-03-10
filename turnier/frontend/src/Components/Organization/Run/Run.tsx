@@ -51,7 +51,7 @@ const Run = (props: Props) => {
     //Filter all participants for the current run
     const currentRunClass: SkillLevel = params.class ? Math.floor(Number(params.class) / 2) : 0
     const currentSize = params.class ? Number(params.size) : 0
-    const participants = allParticipants?.filter(p => p.skillLevel === currentRunClass && p.size === currentSize)
+    const participants = allParticipants?.filter(p => p.skillLevel === currentRunClass && p.size === currentSize && p.registered)
 
     // Get index of first participant without result
     const firstIndex = participants?.findIndex(p => getResultFromParticipant(currentRun, p).time === -2)

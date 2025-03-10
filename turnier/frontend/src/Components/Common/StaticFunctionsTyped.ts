@@ -199,7 +199,7 @@ export const runTimeToStringClock = (time: number) => {
 }
 
 export const getParticipantsForRun = (participants: Participant[], run: SkillLevel, size: Size) => {
-    return participants?.filter(p => p.skillLevel === run && p.size === size)
+    return participants?.filter(p => p.skillLevel === run && p.size === size && p.registered)
 }
 
 export const getNumberOfParticipantsForRun = (participants: Participant[], run: SkillLevel, size: Size) => {
