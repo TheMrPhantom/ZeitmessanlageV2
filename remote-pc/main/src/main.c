@@ -17,17 +17,13 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 
-#include <stdio.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
-#include "driver/gpio.h"
 #include "Sensor.h"
 #include "Network.h"
 #include "main.h"
 #include "Keyboard.h"
 #include "LED.h"
 #include "Button.h"
+#include "Printer.h"
 
 QueueHandle_t sensorInterputQueue;
 QueueHandle_t networkQueue;
@@ -42,6 +38,7 @@ void app_main(void)
 
     init_keyboard();
     init_led();
+    init_printer();
 
     set_led(0, 0, 10);
 
