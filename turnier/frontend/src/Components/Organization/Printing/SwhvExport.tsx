@@ -63,7 +63,7 @@ const SwhvExport = (props: Props) => {
 
             const numberOfYouthParticipants = getNumberOfParticipantsForRun(participants, runToRunClass(run!.run), run!.height, true)
             const participantsForRun = getParticipantsForRun(participants, runToRunClass(run!.run), run!.height)
-            console.log(numberOfYouthParticipants, classToString(run!.run), run!.height, participantsForRun)
+
             const length = run!.length
             const speed = run!.speed
             const stdTime = standardTime(run!.run, run!.height, participantsForRun, length, speed ? speed : minSpeedA3)
