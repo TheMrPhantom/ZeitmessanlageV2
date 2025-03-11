@@ -1,4 +1,4 @@
-import { Button, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
+import { Button, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, ToggleButton, Typography } from '@mui/material'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import style from './turnament.module.scss'
 import { ALL_HEIGHTS, ALL_RUNS, Run, Size } from '../../../types/ResponseTypes'
@@ -9,7 +9,7 @@ import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate, useParams } from 'react-router-dom'
 import { dateToURLString } from '../../Common/StaticFunctions'
-import { changeDate, changeJudge, changeLength, changeParticipants, changeSpeed, changeTurnamentName, clearPrints, } from '../../../Actions/SampleAction'
+import { changeDate, changeGame, changeJudge, changeLength, changeParticipants, changeSpeed, changeTurnamentName, clearPrints, } from '../../../Actions/SampleAction'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider/LocalizationProvider'
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns'
@@ -17,6 +17,8 @@ import { de } from 'date-fns/locale'
 import PrintingDialog from './PrintingDialog'
 import { minSpeedA3 } from '../../Common/AgilityPO'
 import QrCodeIcon from '@mui/icons-material/QrCode';
+import CheckIcon from '@mui/icons-material/Check';
+import CloseIcon from '@mui/icons-material/Close';
 
 type Props = {}
 
@@ -205,6 +207,15 @@ const Turnament = (props: Props) => {
                                 }}
                             ><QrCodeIcon /></Button>
                         </Stack>
+                        <Stack className={style.infoBox} gap={2}>
+                            <Typography variant='h5'>swhv Export</Typography>
+                            <Button variant='outlined'
+                                onClick={() => {
+                                    fixAllParticipants()
+                                    navigate(`/o/${params.organization}/${params.date}/export/swhv`)
+                                }}
+                            >Auswählen</Button>
+                        </Stack>
                     </Stack>
                 </Stack>
                 <Stack>
@@ -215,6 +226,7 @@ const Turnament = (props: Props) => {
                                 <TableHead>
                                     <TableRow>
                                         <TableCell>Lauf</TableCell>
+                                        <TableCell>Spiel/2.Chance</TableCell>
                                         <TableCell>Länge</TableCell>
                                         <TableCell>Geschwindigkeit</TableCell>
                                         <TableCell>Zum Lauf</TableCell>
@@ -222,9 +234,26 @@ const Turnament = (props: Props) => {
                                 </TableHead>
                                 <TableBody>
                                     {runs.map((run, index) => {
+                                        const isGame = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === run)?.isGame
                                         return (
                                             <TableRow key={index}>
                                                 <TableCell>{classToString(run)}</TableCell>
+                                                <TableCell>
+                                                    <ToggleButton
+                                                        value="check"
+                                                        selected={isGame}
+                                                        onChange={() => {
+                                                            const date = params.date ? new Date(params.date) : new Date()
+                                                            dispatch(changeGame(date, run, !isGame))
+                                                            const t_organization = params.organization ? params.organization : ""
+
+                                                            storePermanent(t_organization, common.organization)
+                                                            updateDatabase(common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date), t_organization, dispatch)
+                                                        }}
+                                                    >
+                                                        {isGame ? <CheckIcon /> : <CloseIcon />}
+                                                    </ToggleButton>
+                                                </TableCell>
                                                 <TableCell>
                                                     <TextField value={common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === params.date)?.runs.find(r => r.run === run)?.length}
                                                         type="number"

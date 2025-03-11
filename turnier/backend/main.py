@@ -111,6 +111,7 @@ class update_data(Resource):
                 RunInformation.run == run["run"], RunInformation.height == run["height"], RunInformation.turnament_id == t.id).first()
             run_info.length = run["length"]
             run_info.speed = run["speed"]
+            run_info.isGame = run["isGame"]if "isGame" in run else False
 
         participants_from_request = request.json["participants"]
         for participant in participants_from_request:
@@ -129,6 +130,7 @@ class update_data(Resource):
                 participant_info.start_number = participant["startNumber"] if "startNumber" in participant else 0
                 participant_info.sorting = participant["sorting"] if "sorting" in participant else 0
                 participant_info.name = participant["name"] if "name" in participant else ""
+                participant_info.is_youth = participant["isYouth"] if "isYouth" in participant else False
                 participant_info.club = participant["club"] if "club" in participant else ""
                 participant_info.dog = participant["dog"] if "dog" in participant else ""
                 participant_info.mail = participant["mail"] if "mail" in participant else ""
@@ -165,6 +167,7 @@ class update_data(Resource):
                 participant_info.start_number = participant["startNumber"] if "startNumber" in participant else 0
                 participant_info.sorting = participant["sorting"] if "sorting" in participant else 0
                 participant_info.name = participant["name"] if "name" in participant else ""
+                participant_info.is_youth = participant["isYouth"] if "isYouth" in participant else False
                 participant_info.club = participant["club"] if "club" in participant else ""
                 participant_info.dog = participant["dog"] if "dog" in participant else ""
                 participant_info.mail = participant["mail"] if "mail" in participant else ""

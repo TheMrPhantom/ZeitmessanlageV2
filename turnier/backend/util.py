@@ -74,7 +74,7 @@ OIDC_USER_INFO = os.environ.get(
 OIDC_USER_NEEDS_VERIFICATION = os.environ.get(
     "OIDC_USER_NEEDS_VERIFICATION") == "true" if os.environ.get("OIDC_USER_NEEDS_VERIFICATION") else True
 
-CURRENT_VERSION = 0
+CURRENT_VERSION = 2
 
 tempfile_path = "tempfiles"
 backup_file_name = "backup.json"
@@ -124,6 +124,8 @@ def get_user_info(access_token, resource_url):
     return response.json()
 
 # Function to load a private key from a PEM file
+
+
 def load_private_key_from_pem(pem_path: str) -> rsa.RSAPrivateKey:
     with open(pem_path, 'rb') as pem_file:
         pem_data = pem_file.read()
@@ -133,9 +135,13 @@ def load_private_key_from_pem(pem_path: str) -> rsa.RSAPrivateKey:
         )
     return private_key
 
-private_key: rsa.RSAPrivateKey = load_private_key_from_pem('rsa-keys/private-key.pem')
+
+private_key: rsa.RSAPrivateKey = load_private_key_from_pem(
+    'rsa-keys/private-key.pem')
 
 # Function to sign a message using RSA private key
+
+
 def sign_message(message: str) -> str:
     signature = private_key.sign(
         message.encode(),
@@ -143,7 +149,6 @@ def sign_message(message: str) -> str:
         hashes.SHA256()
     )
     return base64.b64encode(signature).decode()
-
 
 
 checkout_mail_text = """Hallo {name},

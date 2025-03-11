@@ -10,6 +10,7 @@ export type Participant = {
     startNumber: number,
     sorting: number,
     name: string,
+    isYouth: boolean,
     club: string,
     dog: string,
     skillLevel: SkillLevel,
@@ -83,7 +84,8 @@ export type RunInformation = {
     run: Run,
     height: Size,
     length: number,
-    speed: number
+    speed: number,
+    isGame: boolean
 }
 
 export type Organization = {
@@ -99,6 +101,7 @@ export const defaultParticipant: Participant = {
     name: "",
     club: "",
     dog: "",
+    isYouth: false,
     skillLevel: SkillLevel.A0,
     size: Size.Small,
     resultA: { time: 0, faults: 0, refusals: 0, type: 0 },
@@ -133,3 +136,6 @@ export type Verification = {
     name: string,
     alias: string
 }
+
+export const runs = [Run.A3, Run.J3, Run.A2, Run.J2, Run.A1, Run.J1, Run.A0, Run.J0]
+export const heights = [Size.Small, Size.Medium, Size.Intermediate, Size.Large]

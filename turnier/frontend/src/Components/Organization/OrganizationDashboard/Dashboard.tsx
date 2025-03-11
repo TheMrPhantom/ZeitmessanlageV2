@@ -184,7 +184,7 @@ const Dashboard = (props: Props) => {
 
                                     ALL_RUNS.forEach(element => {
                                         ALL_HEIGHTS.forEach(height => {
-                                            runs.push({ run: element, height: height, length: 0, speed: 0 })
+                                            runs.push({ run: element, height: height, length: 0, speed: 0, isGame: false })
                                         });
                                     });
 
