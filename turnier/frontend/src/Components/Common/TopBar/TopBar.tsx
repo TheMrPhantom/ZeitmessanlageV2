@@ -32,6 +32,7 @@ import WarningIcon from '@mui/icons-material/Warning';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { setSendingFailed } from '../../../Actions/SampleAction';
 import CloudSyncIcon from '@mui/icons-material/CloudSync';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 
 type Props = {}
 
@@ -276,6 +277,15 @@ const TopBar = (props: Props) => {
                 <Toolbar sx={{ justifyContent: "space-between" }}>
                     <div style={{ display: "flex" }}>
                         {/*getIcon() Disabled drawer*/}
+                        <IconButton
+                            color="inherit"
+                            onClick={() => {
+                                navigate(-1)
+                            }}
+                        >
+                            <ArrowBackIcon />
+                        </IconButton>
+                        <Spacer horizontal={20} />
                         <Button
                             size="large"
                             color="inherit"

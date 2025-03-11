@@ -1,9 +1,11 @@
 import React from 'react'
 import style from './print.module.scss'
 import PageHeader from './PageHeader'
-import { Button, Paper, Stack, Typography } from '@mui/material'
+import { Button, IconButton, Paper, Stack, Typography } from '@mui/material'
 import Spacer from '../../Common/Spacer'
 import PrintIcon from '@mui/icons-material/Print';
+import { useNavigate } from 'react-router-dom'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 
 type Props = {
     generationType: string,
@@ -11,10 +13,14 @@ type Props = {
 }
 
 const PrintingA4 = (props: Props) => {
+    const navigate = useNavigate()
 
     return <>
         <Paper className={style.printInvisibleHeader}>
             <Stack direction="row" gap={2} justifyContent="space-between">
+                <IconButton onClick={() => navigate(-1)}>
+                    <ArrowBackIcon />
+                </IconButton>
                 <Typography variant='h5'>{props.generationType} wurde(n) generiert</Typography>
                 <Button variant='contained' onClick={() => window.print()}>
                     <PrintIcon />

@@ -6,9 +6,11 @@ import { RootState } from '../../../Reducer/reducerCombiner'
 import { Participant, Result, Run, Size, StickerInfo } from '../../../types/ResponseTypes';
 import { ListType } from '../Turnament/PrintingDialog';
 import Spacer from '../../Common/Spacer';
-import { Button, Paper, Stack, Typography } from '@mui/material';
+import { Button, Icon, IconButton, Paper, Stack, Typography } from '@mui/material';
 import PrintIcon from '@mui/icons-material/Print';
 import style from './print.module.scss'
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { useNavigate } from 'react-router-dom';
 
 type Props = {}
 
@@ -28,6 +30,7 @@ const Printing = (props: Props) => {
     const stickerHeight = 15;
 
     const common: CommonReducerType = useSelector((state: RootState) => state.common);
+    const navigate = useNavigate()
     //const dispatch = useDispatch()
 
 
@@ -199,6 +202,9 @@ const Printing = (props: Props) => {
         <>
             <Paper className={style.printInvisibleHeader}>
                 <Stack direction="row" gap={2} justifyContent="space-between">
+                    <IconButton onClick={() => navigate(-1)}>
+                        <ArrowBackIcon />
+                    </IconButton>
                     <Typography variant='h5'>Listen wurden generiert</Typography>
                     <Button variant='contained' onClick={() => window.print()}>
                         <PrintIcon />
