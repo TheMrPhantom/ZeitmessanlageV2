@@ -60,7 +60,7 @@ const Routing = (props: Props) => {
                 /></>} />
                 <Route path="/o/:organization/:date/print" element={<Printing />} />
                 <Route path="/o/:organization/:date/print/qr" element={<PrintQR />} />
-                <Route path="/o/:organization/:date/print/swhv" element={<SwhvExport />} />
+                <Route path="/o/:organization/:date/export/swhv" element={<><Toolbar /><SwhvExport /></>} />
 
                 {/*User pages*/}
                 <Route path="/u/:organization/:date/:secret" element={<><Toolbar /><RunSelection /></>} />

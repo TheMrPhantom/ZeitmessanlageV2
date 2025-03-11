@@ -18,6 +18,10 @@ $width: 210mm;
     left: 0mm;
 }
 
+.container{
+    padding: $padding;
+}
+
 .turnamentText {
     transform: scale(0.58);
     transform-origin: top left;
@@ -85,6 +89,10 @@ $width: 210mm;
     padding: $padding;
     margin: $padding;
     width: $width;
+}
+
+.stepStack{
+    padding:$padding;
 }
 
 @media print {

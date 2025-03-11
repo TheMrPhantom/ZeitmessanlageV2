@@ -212,7 +212,7 @@ const Turnament = (props: Props) => {
                             <Button variant='outlined'
                                 onClick={() => {
                                     fixAllParticipants()
-                                    navigate(`/o/${params.organization}/${params.date}/print/swhv`)
+                                    navigate(`/o/${params.organization}/${params.date}/export/swhv`)
                                 }}
                             >Auswählen</Button>
                         </Stack>
@@ -226,7 +226,7 @@ const Turnament = (props: Props) => {
                                 <TableHead>
                                     <TableRow>
                                         <TableCell>Lauf</TableCell>
-                                        <TableCell>Spiel</TableCell>
+                                        <TableCell>Spiel/2.Chance</TableCell>
                                         <TableCell>Länge</TableCell>
                                         <TableCell>Geschwindigkeit</TableCell>
                                         <TableCell>Zum Lauf</TableCell>
