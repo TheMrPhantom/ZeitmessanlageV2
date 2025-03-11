@@ -34,6 +34,7 @@ class Participant(db.Model):
     dog = sql.Column(sql.String, nullable=False)
     skill_level = sql.Column(sql.Integer, nullable=False)
     size = sql.Column(sql.Integer, nullable=False)
+    is_youth = sql.Column(sql.Boolean, nullable=False)
     mail = sql.Column(sql.String, nullable=False)
     association = sql.Column(sql.String, nullable=False)
     association_member_number = sql.Column(sql.String, nullable=False)
@@ -58,6 +59,7 @@ class Participant(db.Model):
             "startNumber": self.start_number,
             "sorting": self.sorting,
             "name": self.name,
+            "isYouth": self.is_youth,
             "club": self.club,
             "dog": self.dog,
             "skillLevel": self.skill_level,
@@ -78,6 +80,7 @@ class Participant(db.Model):
             "startNumber": self.start_number,
             "sorting": self.sorting,
             "name": self.name,
+            "isYouth": self.is_youth,
             "club": self.club,
             "dog": self.dog,
             "skillLevel": self.skill_level,
@@ -102,6 +105,7 @@ class RunInformation(db.Model):
     height = sql.Column(sql.Integer, nullable=False)
     length = sql.Column(sql.Integer, nullable=False)
     speed = sql.Column(sql.Float, nullable=False)
+    isGame = sql.Column(sql.Boolean, nullable=False)
     turnament_id = sql.Column(sql.Integer, sql.ForeignKey(
         'tournament.id', ondelete='CASCADE'), nullable=True)
 
@@ -110,7 +114,8 @@ class RunInformation(db.Model):
             "run": self.run,
             "height": self.height,
             "length": self.length,
-            "speed": self.speed
+            "speed": self.speed,
+            "isGame": self.isGame
         }
 
 

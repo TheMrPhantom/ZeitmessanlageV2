@@ -14,6 +14,7 @@ import { startSerial } from '../Common/StaticFunctionsTyped';
 import UseOffline from '../Organization/UseOffline/UseOffline';
 import PrintQR from '../Organization/Printing/PrintQR';
 import Admin from '../Admin/Dashboard/Admin';
+import SwhvExport from '../Organization/Printing/SwhvExport';
 type Props = {}
 
 const Routing = (props: Props) => {
@@ -59,6 +60,7 @@ const Routing = (props: Props) => {
                 /></>} />
                 <Route path="/o/:organization/:date/print" element={<Printing />} />
                 <Route path="/o/:organization/:date/print/qr" element={<PrintQR />} />
+                <Route path="/o/:organization/:date/export/swhv" element={<><Toolbar /><SwhvExport /></>} />
 
                 {/*User pages*/}
                 <Route path="/u/:organization/:date/:secret" element={<><Toolbar /><RunSelection /></>} />
