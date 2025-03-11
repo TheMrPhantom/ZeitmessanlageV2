@@ -13,14 +13,14 @@ class Result(db.Model):
     time = sql.Column(sql.Float, nullable=False)
     faults = sql.Column(sql.Integer, nullable=False)
     refusals = sql.Column(sql.Integer, nullable=False)
-    run = sql.Column(sql.Integer, nullable=False)
+    type = sql.Column(sql.Integer, nullable=False)
 
     def to_dict(self):
         return {
             "time": self.time,
             "faults": self.faults,
             "refusals": self.refusals,
-            "run": self.run
+            "type": self.type
         }
 
 

@@ -151,7 +151,7 @@ class update_data(Resource):
                 result_a.time = participant["resultA"]["time"]
                 result_a.faults = participant["resultA"]["faults"]
                 result_a.refusals = participant["resultA"]["refusals"]
-                result_a.run = participant["resultA"]["run"]
+                result_a.type = participant["resultA"]["type"]
                 db.session.add(result_a)
                 participant_info.result_a = result_a
 
@@ -160,7 +160,7 @@ class update_data(Resource):
                 result_j.time = participant["resultJ"]["time"]
                 result_j.faults = participant["resultJ"]["faults"]
                 result_j.refusals = participant["resultJ"]["refusals"]
-                result_j.run = participant["resultJ"]["run"]
+                result_j.type = participant["resultJ"]["type"]
                 db.session.add(result_j)
                 participant_info.result_j = result_j
             else:
@@ -185,12 +185,12 @@ class update_data(Resource):
                 participant_info.result_a.time = participant["resultA"]["time"]
                 participant_info.result_a.faults = participant["resultA"]["faults"]
                 participant_info.result_a.refusals = participant["resultA"]["refusals"]
-                participant_info.result_a.run = participant["resultA"]["run"]
+                participant_info.result_a.type = participant["resultA"]["type"]
 
                 participant_info.result_j.time = participant["resultJ"]["time"]
                 participant_info.result_j.faults = participant["resultJ"]["faults"]
                 participant_info.result_j.refusals = participant["resultJ"]["refusals"]
-                participant_info.result_j.run = participant["resultJ"]["run"]
+                participant_info.result_j.type = participant["resultJ"]["type"]
 
         db.session.commit()
 

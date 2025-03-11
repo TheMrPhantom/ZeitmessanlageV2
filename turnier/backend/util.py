@@ -74,7 +74,7 @@ OIDC_USER_INFO = os.environ.get(
 OIDC_USER_NEEDS_VERIFICATION = os.environ.get(
     "OIDC_USER_NEEDS_VERIFICATION") == "true" if os.environ.get("OIDC_USER_NEEDS_VERIFICATION") else True
 
-CURRENT_VERSION = 2
+CURRENT_VERSION = 3
 
 tempfile_path = "tempfiles"
 backup_file_name = "backup.json"
