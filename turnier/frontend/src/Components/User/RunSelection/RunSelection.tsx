@@ -132,14 +132,14 @@ const RunSelection = (props: Props) => {
             return favoriteParticipants.map((participant) => {
                 //Calculate standard time for the two runs
                 const p = getParticipantsForRun(common.userTurnament.participants, participant.skillLevel, participant.size)
-                let parcourLength = common.userTurnament.runs.find((run) => run.run === participant.resultA.run)?.length
-                let parcourSpeed = common.userTurnament.runs.find((run) => run.run === participant.resultA.run)?.speed
-                let stdTime = standardTime(participant.resultA.run, participant.size, p, parcourLength ? parcourLength : 0, parcourSpeed ? parcourSpeed : 3)
+                let parcourLength = common.userTurnament.runs.find((run) => run.run === participant.skillLevel * 2)?.length
+                let parcourSpeed = common.userTurnament.runs.find((run) => run.run === participant.skillLevel * 2)?.speed
+                let stdTime = standardTime(participant.skillLevel * 2, participant.size, p, parcourLength ? parcourLength : 0, parcourSpeed ? parcourSpeed : 3)
                 const timefaultsA = getTimeFaults(participant.resultA, stdTime)
 
-                parcourLength = common.userTurnament.runs.find((run) => run.run === participant.resultJ.run)?.length
-                parcourSpeed = common.userTurnament.runs.find((run) => run.run === participant.resultJ.run)?.speed
-                stdTime = standardTime(participant.resultJ.run, participant.size, p, parcourLength ? parcourLength : 0, parcourSpeed ? parcourSpeed : 3)
+                parcourLength = common.userTurnament.runs.find((run) => run.run === participant.skillLevel * 2 + 1)?.length
+                parcourSpeed = common.userTurnament.runs.find((run) => run.run === participant.skillLevel * 2 + 1)?.speed
+                stdTime = standardTime(participant.skillLevel * 2 + 1, participant.size, p, parcourLength ? parcourLength : 0, parcourSpeed ? parcourSpeed : 3)
                 const timefaultsJ = getTimeFaults(participant.resultJ, stdTime)
 
                 return <Dog dogname={participant.dog}

@@ -288,13 +288,13 @@ const Participants = (props: Props) => {
                 time: -2,
                 faults: 0,
                 refusals: 0,
-                run: runclass * 2
+                type: 0
             },
             resultJ: {
                 time: -2,
                 faults: 0,
                 refusals: 0,
-                run: runclass * 2 + 1
+                type: 1
             }
         }
 
@@ -414,13 +414,13 @@ const Participants = (props: Props) => {
                                             time: -2,
                                             faults: 0,
                                             refusals: 0,
-                                            run: skillLevel * 2
+                                            type: 0
                                         },
                                         resultJ: {
                                             time: -2,
                                             faults: 0,
                                             refusals: 0,
-                                            run: skillLevel * 2 + 1
+                                            type: 1
                                         }
                                     }
                                     participants.push(participant)
@@ -504,13 +504,13 @@ const Participants = (props: Props) => {
                                     time: -2,
                                     faults: 0,
                                     refusals: 0,
-                                    run: skillLevel * 2
+                                    type: 0
                                 },
                                 resultJ: {
                                     time: -2,
                                     faults: 0,
                                     refusals: 0,
-                                    run: skillLevel * 2 + 1
+                                    type: 1
                                 }
                             }
                             console.log(participant)

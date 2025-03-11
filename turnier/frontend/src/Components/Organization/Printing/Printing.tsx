@@ -6,7 +6,7 @@ import { RootState } from '../../../Reducer/reducerCombiner'
 import { Participant, Result, Run, Size, StickerInfo } from '../../../types/ResponseTypes';
 import { ListType } from '../Turnament/PrintingDialog';
 import Spacer from '../../Common/Spacer';
-import { Button, Icon, IconButton, Paper, Stack, Typography } from '@mui/material';
+import { Button, IconButton, Paper, Stack, Typography } from '@mui/material';
 import PrintIcon from '@mui/icons-material/Print';
 import style from './print.module.scss'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';

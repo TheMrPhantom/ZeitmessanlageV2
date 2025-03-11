@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import style from './run.module.scss'
 import { Button, Divider, IconButton, InputAdornment, Paper, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Typography } from '@mui/material'
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
@@ -431,6 +431,65 @@ const Run = (props: Props) => {
             dispatch(openToast({ message: "Bitte Timer stoppen", type: "warning", headline: "Teilnehmer kann nicht gewechselt werden solange der timer läuft" }))
         }
     }
+
+    const [, setwebsocket] = useState<WebSocket | null>(null);
+
+    const ref = useRef(true)
+    useEffect(() => {
+        if (ref.current) {
+            ref.current = false;
+            const ws = new WebSocket(window.globalTS.WEBSOCKET)
+
+            ws.onopen = () => {
+                ws.send(JSON.stringify({
+                    action: "subscribe",
+                    organization: params.organization
+                }))
+            }
+
+            const closeWs = () => {
+                try {
+                    if (ws !== null) {
+                        ws.close()
+                    }
+                }
+                catch (e) {
+                    console.log(e);
+                }
+            }
+
+            ws.onmessage = (e: MessageEvent) => {
+                const message = JSON.parse(e.data);
+                console.log(message)
+                switch (message.action) {
+                    case "reload":
+                        console.log("reload")
+                        break;
+                }
+
+            };
+
+            ws.onerror = () => {
+                closeWs()
+                setwebsocket(null)
+                ref.current = true;
+            }
+
+            ws.onclose = () => {
+                closeWs()
+                setwebsocket(null)
+                ref.current = true;
+            }
+            setwebsocket(ws);
+
+            return () => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.close();
+                }
+            };
+
+        }
+    }, [dispatch, params.date, params.organization, params.secret])
 
     return (
         <Stack className={style.runContainer} direction="column" alignItems="center" gap={4}>

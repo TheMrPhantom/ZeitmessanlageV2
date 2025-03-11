@@ -61,7 +61,7 @@ export type Result = {
     time: number,
     faults: number,
     refusals: number,
-    run: Run,
+    type: 0 | 1, // 0 = A, 1 = J
 }
 
 export type ExtendedResult = {
@@ -101,8 +101,8 @@ export const defaultParticipant: Participant = {
     dog: "",
     skillLevel: SkillLevel.A0,
     size: Size.Small,
-    resultA: { time: 0, faults: 0, refusals: 0, run: Run.A0 },
-    resultJ: { time: 0, faults: 0, refusals: 0, run: Run.J0 }
+    resultA: { time: 0, faults: 0, refusals: 0, type: 0 },
+    resultJ: { time: 0, faults: 0, refusals: 0, type: 1 }
 }
 
 export type StickerInfo = {
