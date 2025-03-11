@@ -9,7 +9,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom'
 import { dateToURLString } from '../../Common/StaticFunctions';
 import { addParticipant, removeParticipant, updateParticipant } from '../../../Actions/SampleAction';
-import { loadPermanent, storePermanent, stringToSize, stringToSkillLevel, updateDatabase } from '../../Common/StaticFunctionsTyped';
+import { isYouthParticipant, loadPermanent, storePermanent, stringToSize, stringToSkillLevel, updateDatabase } from '../../Common/StaticFunctionsTyped';
 import { usePapaParse } from 'react-papaparse';
 import ImportParticipants from './ImportParticipants';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
@@ -19,6 +19,7 @@ import { ArrowUpward, ArrowDownward } from '@mui/icons-material';
 import HelpIcon from '@mui/icons-material/Help';
 
 type Props = {}
+
 type TableProps = {
     common: CommonReducerType,
     turnamentDate: Date,
@@ -266,17 +267,19 @@ const Participants = (props: Props) => {
     const [runclass, setrunclass] = useState(SkillLevel.A3)
     const [size, setsize] = useState(Size.Small)
     const [file, setFile] = useState<null | File>(null);
+    const [birthYear, setbirthYear] = useState(1900)
 
     const [parsedInputFile, setparsedInputFile] = useState<Array<{ date?: string, participants: Participant[] }> | null>(null)
 
     loadPermanent(organization, dispatch, common)
 
-    const addParticipantToTurnament = (name: string, club: string, dog: string, runclass: SkillLevel, size: Size, association: string, associationMemberNumber: string, chipNumber: string) => {
+    const addParticipantToTurnament = (name: string, birthYear: string, club: string, dog: string, runclass: SkillLevel, size: Size, association: string, associationMemberNumber: string, chipNumber: string) => {
 
         const participant: Participant = {
             startNumber: 0,
             sorting: 0,
             name: name,
+            isYouth: isYouthParticipant(`${birthYear}-01-01`, turnamentDate),
             club: club,
             dog: dog,
             skillLevel: runclass,
@@ -398,6 +401,7 @@ const Participants = (props: Props) => {
                                         startNumber: 0,
                                         sorting: 0,
                                         name: `${line[2]} ${line[3]}`,
+                                        isYouth: isYouthParticipant(String(line[4]), turnamentDate),
                                         club: line[6],
                                         dog: line[15],
                                         skillLevel: skillLevel,
@@ -488,6 +492,7 @@ const Participants = (props: Props) => {
                                 startNumber: 0,
                                 sorting: 0,
                                 name: `${line[1]} ${lastnameCapitalized}`,
+                                isYouth: isYouthParticipant(String(line[2]), turnamentDate),
                                 club: line[10],
                                 dog: line[11],
                                 skillLevel: skillLevel,
@@ -535,6 +540,16 @@ const Participants = (props: Props) => {
         reader.readAsText(file, 'utf-8');
     };
 
+    const lastYears = () => {
+        // Get the list of the last 23 years
+        const years = []
+        const currentYear = new Date().getFullYear()
+        for (let i = 0; i < 23; i++) {
+            years.push(currentYear - i)
+        }
+        return years
+    }
+
 
     return (<>
         <Stack gap={2} className={style.paper}>
@@ -580,6 +595,20 @@ const Participants = (props: Props) => {
                         <Typography variant='h6'>Teilnehmer manuell hinzufügen</Typography>
                         <Stack direction="row" flexWrap="wrap" gap={2}>
                             <TextField value={name} label="Name" onChange={(value) => setname(value.target.value)} />
+                            <FormControl className={style.picker}>
+                                <InputLabel id="demo-simple-select-label" >Geburtsjahr</InputLabel>
+                                <Select
+                                    labelId="demo-simple-select-label"
+                                    id="demo-simple-select"
+                                    value={birthYear}
+                                    label="Geburtsjahr"
+                                    onChange={(value) => setbirthYear(Number(value.target.value))}
+                                >
+                                    {lastYears().map(year => <MenuItem value={year}>{year}</MenuItem>)}
+                                    <MenuItem value={1900}>{"< " + lastYears().slice(-1)[0]}</MenuItem>
+
+                                </Select>
+                            </FormControl>
                             <TextField value={club} label="Verein" onChange={(value) => setclub(value.target.value)} />
                             <TextField value={dog} label="Hundename" onChange={(value) => setdog(value.target.value)} />
                             <FormControl className={style.picker}>
@@ -620,7 +649,7 @@ const Participants = (props: Props) => {
                         <Button variant="contained"
                             color="primary"
                             onClick={() => {
-                                addParticipantToTurnament(name, club, dog, runclass, size, association, associationMemberNumber, chipNumber)
+                                addParticipantToTurnament(name, birthYear.toString(), club, dog, runclass, size, association, associationMemberNumber, chipNumber)
                             }}
                         >Hinzufügen</Button>
                     </Stack>

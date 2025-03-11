@@ -146,6 +146,13 @@ export const runClassToString = (runClass: SkillLevel) => {
     }
 }
 
+export const isYouthParticipant = (birthDate: string, tournamentDate: Date) => {
+    // A participant is considered youth if they are younger than 18 years or turned 18 in the current year
+    const birthYear = new Date(birthDate).getFullYear()
+    const currentYear = tournamentDate.getFullYear()
+    return currentYear - birthYear <= 18
+}
+
 export const storePermanent = (organization: string, value: Organization) => {
     if (organization === "" || value.name === "") { return }
     if (value.name === "") {
@@ -198,12 +205,16 @@ export const runTimeToStringClock = (time: number) => {
     return `${time.toFixed(2)}s`
 }
 
-export const getParticipantsForRun = (participants: Participant[], run: SkillLevel, size: Size) => {
-    return participants?.filter(p => p.skillLevel === run && p.size === size && p.registered)
+export const getParticipantsForRun = (participants: Participant[], run: SkillLevel, size: Size, youth?: boolean) => {
+    if (youth === undefined) {
+        return participants?.filter(p => p.skillLevel === run && p.size === size && p.registered)
+    } else {
+        return participants?.filter(p => p.skillLevel === run && p.size === size && p.registered && p.isYouth === youth)
+    }
 }
 
-export const getNumberOfParticipantsForRun = (participants: Participant[], run: SkillLevel, size: Size) => {
-    return getParticipantsForRun(participants, run, size).length
+export const getNumberOfParticipantsForRun = (participants: Participant[], run: SkillLevel, size: Size, youth?: boolean) => {
+    return getParticipantsForRun(participants, run, size, youth).length
 }
 
 export const getParticipantFromStartNumber = (participants: Participant[], startNumber: number) => {
@@ -363,7 +374,7 @@ export const getRanking: (participants: Participant[] | undefined, run: Run, cal
             }
             if (totalFaults === lastTotalFaults && time === lastTime) {
                 sameCounter++
-                return { result: result, participant: p, rank: lastRank, timefaults: lastTotalFaults }
+                return { result: result, participant: p, rank: lastRank, timefaults: getTimeFaults(result, calculatedStandardTime) }
             }
             currentrank++
             currentrank += sameCounter
@@ -373,7 +384,7 @@ export const getRanking: (participants: Participant[] | undefined, run: Run, cal
             lastTime = time
             lastRank = currentrank
 
-            return { result: result, participant: p, rank: currentrank, timefaults: totalFaults }
+            return { result: result, participant: p, rank: currentrank, timefaults: getTimeFaults(result, calculatedStandardTime) }
         })
         return results
 
@@ -435,7 +446,8 @@ export const getKombiRanking: (participants: Participant[], skill: SkillLevel, s
 
 export const getRating = (time: number, totalFaults: number) => {
     /* V SG G OB DIS */
-    //https://www.vdh.de/fileadmin/media/hundesport/agility/2018/Ordnung/VDH_TEil_FCI-PO_Agility_2018_2018-05-17_V-6_HP.pdf
+    // https://www.vdh.de/fileadmin/media/hundesport/agility/2018/Ordnung/VDH_TEil_FCI-PO_Agility_2018_2018-05-17_V-6_HP.pdf
+    // Seite 50 -> Suche nach 'OHNE BEWERTUNG' im PDF
     if (time === -2) {
         return "-"
     }
@@ -443,7 +455,7 @@ export const getRating = (time: number, totalFaults: number) => {
     if (time === -1) {
         return "DIS"
     }
-    if (totalFaults === 0) {
+    if (totalFaults < 1) {
         return "V0"
     } else if (totalFaults < 6) {
         return "V"
@@ -455,6 +467,19 @@ export const getRating = (time: number, totalFaults: number) => {
     } else {
         return "OB"
     }
+}
+
+export const getRatingIndex = (rating: string) => {
+    if (rating === "V" || rating === "V0") {
+        return 0
+    } else if (rating === "SG") {
+        return 1
+    } else if (rating === "G") {
+        return 2
+    } else if (rating === "OB") {
+        return 3
+    }
+    return 4
 }
 
 export const openSerial = async (setSerial: (port: any) => void) => {

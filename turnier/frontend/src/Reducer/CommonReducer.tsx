@@ -105,6 +105,17 @@ const reducer = (state = initialState, { type, payload }: any) => {
                 }
             })
             return newState
+        case "CHANGE_GAME":
+            newState.organization.turnaments.forEach((t) => {
+                if (dateToURLString(new Date(t.date)) === dateToURLString(payload.date)) {
+                    t.runs.forEach((r) => {
+                        if (r.run === payload.run) {
+                            r.isGame = payload.isGame
+                        }
+                    })
+                }
+            })
+            return newState
         case "CHANGE_SPEED":
             newState.organization.turnaments.forEach((t) => {
                 if (dateToURLString(new Date(t.date)) === dateToURLString(payload.date)) {

@@ -36,6 +36,13 @@ export const changeLength = (date: Date, run: Run, length: Number) => {
     }
 }
 
+export const changeGame = (date: Date, run: Run, isGame: boolean) => {
+    return {
+        type: "CHANGE_GAME",
+        payload: { date: date, run: run, isGame: isGame }
+    }
+}
+
 export const changeSpeed = (date: Date, run: Run, speed: Number) => {
     return {
         type: "CHANGE_SPEED",

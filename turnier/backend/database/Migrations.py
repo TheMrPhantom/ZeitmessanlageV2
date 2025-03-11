@@ -13,7 +13,9 @@ def migrate(db: session):
     migrations = [
         # Add lists for migrations
         # E.g ALTER TABLE drink ADD column price6 float DEFAULT 50
-        #["ALTER TABLE drink ADD column price6 float DEFAULT 50"]
+        # ["ALTER TABLE drink ADD column price6 float DEFAULT 50"]
+        ["ALTER TABLE participant ADD column is_youth boolan DEFAULT FALSE"],
+        ["ALTER TABLE RunInformation ADD column isGame boolan DEFAULT FALSE"]
     ]
 
     if util.CURRENT_VERSION != len(migrations):
