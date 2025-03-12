@@ -13,7 +13,7 @@ type Props = {}
 
 const Run = (props: Props) => {
     //const common: CommonReducerType = useSelector((state: RootState) => state.common);
-    const [, setwebsocket] = useState<WebSocket | null>(null);
+    const [websocket, setwebsocket] = useState<WebSocket | null>(null);
     const dispatch = useDispatch()
 
     const params = useParams()
@@ -29,7 +29,15 @@ const Run = (props: Props) => {
     })
 
     //Get all participants
-    const allParticipants = common.participants
+    let allParticipants = common.participants
+
+    const first = useRef<Array<Participant>>([])
+    if (allParticipants.length > 0) {
+        first.current = allParticipants;
+    } else {
+        allParticipants = first.current;
+    }
+
     const currentRun: RunType = params.class ? Number(params.class) : 0
 
     //Filter all participants for the current run
@@ -40,6 +48,7 @@ const Run = (props: Props) => {
     const [selectedParticipantStartNumber, setselectedParticipantStartNumber] = useState(0)
     const unsafeselectedParticipant = participants?.find(p => p.startNumber === selectedParticipantStartNumber)
     const selectedParticipant: Participant = unsafeselectedParticipant ? unsafeselectedParticipant : defaultParticipant
+
 
     const currentResult = getResultFromParticipant(currentRun, selectedParticipant)
 
@@ -89,7 +98,7 @@ const Run = (props: Props) => {
 
     const changeFaults = useCallback((value: number) => {
 
-        if (allParticipants) {
+        if (allParticipants.length > 0) {
 
             if (!startedR.current) {
 
@@ -107,7 +116,8 @@ const Run = (props: Props) => {
 
                 const t = { ...common }
                 t.participants = newParticipants
-                setcommon(t)
+                console.log(allParticipants, newParticipants, t)
+                //setcommon(t)
                 setreload(!reload)
                 faultsToDisplay.current = value
 
@@ -240,17 +250,29 @@ const Run = (props: Props) => {
     }, [calculatedStandardTime, changeTime, currentRun, currentTime])
 
 
+    const updateData = useCallback(() => {
+        doGetRequest(`${params.organization}/tournament/${params.secret}/${params.date}`, dispatch).then((data) => {
+            if (data.code === 200) {
+                const t = data.content as Tournament
+                setcommon(t)
+            }
+        })
+    }, [dispatch, params.date, params.organization, params.secret])
+
+
     const ref = useRef(true)
     useEffect(() => {
         if (ref.current) {
             ref.current = false;
             const ws = new WebSocket(window.globalTS.WEBSOCKET)
+
             ws.onopen = () => {
                 ws.send(JSON.stringify({
                     action: "subscribe",
                     organization: params.organization
                 }))
             }
+
             const closeWs = () => {
                 try {
                     if (ws !== null) {
@@ -271,8 +293,6 @@ const Run = (props: Props) => {
                         break;
                     case "stop_timer":
                         stopTimer();
-                        //changeTime(message.message)
-                        //stopTimer();
                         break;
                     case "changed_current_participant":
                         setselectedParticipantStartNumber(message.message.id)
@@ -286,26 +306,15 @@ const Run = (props: Props) => {
                         }
                         selectedRun.current = message.message.currentRun
 
-                        //changeFaults(message.message.faults)
-                        //changeRefusals(message.message.refusals)
                         break;
                     case "changed_current_fault":
-                        //faultsToDisplay.current = Number(message.message)
-                        changeFaults(Number(message.message))
-                        //setreload(!reload)
+                        updateData()
                         break;
                     case "changed_current_refusal":
-                        //refusalToDisplay.current = Number(message.message)
-                        changeRefusals(Number(message.message))
-                        //setreload(!reload)
+                        updateData()
                         break;
                     case "reload":
-                        doGetRequest(`${params.organization}/tournament/${params.secret}/${params.date}`, dispatch).then((data) => {
-                            if (data.code === 200) {
-                                const t = data.content as Tournament
-                                setcommon(t)
-                            }
-                        })
+                        updateData()
                         break;
                 }
 
@@ -316,12 +325,14 @@ const Run = (props: Props) => {
                 closeWs()
                 setwebsocket(null)
                 ref.current = true;
+                console.log("Error in Websocket")
             }
 
             ws.onclose = () => {
                 closeWs()
                 setwebsocket(null)
                 ref.current = true;
+                console.log("Websocket closed")
                 setTimeout(() => {
                     setreload(!reload)
                 }, 1000)
@@ -343,8 +354,17 @@ const Run = (props: Props) => {
 
         }
 
-    }, [reload, params.date, params.organization, dispatch, changeFaults, changeRefusals, params.secret])
+    }, [reload, params.date, params.organization, dispatch, changeFaults, changeRefusals, params.secret, updateData])
 
+
+    useEffect(() => {
+        return () => {
+            if (websocket !== null && websocket.readyState === WebSocket.OPEN) {
+                websocket.close();
+                console.log("cleanup")
+            }
+        }
+    }, [websocket])
 
 
     const startTimer = (initTime?: number) => {
@@ -377,11 +397,18 @@ const Run = (props: Props) => {
 
     const runnerDetails = useCallback(() => {
         if (unsafeselectedParticipant) {
+
             oldFaults.current = currentFaults
             oldRefusals.current = currentRefusals
-            oldTime.current = getResultFromParticipant(currentRun, selectedParticipant).time
-            oldPerson.current = selectedParticipant?.name
-            oldDog.current = selectedParticipant?.dog
+
+
+
+            //update oldtime only if the new time is not -1
+            if (getResultFromParticipant(currentRun, selectedParticipant).time > -1 || oldPerson.current !== selectedParticipant?.name) {
+                oldTime.current = getResultFromParticipant(currentRun, selectedParticipant).time
+                oldPerson.current = selectedParticipant?.name
+                oldDog.current = selectedParticipant?.dog
+            }
 
             if (selectedRun.current === currentRun) {
                 return <Paper className={style.timeContainer}>
@@ -397,7 +424,7 @@ const Run = (props: Props) => {
 
 
                             <Stack direction="row"  >
-                                <Typography variant='h2'>{runTimeToStringClock(getResultFromParticipant(currentRun, selectedParticipant).time)}</Typography>
+                                <Typography variant='h2'>{runTimeToStringClock(oldTime.current)}</Typography>
                             </Stack>
                             <Stack direction="row" gap={2} flexWrap="wrap" justifyContent="space-between">
                                 <Typography variant='h2'>✋{faultsToDisplay.current}</Typography>
@@ -452,7 +479,6 @@ const Run = (props: Props) => {
     }, [currentFaults, currentRefusals, currentRun, currentTimeFault, selectedParticipant, unsafeselectedParticipant])
 
     const resultTable = () => {
-        console.log(participantsWithResults)
         if (!isKombi) {
             return getRanking(participantsWithResults, currentRun, calculatedStandardTime).map((value) => {
                 return (

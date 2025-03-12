@@ -436,7 +436,7 @@ const Run = (props: Props) => {
         }
     }
 
-    const [, setwebsocket] = useState<WebSocket | null>(null);
+    const [websocket, setwebsocket] = useState<WebSocket | null>(null);
 
     const ref = useRef(true)
     useEffect(() => {
@@ -527,6 +527,16 @@ const Run = (props: Props) => {
 
         }
     }, [dispatch, params.date, params.organization, params.secret, common.organization, organization, reload])
+
+
+    useEffect(() => {
+        return () => {
+            if (websocket !== null && websocket.readyState === WebSocket.OPEN) {
+                websocket.close();
+                console.log("cleanup")
+            }
+        }
+    }, [websocket])
 
     return (
         <Stack className={style.runContainer} direction="column" alignItems="center" gap={4}>

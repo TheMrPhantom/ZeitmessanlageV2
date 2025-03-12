@@ -22,7 +22,7 @@ const RunSelection = (props: Props) => {
     const [skillLevel, setskillLevel] = useState(SkillLevel.A3)
     const [jumpHeight, setjumpHeight] = useState(Size.Small)
     const [reload, setreload] = useState(false)
-    const [, setwebsocket] = useState<WebSocket | null>(null);
+    const [websocket, setwebsocket] = useState<WebSocket | null>(null);
     const [selectedParticipant, setselectedParticipant] = useState<{ id: number, faults: number, refusals: number, started: boolean, time: number, currentRun: number, currentSize: number }>(
         { id: -1, faults: 0, refusals: 0, started: false, time: 0, currentRun: -1, currentSize: -1 }
     )
@@ -129,6 +129,16 @@ const RunSelection = (props: Props) => {
 
         }
     }, [reload, dispatch, params.date, params.organization, params.secret])
+
+
+    useEffect(() => {
+        return () => {
+            if (websocket !== null && websocket.readyState === WebSocket.OPEN) {
+                websocket.close();
+                console.log("cleanup")
+            }
+        }
+    }, [websocket])
 
     // Check every second if the last time received is older than 2 times the refresh intervall
     useEffect(() => {
