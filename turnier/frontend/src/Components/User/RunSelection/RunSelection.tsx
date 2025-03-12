@@ -4,7 +4,7 @@ import style from './runselection.module.scss'
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import PetsIcon from '@mui/icons-material/Pets';
 import Spacer from '../../Common/Spacer';
-import { Participant, Size, SkillLevel, Tournament } from '../../../types/ResponseTypes';
+import { Participant, refreshIntervall, Size, SkillLevel, Tournament } from '../../../types/ResponseTypes';
 import { useNavigate, useParams } from 'react-router-dom';
 import Dog from './Dog';
 import { dateToString } from '../../Common/StaticFunctions';
@@ -30,6 +30,7 @@ const RunSelection = (props: Props) => {
     const navigate = useNavigate()
     const dispatch = useDispatch()
     const [orgName, setorgName] = useState("")
+    const [lastTimeReceivedRemaining, setlastTimeReceivedRemaining] = useState(new Date())
     const common: CommonReducerType = useSelector((state: RootState) => state.common);
 
     useEffect(() => {
@@ -90,6 +91,7 @@ const RunSelection = (props: Props) => {
                         break;
                     case "changed_current_participant":
                         setselectedParticipant(message.message)
+                        setlastTimeReceivedRemaining(new Date())
                         break;
                 }
 
@@ -128,6 +130,15 @@ const RunSelection = (props: Props) => {
         }
     }, [reload, dispatch, params.date, params.organization, params.secret])
 
+    // Check every 2 seconds if the last message was more than 5 seconds ago
+    useEffect(() => {
+        const interval = setInterval(() => {
+            if (new Date().getTime() - lastTimeReceivedRemaining.getTime() > refreshIntervall * 2) {
+                setselectedParticipant({ id: -1, faults: 0, refusals: 0, started: false, time: 0, currentRun: -1, currentSize: -1 })
+            }
+        }, 11000)
+        return () => clearInterval(interval)
+    }, [lastTimeReceivedRemaining])
 
 
     const favoriteDogs = () => {
@@ -170,7 +181,7 @@ const RunSelection = (props: Props) => {
 
                             const selectedParticipantIndex = allParticipantsOfRun.findIndex((p) => p.startNumber === selectedParticipant.id)
                             const currentParticipantIndex = allParticipantsOfRun.findIndex((p) => p.startNumber === participant.startNumber)
-                            console.log(selectedParticipantIndex, currentParticipantIndex)
+
                             if (selectedParticipantObject) {
                                 dogsLeft = currentParticipantIndex - selectedParticipantIndex
                                 if (dogsLeft < 0) {

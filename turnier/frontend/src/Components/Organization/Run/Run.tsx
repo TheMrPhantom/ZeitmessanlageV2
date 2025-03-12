@@ -12,7 +12,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom'
 import { doGetRequest, doPostRequest, getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, loadPermanent, maximumTime, moveParticipantInStartList, runTimeToString, runTimeToStringClock, standardTime, storePermanent, updateDatabase, wait } from '../../Common/StaticFunctionsTyped';
 import { dateToURLString } from '../../Common/StaticFunctions';
-import { Run as RunType, SkillLevel, Participant, defaultParticipant, RunCategory } from '../../../types/ResponseTypes';
+import { Run as RunType, SkillLevel, Participant, defaultParticipant, RunCategory, refreshIntervall } from '../../../types/ResponseTypes';
 import { changeLength, changeParticipants, changeSpeed } from '../../../Actions/SampleAction';
 import { minSpeedA3 } from '../../Common/AgilityPO';
 import { useCallback, useMemo } from 'react';
@@ -222,7 +222,7 @@ const Run = (props: Props) => {
                 id: selectedParticipant.startNumber, faults: currentFaults, refusals: currentRefusals, started: started, time: initTime, currentRun: currentRun, currentSize: currentSize
             }, dispatch)
 
-        }, 3000);
+        }, refreshIntervall);
         return () => clearInterval(id);
     }, [selectedParticipant.startNumber, currentFaults, currentRefusals, common.organization.name, started, initTime, currentRun, dispatch, currentSize]);
 

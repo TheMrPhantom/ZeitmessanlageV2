@@ -139,3 +139,4 @@ export type Verification = {
 
 export const runs = [Run.A3, Run.J3, Run.A2, Run.J2, Run.A1, Run.J1, Run.A0, Run.J0]
 export const heights = [Size.Small, Size.Medium, Size.Intermediate, Size.Large]
+export const refreshIntervall = 3000
