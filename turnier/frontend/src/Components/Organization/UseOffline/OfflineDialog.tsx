@@ -10,7 +10,7 @@ import { loadOrganization } from '../../../Actions/SampleAction';
 import { doGetRequest, loadPermanent, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped';
 import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
-import { openErrorToast, openToast } from '../../../Actions/CommonAction';
+import { openToast } from '../../../Actions/CommonAction';
 
 type Props = {
     type: "online" | "device",

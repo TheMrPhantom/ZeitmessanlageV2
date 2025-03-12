@@ -17,243 +17,16 @@ import AlarmOnIcon from '@mui/icons-material/AlarmOn';
 import PaidIcon from '@mui/icons-material/Paid';
 import { ArrowUpward, ArrowDownward } from '@mui/icons-material';
 import HelpIcon from '@mui/icons-material/Help';
+import Register from './Register';
 
 type Props = {}
 
 type TableProps = {
+    search: string,
     common: CommonReducerType,
     turnamentDate: Date,
     organization: string
 }
-
-const ParticipantTable = (props: TableProps) => {
-    const dispatch = useDispatch();
-    const [sortConfig, setSortConfig] = useState<{ key: string | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
-
-    const participants = props.common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(props.turnamentDate))?.participants || [];
-
-    // Sorting function
-    const sortedParticipants = [...participants].sort((a: any, b: any) => {
-        if (sortConfig.key) {
-            const aValue = a[sortConfig.key];
-            const bValue = b[sortConfig.key];
-
-            if (aValue === bValue) return 0;
-
-            const sortDirection = sortConfig.direction === 'asc' ? 1 : -1;
-            return aValue > bValue ? sortDirection : -sortDirection;
-        }
-        // Default sorting by startNumber when no column is actively sorted
-        return a.startNumber - b.startNumber;
-    });
-
-    // Handle sorting with three states: asc, desc, and default (unsorted)
-    const handleSort = (key: string) => {
-        // Prevent sorting on "Startnummer" and "Entfernen" columns
-        if (key === 'startNumber' || key === 'delete') return;
-
-        if (sortConfig.key === key) {
-            if (sortConfig.direction === 'asc') {
-                // Change from asc to desc
-                setSortConfig({ key, direction: 'desc' });
-            } else if (sortConfig.direction === 'desc') {
-                // Change from desc to default (startNumber sorting)
-                setSortConfig({ key: null, direction: null });
-            } else {
-                // Reset to asc
-                setSortConfig({ key, direction: 'asc' });
-            }
-        } else {
-            // Initial sort is ascending
-            setSortConfig({ key, direction: 'asc' });
-        }
-    };
-
-    // Helper to render sorting arrows
-    const renderSortIcon = (key: string) => {
-        if (sortConfig.key === key) {
-            if (sortConfig.direction === 'asc') {
-                return <ArrowUpward fontSize="small" />;
-            } else if (sortConfig.direction === 'desc') {
-                return <ArrowDownward fontSize="small" />;
-            }
-        }
-        return null;
-    };
-
-    const updateParticipantFromTable = (participant: Participant) => {
-        dispatch(updateParticipant(props.turnamentDate, participant));
-        storePermanent(props.organization, props.common.organization);
-        doPostRequest(`${props.organization}/tournament/${dateToURLString(props.turnamentDate)}/participant`, participant, dispatch);
-    }
-
-    useEffect(() => {
-        doGetRequest(`${props.common.organization.name}`, dispatch).then((response) => {
-            if (response.code === 200) {
-                dispatch(loadOrganization(response.content))
-                storePermanent(props.common.organization.name, response.content)
-            }
-        }, dispatch)
-    }, [dispatch, props.common.organization.name])
-
-    return (
-        <TableContainer component={Paper}>
-            <Table size="small">
-                <TableHead>
-                    <TableRow>
-                        <TableCell>Startnummer</TableCell>
-                        <TableCell onClick={() => handleSort('name')} style={{ cursor: 'pointer' }}>
-                            <Stack flexDirection="row" alignItems="center" gap={1}>
-                                <div>Name</div>
-                                {renderSortIcon('name')}
-                            </Stack>
-                        </TableCell>
-                        <TableCell onClick={() => handleSort('club')} style={{ cursor: 'pointer' }}>
-                            <Stack flexDirection="row" alignItems="center" gap={1}>
-                                <div>Verein</div>
-                                {renderSortIcon('club')}
-                            </Stack>
-                        </TableCell>
-                        <TableCell onClick={() => handleSort('dog')} style={{ cursor: 'pointer' }}>
-                            <Stack flexDirection="row" alignItems="center" gap={1}>
-                                <div>Hund</div>
-                                {renderSortIcon('dog')}
-                            </Stack>
-                        </TableCell>
-                        <TableCell onClick={() => handleSort('skillLevel')} style={{ cursor: 'pointer' }}>
-                            <Stack flexDirection="row" alignItems="center" gap={1}>
-                                <div>Klasse</div>
-                                {renderSortIcon('skillLevel')}
-                            </Stack>
-                        </TableCell>
-                        <TableCell onClick={() => handleSort('size')} style={{ cursor: 'pointer' }}>
-                            <Stack flexDirection="row" alignItems="center" gap={1}>
-                                <div>Größe</div>
-                                {renderSortIcon('size')}
-                            </Stack>
-                        </TableCell>
-                        <Tooltip title="Meldung bezahlt?" arrow placement='top'>
-                            <TableCell align="center" onClick={() => handleSort('paid')} style={{ cursor: 'pointer' }}>
-                                <Stack flexDirection="row" alignItems="center" gap={1}>
-                                    <PaidIcon />
-                                    {renderSortIcon('paid')}
-                                </Stack>
-                            </TableCell>
-                        </Tooltip>
-                        <Tooltip title="Teilnehmer gemeldet?" arrow placement='top'>
-                            <TableCell align="center" onClick={() => handleSort('registered')} style={{ cursor: 'pointer' }}>
-                                <Stack flexDirection="row" alignItems="center" gap={1}>
-                                    <HowToRegIcon />
-                                    {renderSortIcon('registered')}
-                                </Stack>
-                            </TableCell>
-                        </Tooltip>
-                        <Tooltip title="Teilnehmer am Start?" arrow placement='top'>
-                            <TableCell align="center" onClick={() => handleSort('ready')} style={{ cursor: 'pointer' }}>
-                                <Stack flexDirection="row" alignItems="center" gap={1}>
-                                    <AlarmOnIcon />
-                                    {renderSortIcon('ready')}
-                                </Stack>
-                            </TableCell>
-                        </Tooltip>
-
-                        <TableCell>Entfernen</TableCell>
-                    </TableRow>
-                </TableHead>
-                <TableBody>
-                    {sortedParticipants.map((participant, index) => (
-                        <TableRow key={index}>
-                            <TableCell>{participant.startNumber}</TableCell>
-                            <TableCell>{participant.name}</TableCell>
-                            <TableCell>{participant.club}</TableCell>
-                            <TableCell>{participant.dog}</TableCell>
-                            <TableCell>
-                                <FormControl className={style.picker}>
-                                    <InputLabel id="demo-simple-select-label" >Klasse</InputLabel>
-                                    <Select
-                                        labelId="demo-simple-select-label"
-                                        id="demo-simple-select"
-                                        value={participant.skillLevel}
-                                        label="Klasse"
-                                        onChange={(value) => {
-                                            participant.skillLevel = value.target.value as SkillLevel;
-                                            updateParticipantFromTable(participant)
-                                        }}
-                                    >
-                                        <MenuItem value={SkillLevel.A0}>A0</MenuItem>
-                                        <MenuItem value={SkillLevel.A1}>A1</MenuItem>
-                                        <MenuItem value={SkillLevel.A2}>A2</MenuItem>
-                                        <MenuItem value={SkillLevel.A3}>A3</MenuItem>
-                                    </Select>
-                                </FormControl>
-                            </TableCell>
-                            <TableCell>
-                                <FormControl className={style.picker}>
-                                    <InputLabel id="demo-simple-select-label" >Größe</InputLabel>
-                                    <Select
-                                        labelId="demo-simple-select-label"
-                                        id="demo-simple-select"
-                                        value={participant.size}
-                                        label="Größe"
-                                        onChange={(value) => {
-                                            participant.size = value.target.value as Size;
-                                            updateParticipantFromTable(participant)
-                                        }}
-                                    >
-                                        <MenuItem value={Size.Small}>Small</MenuItem>
-                                        <MenuItem value={Size.Medium}>Medium</MenuItem>
-                                        <MenuItem value={Size.Intermediate}>Intermediate</MenuItem>
-                                        <MenuItem value={Size.Large}>Large</MenuItem>
-                                    </Select>
-                                </FormControl>
-                            </TableCell>
-                            <TableCell align="center">
-                                <Checkbox
-                                    checked={participant.paid}
-                                    onChange={(value) => {
-                                        participant.paid = value.target.checked;
-                                        updateParticipantFromTable(participant)
-                                    }}
-                                />
-                            </TableCell>
-                            <TableCell align="center">
-                                <Checkbox
-                                    checked={participant.registered}
-                                    onChange={(value) => {
-                                        participant.registered = value.target.checked;
-                                        updateParticipantFromTable(participant)
-                                    }}
-                                />
-                            </TableCell>
-                            <TableCell align="center">
-                                <Checkbox
-                                    checked={participant.ready}
-                                    onChange={(value) => {
-                                        participant.ready = value.target.checked;
-                                        updateParticipantFromTable(participant)
-                                    }}
-                                />
-                            </TableCell>
-                            <TableCell>
-                                <Button
-                                    color="error"
-                                    variant="outlined"
-                                    onClick={() => {
-                                        dispatch(removeParticipant(props.turnamentDate, participant));
-                                        storePermanent(props.organization, props.common.organization);
-                                        updateDatabase(props.common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(props.turnamentDate)), props.organization, dispatch);
-                                    }}
-                                >
-                                    <DeleteIcon />
-                                </Button>
-                            </TableCell>
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
-        </TableContainer>
-    );
-};
 
 const Participants = (props: Props) => {
     const { readString } = usePapaParse();
@@ -278,6 +51,8 @@ const Participants = (props: Props) => {
     const [size, setsize] = useState(Size.Small)
     const [file, setFile] = useState<null | File>(null);
     const [birthYear, setbirthYear] = useState(1900)
+    const [registerDialogOpen, setregisterDialogOpen] = useState(false)
+    const [search, setsearch] = useState("")
 
     const [parsedInputFile, setparsedInputFile] = useState<Array<{ date?: string, participants: Participant[] }> | null>(null)
 
@@ -667,13 +442,270 @@ const Participants = (props: Props) => {
             </Stack>
             <Stack gap={2}>
                 <Typography variant='h5'>Starter</Typography>
-                <ParticipantTable common={common} turnamentDate={turnamentDate} organization={organization} />
+                <Stack flexDirection={"row"} gap={2}>
+                    <TextField label="Suche..." value={search} onChange={(value) => setsearch(value.target.value)} />
+                    <Button variant="contained" color="primary" onClick={() => { setregisterDialogOpen(true) }}>Teilnehmer melden</Button>
+                </Stack>
+                <ParticipantTable common={common} turnamentDate={turnamentDate} organization={organization} search={search} />
 
             </Stack>
         </Stack>
         <ImportParticipants parsedInput={parsedInputFile} close={() => { setparsedInputFile(null) }} />
+        <Register participants={common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate))?.participants || []}
+            updateParticipant={(participant: Participant, type: 'paid' | 'registered' | 'ready') => {
+                if (type === 'paid') {
+                    participant.paid = !participant.paid
+                }
+                if (type === 'registered') {
+                    participant.registered = !participant.registered
+                }
+                if (type === 'ready') {
+                    participant.ready = !participant.ready
+                }
+                dispatch(updateParticipant(turnamentDate, participant))
+                storePermanent(organization, common.organization)
+                doPostRequest(`${organization}/tournament/${dateToURLString(turnamentDate)}/participant`, participant, dispatch)
+            }}
+            onClose={() => { setregisterDialogOpen(false) }}
+            open={registerDialogOpen}
+        />
     </>
     )
 }
+
+const ParticipantTable = (props: TableProps) => {
+    const dispatch = useDispatch();
+    const [sortConfig, setSortConfig] = useState<{ key: string | null, direction: 'asc' | 'desc' | null }>({ key: null, direction: null });
+
+    const participants = props.common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(props.turnamentDate))?.participants || [];
+
+    const filteredParticipants = participants.filter(p => {
+        return p.name.toLocaleLowerCase().replaceAll(" ", "").includes(props.search.toLocaleLowerCase().replaceAll(" ", "")) ||
+            p.dog.toLocaleLowerCase().replaceAll(" ", "").includes(props.search.toLocaleLowerCase().replaceAll(" ", "")) ||
+            p.club.toLocaleLowerCase().replaceAll(" ", "").includes(props.search.toLocaleLowerCase().replaceAll(" ", "")) || props.search === ""
+    })
+
+    // Sorting function
+    const sortedParticipants = [...filteredParticipants].sort((a: any, b: any) => {
+        if (sortConfig.key) {
+            const aValue = a[sortConfig.key];
+            const bValue = b[sortConfig.key];
+
+            if (aValue === bValue) return 0;
+
+            const sortDirection = sortConfig.direction === 'asc' ? 1 : -1;
+            return aValue > bValue ? sortDirection : -sortDirection;
+        }
+        // Default sorting by startNumber when no column is actively sorted
+        return a.startNumber - b.startNumber;
+    });
+
+    // Handle sorting with three states: asc, desc, and default (unsorted)
+    const handleSort = (key: string) => {
+        // Prevent sorting on "Startnummer" and "Entfernen" columns
+        if (key === 'startNumber' || key === 'delete') return;
+
+        if (sortConfig.key === key) {
+            if (sortConfig.direction === 'asc') {
+                // Change from asc to desc
+                setSortConfig({ key, direction: 'desc' });
+            } else if (sortConfig.direction === 'desc') {
+                // Change from desc to default (startNumber sorting)
+                setSortConfig({ key: null, direction: null });
+            } else {
+                // Reset to asc
+                setSortConfig({ key, direction: 'asc' });
+            }
+        } else {
+            // Initial sort is ascending
+            setSortConfig({ key, direction: 'asc' });
+        }
+    };
+
+    // Helper to render sorting arrows
+    const renderSortIcon = (key: string) => {
+        if (sortConfig.key === key) {
+            if (sortConfig.direction === 'asc') {
+                return <ArrowUpward fontSize="small" />;
+            } else if (sortConfig.direction === 'desc') {
+                return <ArrowDownward fontSize="small" />;
+            }
+        }
+        return null;
+    };
+
+    const updateParticipantFromTable = (participant: Participant) => {
+        dispatch(updateParticipant(props.turnamentDate, participant));
+        storePermanent(props.organization, props.common.organization);
+        doPostRequest(`${props.organization}/tournament/${dateToURLString(props.turnamentDate)}/participant`, participant, dispatch);
+    }
+
+    useEffect(() => {
+        doGetRequest(`${props.common.organization.name}`, dispatch).then((response) => {
+            if (response.code === 200) {
+                dispatch(loadOrganization(response.content))
+                storePermanent(props.common.organization.name, response.content)
+            }
+        }, dispatch)
+    }, [dispatch, props.common.organization.name])
+
+    return (
+        <TableContainer component={Paper}>
+            <Table size="small">
+                <TableHead>
+                    <TableRow>
+                        <TableCell>Startnummer</TableCell>
+                        <TableCell onClick={() => handleSort('name')} style={{ cursor: 'pointer' }}>
+                            <Stack flexDirection="row" alignItems="center" gap={1}>
+                                <div>Name</div>
+                                {renderSortIcon('name')}
+                            </Stack>
+                        </TableCell>
+                        <TableCell onClick={() => handleSort('club')} style={{ cursor: 'pointer' }}>
+                            <Stack flexDirection="row" alignItems="center" gap={1}>
+                                <div>Verein</div>
+                                {renderSortIcon('club')}
+                            </Stack>
+                        </TableCell>
+                        <TableCell onClick={() => handleSort('dog')} style={{ cursor: 'pointer' }}>
+                            <Stack flexDirection="row" alignItems="center" gap={1}>
+                                <div>Hund</div>
+                                {renderSortIcon('dog')}
+                            </Stack>
+                        </TableCell>
+                        <TableCell onClick={() => handleSort('skillLevel')} style={{ cursor: 'pointer' }}>
+                            <Stack flexDirection="row" alignItems="center" gap={1}>
+                                <div>Klasse</div>
+                                {renderSortIcon('skillLevel')}
+                            </Stack>
+                        </TableCell>
+                        <TableCell onClick={() => handleSort('size')} style={{ cursor: 'pointer' }}>
+                            <Stack flexDirection="row" alignItems="center" gap={1}>
+                                <div>Größe</div>
+                                {renderSortIcon('size')}
+                            </Stack>
+                        </TableCell>
+                        <Tooltip title="Meldung bezahlt?" arrow placement='top'>
+                            <TableCell align="center" onClick={() => handleSort('paid')} style={{ cursor: 'pointer' }}>
+                                <Stack flexDirection="row" alignItems="center" gap={1}>
+                                    <PaidIcon />
+                                    {renderSortIcon('paid')}
+                                </Stack>
+                            </TableCell>
+                        </Tooltip>
+                        <Tooltip title="Teilnehmer gemeldet?" arrow placement='top'>
+                            <TableCell align="center" onClick={() => handleSort('registered')} style={{ cursor: 'pointer' }}>
+                                <Stack flexDirection="row" alignItems="center" gap={1}>
+                                    <HowToRegIcon />
+                                    {renderSortIcon('registered')}
+                                </Stack>
+                            </TableCell>
+                        </Tooltip>
+                        <Tooltip title="Teilnehmer am Start?" arrow placement='top'>
+                            <TableCell align="center" onClick={() => handleSort('ready')} style={{ cursor: 'pointer' }}>
+                                <Stack flexDirection="row" alignItems="center" gap={1}>
+                                    <AlarmOnIcon />
+                                    {renderSortIcon('ready')}
+                                </Stack>
+                            </TableCell>
+                        </Tooltip>
+
+                        <TableCell>Entfernen</TableCell>
+                    </TableRow>
+                </TableHead>
+                <TableBody>
+                    {sortedParticipants.map((participant, index) => (
+                        <TableRow key={index}>
+                            <TableCell>{participant.startNumber}</TableCell>
+                            <TableCell>{participant.name}</TableCell>
+                            <TableCell>{participant.club}</TableCell>
+                            <TableCell>{participant.dog}</TableCell>
+                            <TableCell>
+                                <FormControl className={style.picker}>
+                                    <InputLabel id="demo-simple-select-label" >Klasse</InputLabel>
+                                    <Select
+                                        labelId="demo-simple-select-label"
+                                        id="demo-simple-select"
+                                        value={participant.skillLevel}
+                                        label="Klasse"
+                                        onChange={(value) => {
+                                            participant.skillLevel = value.target.value as SkillLevel;
+                                            updateParticipantFromTable(participant)
+                                        }}
+                                    >
+                                        <MenuItem value={SkillLevel.A0}>A0</MenuItem>
+                                        <MenuItem value={SkillLevel.A1}>A1</MenuItem>
+                                        <MenuItem value={SkillLevel.A2}>A2</MenuItem>
+                                        <MenuItem value={SkillLevel.A3}>A3</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            </TableCell>
+                            <TableCell>
+                                <FormControl className={style.picker}>
+                                    <InputLabel id="demo-simple-select-label" >Größe</InputLabel>
+                                    <Select
+                                        labelId="demo-simple-select-label"
+                                        id="demo-simple-select"
+                                        value={participant.size}
+                                        label="Größe"
+                                        onChange={(value) => {
+                                            participant.size = value.target.value as Size;
+                                            updateParticipantFromTable(participant)
+                                        }}
+                                    >
+                                        <MenuItem value={Size.Small}>Small</MenuItem>
+                                        <MenuItem value={Size.Medium}>Medium</MenuItem>
+                                        <MenuItem value={Size.Intermediate}>Intermediate</MenuItem>
+                                        <MenuItem value={Size.Large}>Large</MenuItem>
+                                    </Select>
+                                </FormControl>
+                            </TableCell>
+                            <TableCell align="center">
+                                <Checkbox
+                                    checked={participant.paid}
+                                    onChange={(value) => {
+                                        participant.paid = value.target.checked;
+                                        updateParticipantFromTable(participant)
+                                    }}
+                                />
+                            </TableCell>
+                            <TableCell align="center">
+                                <Checkbox
+                                    checked={participant.registered}
+                                    onChange={(value) => {
+                                        participant.registered = value.target.checked;
+                                        updateParticipantFromTable(participant)
+                                    }}
+                                />
+                            </TableCell>
+                            <TableCell align="center">
+                                <Checkbox
+                                    checked={participant.ready}
+                                    onChange={(value) => {
+                                        participant.ready = value.target.checked;
+                                        updateParticipantFromTable(participant)
+                                    }}
+                                />
+                            </TableCell>
+                            <TableCell>
+                                <Button
+                                    color="error"
+                                    variant="outlined"
+                                    onClick={() => {
+                                        dispatch(removeParticipant(props.turnamentDate, participant));
+                                        storePermanent(props.organization, props.common.organization);
+                                        updateDatabase(props.common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(props.turnamentDate)), props.organization, dispatch);
+                                    }}
+                                >
+                                    <DeleteIcon />
+                                </Button>
+                            </TableCell>
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>
+        </TableContainer>
+    );
+};
 
 export default Participants
