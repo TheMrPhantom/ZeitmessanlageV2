@@ -6,7 +6,7 @@ let mainWindow;
 function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1280,
-        height: 720,
+        height: 1000,
         icon: path.join(__dirname, 'public/apple-touch-icon.png'),
         webPreferences: {
             nodeIntegration: true,
@@ -16,7 +16,7 @@ function createWindow() {
 
     Menu.setApplicationMenu(null);
 
-    mainWindow.loadURL('http://127.0.0.1:3000'); // or your app's entry point
+    mainWindow.loadURL('https://turnier.dogdog-zeitmessung.de');
 
     mainWindow.webContents.on('before-input-event', (event, input) => {
         if (input.type === 'keyDown' && input.key === 'F12') {
