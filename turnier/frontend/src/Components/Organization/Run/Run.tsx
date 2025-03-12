@@ -519,6 +519,12 @@ const Run = (props: Props) => {
                 }
             };
 
+        } else {
+            //Retry every 5 seconds to reconnect to the websocket, by setting the reload state
+            setTimeout(() => {
+                setreload(!reload)
+            }, 5000)
+
         }
     }, [dispatch, params.date, params.organization, params.secret, common.organization, organization, reload])
 

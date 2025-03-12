@@ -242,100 +242,108 @@ const Run = (props: Props) => {
 
     const ref = useRef(true)
     useEffect(() => {
-        const ws = new WebSocket(window.globalTS.WEBSOCKET)
-        ws.onopen = () => {
-            ws.send(JSON.stringify({
-                action: "subscribe",
-                organization: params.organization
-            }))
-        }
-        const closeWs = () => {
-            try {
-                if (ws !== null) {
-                    ws.close()
+        if (ref.current) {
+            ref.current = false;
+            const ws = new WebSocket(window.globalTS.WEBSOCKET)
+            ws.onopen = () => {
+                ws.send(JSON.stringify({
+                    action: "subscribe",
+                    organization: params.organization
+                }))
+            }
+            const closeWs = () => {
+                try {
+                    if (ws !== null) {
+                        ws.close()
+                    }
+                }
+                catch (e) {
+                    console.log(e);
                 }
             }
-            catch (e) {
-                console.log(e);
-            }
-        }
 
-        ws.onmessage = (e: MessageEvent) => {
-            const message = JSON.parse(e.data);
-            console.log(message)
-            switch (message.action) {
-                case "start_timer":
-                    startTimer();
-                    break;
-                case "stop_timer":
-                    stopTimer();
-                    //changeTime(message.message)
-                    //stopTimer();
-                    break;
-                case "changed_current_participant":
-                    setselectedParticipantStartNumber(message.message.id)
-                    refusalToDisplay.current = message.message.refusals
-                    faultsToDisplay.current = message.message.faults
-                    if (message.message.started && !timerStaredRef.current) {
-                        startTimer(message.message.time)
-                    }
-                    if (selectedRun.current !== message.message.currentRun) {
-                        setreload(!reload)
-                    }
-                    selectedRun.current = message.message.currentRun
+            ws.onmessage = (e: MessageEvent) => {
+                const message = JSON.parse(e.data);
 
-                    //changeFaults(message.message.faults)
-                    //changeRefusals(message.message.refusals)
-                    break;
-                case "changed_current_fault":
-                    //faultsToDisplay.current = Number(message.message)
-                    changeFaults(Number(message.message))
-                    //setreload(!reload)
-                    break;
-                case "changed_current_refusal":
-                    //refusalToDisplay.current = Number(message.message)
-                    changeRefusals(Number(message.message))
-                    //setreload(!reload)
-                    break;
-                case "reload":
-                    doGetRequest(`${params.organization}/tournament/${params.secret}/${params.date}`, dispatch).then((data) => {
-                        if (data.code === 200) {
-                            const t = data.content as Tournament
-                            setcommon(t)
+                switch (message.action) {
+                    case "start_timer":
+                        startTimer();
+                        break;
+                    case "stop_timer":
+                        stopTimer();
+                        //changeTime(message.message)
+                        //stopTimer();
+                        break;
+                    case "changed_current_participant":
+                        setselectedParticipantStartNumber(message.message.id)
+                        refusalToDisplay.current = message.message.refusals
+                        faultsToDisplay.current = message.message.faults
+                        if (message.message.started && !timerStaredRef.current) {
+                            startTimer(message.message.time)
                         }
-                    })
-                    break;
+                        if (selectedRun.current !== message.message.currentRun) {
+                            setreload(!reload)
+                        }
+                        selectedRun.current = message.message.currentRun
+
+                        //changeFaults(message.message.faults)
+                        //changeRefusals(message.message.refusals)
+                        break;
+                    case "changed_current_fault":
+                        //faultsToDisplay.current = Number(message.message)
+                        changeFaults(Number(message.message))
+                        //setreload(!reload)
+                        break;
+                    case "changed_current_refusal":
+                        //refusalToDisplay.current = Number(message.message)
+                        changeRefusals(Number(message.message))
+                        //setreload(!reload)
+                        break;
+                    case "reload":
+                        doGetRequest(`${params.organization}/tournament/${params.secret}/${params.date}`, dispatch).then((data) => {
+                            if (data.code === 200) {
+                                const t = data.content as Tournament
+                                setcommon(t)
+                            }
+                        })
+                        break;
+                }
+
+            };
+
+
+            ws.onerror = () => {
+                closeWs()
+                setwebsocket(null)
+                ref.current = true;
             }
 
-        };
+            ws.onclose = () => {
+                closeWs()
+                setwebsocket(null)
+                ref.current = true;
+                setTimeout(() => {
+                    setreload(!reload)
+                }, 1000)
+            }
+            setwebsocket(ws);
 
+            return () => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.close();
+                    console.log("cleanup")
+                }
+            };
 
-        ws.onerror = () => {
-            closeWs()
-            setwebsocket(null)
-            ref.current = true;
-        }
-
-        ws.onclose = () => {
-            closeWs()
-            setwebsocket(null)
-            ref.current = true;
+        } else {
+            //Retry every 5 seconds to reconnect to the websocket, by setting the reload state
             setTimeout(() => {
                 setreload(!reload)
-            }, 1000)
+            }, 5000)
+
         }
-        setwebsocket(ws);
 
-        return () => {
-            if (ws.readyState === WebSocket.OPEN) {
-                ws.close();
-                console.log("cleanup")
-            }
-        };
-
-        // This ignore is there because adding the missing dependencies makes that infinite ws connection are spawned
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [reload, params.date, params.organization, dispatch])
+    }, [reload, params.date, params.organization, dispatch, changeFaults, changeRefusals, params.secret])
 
 
 
