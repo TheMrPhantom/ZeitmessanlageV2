@@ -72,6 +72,7 @@ const Run = (props: Props) => {
     //Timer
     const [started, setStarted] = useState(false);
     const [initTime, setinitTime] = useState(new Date().getTime())
+    const [reload, setreload] = useState(false)
 
     const parcoursInfos = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(turnamentDate))?.runs.find(r => r.run === currentRun && r.height === currentSize)
 
@@ -506,6 +507,9 @@ const Run = (props: Props) => {
                 closeWs()
                 setwebsocket(null)
                 ref.current = true;
+                setTimeout(() => {
+                    setreload(!reload)
+                }, 1000)
             }
             setwebsocket(ws);
 
@@ -516,7 +520,7 @@ const Run = (props: Props) => {
             };
 
         }
-    }, [dispatch, params.date, params.organization, params.secret, common.organization, organization])
+    }, [dispatch, params.date, params.organization, params.secret, common.organization, organization, reload])
 
     return (
         <Stack className={style.runContainer} direction="column" alignItems="center" gap={4}>

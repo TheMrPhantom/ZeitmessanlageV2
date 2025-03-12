@@ -97,12 +97,17 @@ const RunSelection = (props: Props) => {
                 closeWs()
                 setwebsocket(null)
                 ref.current = true;
+                console.log("Error in Websocket")
             }
 
             ws.onclose = () => {
                 closeWs()
                 setwebsocket(null)
                 ref.current = true;
+                console.log("Websocket closed")
+                setTimeout(() => {
+                    setreload(!reload)
+                }, 1000)
             }
             setwebsocket(ws);
 
@@ -111,6 +116,12 @@ const RunSelection = (props: Props) => {
                     ws.close();
                 }
             };
+
+        } else {
+            //Retry every 5 seconds to reconnect to the websocket, by setting the reload state
+            setTimeout(() => {
+                setreload(!reload)
+            }, 5000)
 
         }
     }, [reload, dispatch, params.date, params.organization, params.secret])

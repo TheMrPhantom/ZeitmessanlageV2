@@ -170,12 +170,12 @@ const ImportParticipants = (props: Props) => {
                 })
 
                 participantsOfSkillLevel.sort((a, b) => { return 0.5 - Math.random() }).forEach((participant, index) => {
-                    const oldParticipant = participantsToOverrite.find((oldParticipant) => {
-                        return oldParticipant.name === participant.name && oldParticipant.dog === participant.dog
+                    const participantToSet = participantsToOverrite.find((p) => {
+                        return p.name === participant.name && p.dog === participant.dog
                     })
-                    if (oldParticipant) {
-                        oldParticipant.sorting = index
-                        console.log(index + 1)
+                    if (participantToSet) {
+                        participantToSet.sorting = index + 1
+                        console.log(index)
                     }
                 })
             })

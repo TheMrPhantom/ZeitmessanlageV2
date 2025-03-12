@@ -318,7 +318,9 @@ const Run = (props: Props) => {
             closeWs()
             setwebsocket(null)
             ref.current = true;
-            console.log("closed")
+            setTimeout(() => {
+                setreload(!reload)
+            }, 1000)
         }
         setwebsocket(ws);
 
