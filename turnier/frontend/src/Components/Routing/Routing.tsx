@@ -65,6 +65,7 @@ const Routing = (props: Props) => {
                 {/*User pages*/}
                 <Route path="/u/:organization/:date/:secret" element={<><Toolbar /><RunSelection /></>} />
                 <Route path="/u/:organization/:date/:secret/:class/:size" element={<><Toolbar /><UserRun /></>} />
+                <Route path="/u/:organization/:date/:secret/:class/:size/kombi" element={<><Toolbar /><UserRun /></>} />
 
                 {/*Admin pages*/}
                 <Route path="/admin" element={<><Toolbar /><Admin /></>} />

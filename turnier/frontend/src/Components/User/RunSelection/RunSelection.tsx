@@ -307,6 +307,14 @@ const RunSelection = (props: Props) => {
                         >
                             Zum Jumping
                         </Button>
+                        <Button variant='contained'
+                            className={style.runButton}
+                            onClick={() => {
+                                navigate(`${skillLevel * 2}/${jumpHeight}/kombi`)
+                            }}
+                        >
+                            Zur Kombi
+                        </Button>
                     </Stack>
                 </Stack>
 

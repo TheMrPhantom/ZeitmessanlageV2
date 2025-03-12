@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import style from './run.module.scss'
 import { Collapse, Divider, FormControlLabel, Paper, Rating, Stack, Switch, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material'
 import { useParams } from 'react-router-dom'
-import { checkIfFavorite, doGetRequest, favoriteIdenfitier, getParticipantsForRun, getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, maximumTime, runTimeToString, runTimeToStringClock, standardTime } from '../../Common/StaticFunctionsTyped';
+import { checkIfFavorite, doGetRequest, favoriteIdenfitier, getKombiRanking, getParticipantsForRun, getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, maximumTime, runTimeToString, runTimeToStringClock, standardTime } from '../../Common/StaticFunctionsTyped';
 import { Run as RunType, SkillLevel, Participant, defaultParticipant, RunCategory, Tournament } from '../../../types/ResponseTypes';
 import { minSpeedA3 } from '../../Common/AgilityPO';
 import { useCallback } from 'react';
@@ -17,6 +17,8 @@ const Run = (props: Props) => {
     const dispatch = useDispatch()
 
     const params = useParams()
+
+    const isKombi = window.location.pathname.endsWith("kombi")
 
     const [common, setcommon] = useState<Tournament>({
         date: new Date(),
@@ -441,6 +443,60 @@ const Run = (props: Props) => {
 
     }, [currentFaults, currentRefusals, currentRun, currentTimeFault, selectedParticipant, unsafeselectedParticipant])
 
+    const resultTable = () => {
+        console.log(participantsWithResults)
+        if (!isKombi) {
+            return getRanking(participantsWithResults, currentRun, calculatedStandardTime).map((value) => {
+                return (
+                    <TableRow key={value.participant.startNumber} className={value.participant.startNumber === selectedParticipant.startNumber &&
+                        selectedRun.current === currentRun ? style.selected : ""}>
+                        <TableCell>{value.rank > 0 ? `${value.rank}.` : ""}</TableCell>
+                        <TableCell>{value.participant.name}</TableCell>
+                        <TableCell>{value.participant.dog}</TableCell>
+                        <TableCell>{runTimeToString(value.result.time)}</TableCell>
+                        <TableCell>{value.result.time > 0 ? value.result.faults : "-"}</TableCell>
+                        <TableCell>{value.result.time > 0 ? value.result.refusals : "-"}</TableCell>
+                        <TableCell>{value.result.time > 0 ? getTimeFaults(value.result, calculatedStandardTime).toFixed(2) : "-"}</TableCell>
+                    </TableRow>
+                )
+            })
+        } else {
+            const parcoursInfosA = common.runs.find(r => r.run === currentRunClass * 2 && r.height === currentSize)
+            const parcoursInfosJ = common.runs.find(r => r.run === currentRunClass * 2 + 1 && r.height === currentSize)
+
+            if (parcoursInfosA === undefined || parcoursInfosJ === undefined) {
+                return <></>
+            }
+
+            const stdTimeA = standardTime(parcoursInfosA.run,
+                currentSize,
+                participants ? participants : [],
+                parcoursInfosA?.length ? parcoursInfosA?.length : 0,
+                parcoursInfosA?.speed ? parcoursInfosA?.speed : minSpeedA3)
+
+            const stdTimeJ = standardTime(parcoursInfosJ.run,
+                currentSize,
+                participants ? participants : [],
+                parcoursInfosJ?.length ? parcoursInfosJ?.length : 0,
+                parcoursInfosJ?.speed ? parcoursInfosJ?.speed : minSpeedA3)
+
+            const kombiRanking = getKombiRanking(participantsWithResults, currentRunClass, currentSize, stdTimeA, stdTimeJ)
+
+            return kombiRanking.map((value) => {
+                return (
+                    <TableRow key={value.participant.startNumber} className={value.participant.startNumber === selectedParticipant.startNumber &&
+                        selectedRun.current === currentRun ? style.selected : ""}>
+                        <TableCell>{value.kombi > 0 ? `${value.kombi}.` : ""}</TableCell>
+                        <TableCell>{value.participant.name}</TableCell>
+                        <TableCell>{value.participant.dog}</TableCell>
+                        <TableCell>{runTimeToString(value.totalTime)}</TableCell>
+                        <TableCell>{value.totalFaults}</TableCell>
+                    </TableRow>
+                )
+            })
+        }
+    }
+
     return (
         <Stack className={style.runContainer} direction="column" alignItems="center" gap={4}>
             {runnerDetails()}
@@ -521,22 +577,8 @@ const Run = (props: Props) => {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {/*Participants with result sorted by totalfaults and time*/
-                                    getRanking(participantsWithResults, currentRun, calculatedStandardTime).map((value) => {
-                                        return (
-                                            <TableRow key={value.participant.startNumber} className={value.participant.startNumber === selectedParticipant.startNumber &&
-                                                selectedRun.current === currentRun ? style.selected : ""}>
-                                                <TableCell>{value.rank > 0 ? `${value.rank}.` : ""}</TableCell>
-                                                <TableCell>{value.participant.name}</TableCell>
-                                                <TableCell>{value.participant.dog}</TableCell>
-                                                <TableCell>{runTimeToString(value.result.time)}</TableCell>
-                                                <TableCell>{value.result.time > 0 ? value.result.faults : "-"}</TableCell>
-                                                <TableCell>{value.result.time > 0 ? value.result.refusals : "-"}</TableCell>
-                                                <TableCell>{value.result.time > 0 ? getTimeFaults(value.result, calculatedStandardTime).toFixed(2) : "-"}</TableCell>
-                                            </TableRow>
-                                        )
-                                    }
-                                    )
+                                {
+                                    resultTable()
                                 }
                             </TableBody>
                         </Table>
