@@ -130,13 +130,13 @@ const RunSelection = (props: Props) => {
         }
     }, [reload, dispatch, params.date, params.organization, params.secret])
 
-    // Check every 2 seconds if the last message was more than 5 seconds ago
+    // Check every second if the last time received is older than 2 times the refresh intervall
     useEffect(() => {
         const interval = setInterval(() => {
             if (new Date().getTime() - lastTimeReceivedRemaining.getTime() > refreshIntervall * 2) {
                 setselectedParticipant({ id: -1, faults: 0, refusals: 0, started: false, time: 0, currentRun: -1, currentSize: -1 })
             }
-        }, 11000)
+        }, 1000)
         return () => clearInterval(interval)
     }, [lastTimeReceivedRemaining])
 
