@@ -209,6 +209,55 @@ class update_data(Resource):
         return util.build_response("OK")
 
 
+@api.route('/<string:name>/tournament/<string:date>/participant')
+class update_data(Resource):
+    def post(self, name, date):
+        """
+        Update a participant of a tournament
+        """
+
+        t: Tournament | None = db.session.query(Tournament).filter(
+            Tournament.date == date, Member.name == name, Tournament.member_id == Member.id).first()
+
+        if t is None:
+            return util.build_response("Not found", 404)
+
+        participant: Participant | None = db.session.query(Participant).filter(
+            Participant.turnament_id == t.id, Participant.start_number == request.json["startNumber"]).first()
+        participant.skill_level = request.json["skillLevel"]
+        participant.size = request.json["size"]
+        participant.paid = request.json["paid"]
+        participant.registered = request.json["registered"]
+        participant.ready = request.json["ready"]
+
+        db.session.commit()
+
+        socket.send(name, {"action": "participant-reload",
+                    "message": {"date": date, "startNumber": request.json["startNumber"]}})
+
+        return util.build_response("OK")
+
+
+@api.route('/<string:name>/tournament/<string:date>/participant/<int:startNumber>')
+class update_data(Resource):
+
+    def get(self, name, date, startNumber):
+        """
+        Get a participant of a tournament
+        """
+
+        t: Tournament | None = db.session.query(Tournament).filter(
+            Tournament.date == date, Member.name == name, Tournament.member_id == Member.id).first()
+
+        if t is None:
+            return util.build_response("Not found", 404)
+
+        participant: Participant | None = db.session.query(Participant).filter(
+            Participant.turnament_id == t.id, Participant.start_number == startNumber).first()
+
+        return util.build_response(participant.to_dict())
+
+
 @api.route('/organization/<string:name>')
 class get_organizer_info(Resource):
     def get(self, name):

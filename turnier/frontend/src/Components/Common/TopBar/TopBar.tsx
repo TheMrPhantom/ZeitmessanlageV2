@@ -98,6 +98,7 @@ const TopBar = (props: Props) => {
 
                             if (success) {
                                 dispatch(setSendingFailed(false));
+                                break;
 
                             }
                         }

@@ -10,7 +10,7 @@ import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom'
-import { doPostRequest, getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, loadPermanent, maximumTime, moveParticipantInStartList, runTimeToString, runTimeToStringClock, standardTime, storePermanent, updateDatabase, wait } from '../../Common/StaticFunctionsTyped';
+import { doGetRequest, doPostRequest, getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, loadPermanent, maximumTime, moveParticipantInStartList, runTimeToString, runTimeToStringClock, standardTime, storePermanent, updateDatabase, wait } from '../../Common/StaticFunctionsTyped';
 import { dateToURLString } from '../../Common/StaticFunctions';
 import { Run as RunType, SkillLevel, Participant, defaultParticipant, RunCategory } from '../../../types/ResponseTypes';
 import { changeLength, changeParticipants, changeSpeed } from '../../../Actions/SampleAction';
@@ -85,6 +85,9 @@ const Run = (props: Props) => {
     const currentTimeFault = getTimeFaults(currentResult, calculatedStandardTime)
 
     useEffect(() => {
+        if (common.organization.name === "") {
+            return
+        }
         doPostRequest(`${common.organization.name}/current/participant`, {
             id: selectedParticipant.startNumber, faults: currentFaults, refusals: currentRefusals, started: started, time: initTime, currentRun: currentRun
         }, dispatch)
@@ -462,8 +465,32 @@ const Run = (props: Props) => {
                 const message = JSON.parse(e.data);
                 console.log(message)
                 switch (message.action) {
-                    case "reload":
-                        console.log("reload")
+                    case "participant-reload":
+                        const date = message.message.date
+                        const startNumber = message.message.startNumber
+
+                        doGetRequest(`${organization}/tournament/${date}/participant/${startNumber}`, dispatch).then((response) => {
+                            if (response.code === 200) {
+                                //Get the participants of the date
+                                const participants = common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(new Date(date)))?.participants
+                                //Get the participant
+                                const participant = participants?.find(p => p.startNumber === startNumber)
+
+                                if (participants !== undefined && participant !== undefined) {
+
+                                    //Get the index of the participant
+                                    participant.skillLevel = response.content.skillLevel
+                                    participant.size = response.content.size
+                                    participant.paid = response.content.paid
+                                    participant.registered = response.content.registered
+                                    participant.ready = response.content.ready
+
+                                    dispatch(changeParticipants(new Date(date), participants))
+                                    storePermanent(organization, common.organization)
+                                }
+                            }
+                        })
+
                         break;
                 }
 
@@ -489,7 +516,7 @@ const Run = (props: Props) => {
             };
 
         }
-    }, [dispatch, params.date, params.organization, params.secret])
+    }, [dispatch, params.date, params.organization, params.secret, common.organization, organization])
 
     return (
         <Stack className={style.runContainer} direction="column" alignItems="center" gap={4}>

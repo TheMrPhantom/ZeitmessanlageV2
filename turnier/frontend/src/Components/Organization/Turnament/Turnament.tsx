@@ -107,13 +107,14 @@ const Turnament = (props: Props) => {
     }, [allParticipants, common.organization, date, dispatch, params.date, t_organization, fixAllParticipants])
 
 
-
-    useEffect(() => {
-
-        //get current turnament
-        updateDatabase(turnament, params.organization ? params.organization : "", dispatch)
-
-    }, [turnament, params.organization, dispatch])
+    /*
+        useEffect(() => {
+    
+            //get current turnament
+            updateDatabase(turnament, params.organization ? params.organization : "", dispatch)
+    
+        }, [turnament, params.organization, dispatch])
+    */
 
     useEffect(() => {
 

@@ -1,5 +1,5 @@
 import { Button, Checkbox, FormControl, InputLabel, MenuItem, Paper, Select, Stack, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography } from '@mui/material'
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import DeleteIcon from '@mui/icons-material/Delete';
 import style from './participants.module.scss'
 import { Participant, SkillLevel, Size } from '../../../types/ResponseTypes';
@@ -8,8 +8,8 @@ import { CommonReducerType } from '../../../Reducer/CommonReducer';
 import { useDispatch, useSelector } from 'react-redux';
 import { useParams } from 'react-router-dom'
 import { dateToURLString } from '../../Common/StaticFunctions';
-import { addParticipant, removeParticipant, updateParticipant } from '../../../Actions/SampleAction';
-import { isYouthParticipant, loadPermanent, storePermanent, stringToSize, stringToSkillLevel, updateDatabase } from '../../Common/StaticFunctionsTyped';
+import { addParticipant, loadOrganization, removeParticipant, updateParticipant } from '../../../Actions/SampleAction';
+import { doGetRequest, doPostRequest, isYouthParticipant, loadPermanent, storePermanent, stringToSize, stringToSkillLevel, updateDatabase } from '../../Common/StaticFunctionsTyped';
 import { usePapaParse } from 'react-papaparse';
 import ImportParticipants from './ImportParticipants';
 import HowToRegIcon from '@mui/icons-material/HowToReg';
@@ -84,8 +84,18 @@ const ParticipantTable = (props: TableProps) => {
     const updateParticipantFromTable = (participant: Participant) => {
         dispatch(updateParticipant(props.turnamentDate, participant));
         storePermanent(props.organization, props.common.organization);
-        updateDatabase(props.common.organization.turnaments.find(t => dateToURLString(new Date(t.date)) === dateToURLString(props.turnamentDate)), props.organization, dispatch);
+        doPostRequest(`${props.organization}/tournament/${dateToURLString(props.turnamentDate)}/participant`, participant, dispatch);
     }
+
+    useEffect(() => {
+        doGetRequest(`${props.common.organization.name}`, dispatch).then((response) => {
+            if (response.code === 200) {
+                dispatch(loadOrganization(response.content))
+                storePermanent(props.common.organization.name, response.content)
+            }
+        }, dispatch)
+    }, [dispatch, props.common.organization.name])
+
     return (
         <TableContainer component={Paper}>
             <Table size="small">

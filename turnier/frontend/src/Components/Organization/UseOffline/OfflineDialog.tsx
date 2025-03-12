@@ -10,6 +10,7 @@ import { loadOrganization } from '../../../Actions/SampleAction';
 import { doGetRequest, loadPermanent, storePermanent, updateDatabase } from '../../Common/StaticFunctionsTyped';
 import { RootState } from '../../../Reducer/reducerCombiner'
 import { CommonReducerType } from '../../../Reducer/CommonReducer';
+import { openErrorToast, openToast } from '../../../Actions/CommonAction';
 
 type Props = {
     type: "online" | "device",
@@ -47,12 +48,14 @@ const OfflineDialog = (props: Props) => {
                             const organization = JSON.parse(localValidationData).name
                             if (props.type === "online") {
                                 if (organization.name !== "") {
-                                    doGetRequest(`${organization}`, dispatch).then((response) => {
+                                    doGetRequest(`${organization}`, dispatch, true).then((response) => {
                                         if (response.code === 200) {
                                             dispatch(loadOrganization(response.content))
                                             storePermanent(organization, response.content)
                                             props.close()
                                             navigate(`/o/${organization}`)
+                                        } else {
+                                            dispatch(openToast({ message: "Online Daten aktuell nicht verfügbar", type: "error" }))
                                         }
                                     }, dispatch)
                                 }

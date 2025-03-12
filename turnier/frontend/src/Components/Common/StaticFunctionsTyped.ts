@@ -5,7 +5,7 @@ import { faultFactor, maxTimeFactorA0A1A2, maxTimeFactorA3, minSpeedA3, minSpeed
 import * as forge from 'node-forge';
 import { Dispatch } from "react";
 
-export const doRequest = async (method: string, path: string, data: any, dispatch: Dispatch<any>) => {
+export const doRequest = async (method: string, path: string, data: any, dispatch: Dispatch<any>, ignoreFails?: boolean) => {
     try {
         const resp = await fetch(window.globalTS.DOMAIN + path,
             {
@@ -26,16 +26,18 @@ export const doRequest = async (method: string, path: string, data: any, dispatc
         }
     } catch (error) {
         console.log(error)
-        dispatch(setSendingFailed(true))
+        if (ignoreFails === undefined || !ignoreFails) {
+            dispatch(setSendingFailed(true))
+        }
         return { code: 503 /*Service unavailable*/, content: {} }
     }
 };
 
-export const doGetRequest = async (path: string, dispatch: Dispatch<any>) => {
-    return doRequest("GET", path, {}, dispatch)
+export const doGetRequest = async (path: string, dispatch: Dispatch<any>, ignoreFails?: boolean) => {
+    return doRequest("GET", path, {}, dispatch, ignoreFails)
 };
-export const doPostRequest = async (path: string, data: any, dispatch: Dispatch<any>) => {
-    return doRequest("POST", path, data, dispatch)
+export const doPostRequest = async (path: string, data: any, dispatch: Dispatch<any>, ignoreFails?: boolean) => {
+    return doRequest("POST", path, data, dispatch, ignoreFails)
 };
 
 export const doPostRequestRawBody = async (path: string, body: any) => {
