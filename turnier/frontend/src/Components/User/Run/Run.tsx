@@ -8,6 +8,7 @@ import { minSpeedA3 } from '../../Common/AgilityPO';
 import { useCallback } from 'react';
 import Spacer from '../../Common/Spacer';
 import { useDispatch } from 'react-redux';
+import PetsIcon from '@mui/icons-material/Pets';
 
 type Props = {}
 
@@ -563,7 +564,7 @@ const Run = (props: Props) => {
                                                 <TableCell>{p.name} </TableCell>
                                                 <TableCell>{p.dog}</TableCell>
                                                 <TableCell align="center">
-                                                    <Rating max={1} value={
+                                                    <Rating icon={<PetsIcon />} emptyIcon={<PetsIcon />} max={1} value={
                                                         checkIfFavorite(p, window.localStorage.getItem("favorites")) ? 1 : 0
                                                     }
                                                         onChange={(e, newValue) => {

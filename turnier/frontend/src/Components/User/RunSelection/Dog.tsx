@@ -3,6 +3,7 @@ import React from 'react'
 import style from './runselection.module.scss'
 import { Result } from '../../../types/ResponseTypes'
 import { runTimeToString } from '../../Common/StaticFunctionsTyped'
+import PetsIcon from '@mui/icons-material/Pets';
 
 type Props = {
     dogname: string,
@@ -33,7 +34,7 @@ const Dog = (props: Props) => {
             <Stack gap={2}>
                 <Stack direction="row" gap={2} alignItems="center" justifyContent="space-between">
                     <Typography variant="h5">{props.dogname}</Typography>
-                    <Rating max={1} value={1} onChange={(e, o) => { console.log(props.dogname); props.unlike() }} />
+                    <Rating icon={<PetsIcon />} emptyIcon={<PetsIcon />} max={1} value={1} onChange={(e, o) => { console.log(props.dogname); props.unlike() }} />
                 </Stack>
                 <Stack gap={1}>
                     <Stack direction="row" gap={2} justifyContent="space-between">
