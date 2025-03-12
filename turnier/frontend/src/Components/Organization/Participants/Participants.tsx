@@ -72,6 +72,11 @@ const Participants = (props: Props) => {
             association: association,
             associationMemberNumber: associationMemberNumber,
             chipNumber: chipNumber,
+            measureDog: false,
+            registered: false,
+            ready: false,
+            paid: false,
+            mail: "",
             resultA: {
                 time: -2,
                 faults: 0,

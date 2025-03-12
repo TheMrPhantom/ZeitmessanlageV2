@@ -23,7 +23,9 @@ const RunSelection = (props: Props) => {
     const [jumpHeight, setjumpHeight] = useState(Size.Small)
     const [reload, setreload] = useState(false)
     const [, setwebsocket] = useState<WebSocket | null>(null);
-    const [, setselectedParticipantStartnumber] = useState(-1)
+    const [selectedParticipant, setselectedParticipant] = useState<{ id: number, faults: number, refusals: number, started: boolean, time: number, currentRun: number, currentSize: number }>(
+        { id: -1, faults: 0, refusals: 0, started: false, time: 0, currentRun: -1, currentSize: -1 }
+    )
     const params = useParams()
     const navigate = useNavigate()
     const dispatch = useDispatch()
@@ -87,7 +89,7 @@ const RunSelection = (props: Props) => {
                         })
                         break;
                     case "changed_current_participant":
-                        setselectedParticipantStartnumber(message.participant)
+                        setselectedParticipant(message.message)
                         break;
                 }
 
@@ -153,12 +155,39 @@ const RunSelection = (props: Props) => {
                 stdTime = standardTime(participant.skillLevel * 2 + 1, participant.size, p, parcourLength ? parcourLength : 0, parcourSpeed ? parcourSpeed : 3)
                 const timefaultsJ = getTimeFaults(participant.resultJ, stdTime)
 
+                let dogsLeft = null
+
+                // Is the Participant in the current run?
+                if (selectedParticipant.id !== -1) {
+                    if (participant.skillLevel === Math.floor(selectedParticipant.currentRun / 2)) {
+                        console.log(participant.size, selectedParticipant.currentSize)
+                        if (participant.size === selectedParticipant.currentSize) {
+                            // Find selected participant in the list
+
+                            const selectedParticipantObject = common.userTurnament.participants.find((p) => p.startNumber === selectedParticipant.id)
+
+                            const allParticipantsOfRun = getParticipantsForRun(common.userTurnament.participants, participant.skillLevel, participant.size)
+
+                            const selectedParticipantIndex = allParticipantsOfRun.findIndex((p) => p.startNumber === selectedParticipant.id)
+                            const currentParticipantIndex = allParticipantsOfRun.findIndex((p) => p.startNumber === participant.startNumber)
+                            console.log(selectedParticipantIndex, currentParticipantIndex)
+                            if (selectedParticipantObject) {
+                                dogsLeft = currentParticipantIndex - selectedParticipantIndex
+                                if (dogsLeft < 0) {
+                                    dogsLeft = null
+                                }
+                            }
+
+                        }
+                    }
+                }
+
                 return <Dog dogname={participant.dog}
                     resultA={participant.resultA}
                     resultJ={participant.resultJ}
                     timefaultsA={timefaultsA}
                     timefaultsJ={timefaultsJ}
-                    dogsLeft={null}
+                    dogsLeft={dogsLeft}
                     unlike={() => {
                         let storage = window.localStorage.getItem("favorites")
                         storage = storage ? storage : ""

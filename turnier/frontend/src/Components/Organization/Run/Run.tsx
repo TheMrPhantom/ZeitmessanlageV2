@@ -90,9 +90,9 @@ const Run = (props: Props) => {
             return
         }
         doPostRequest(`${common.organization.name}/current/participant`, {
-            id: selectedParticipant.startNumber, faults: currentFaults, refusals: currentRefusals, started: started, time: initTime, currentRun: currentRun
+            id: selectedParticipant.startNumber, faults: currentFaults, refusals: currentRefusals, started: started, time: initTime, currentRun: currentRun, currentSize: currentSize
         }, dispatch)
-    }, [selectedParticipant.startNumber, currentFaults, currentRefusals, common.organization.name, started, initTime, currentRun, dispatch]);
+    }, [selectedParticipant.startNumber, currentFaults, currentRefusals, common.organization.name, started, initTime, currentRun, currentSize, dispatch]);
 
     const changeFaults = (value: number) => {
 
@@ -219,12 +219,12 @@ const Run = (props: Props) => {
         var id = setInterval(() => {
 
             doPostRequest(`${common.organization.name}/current/participant`, {
-                id: selectedParticipant.startNumber, faults: currentFaults, refusals: currentRefusals, started: started, time: initTime, currentRun: currentRun
+                id: selectedParticipant.startNumber, faults: currentFaults, refusals: currentRefusals, started: started, time: initTime, currentRun: currentRun, currentSize: currentSize
             }, dispatch)
 
         }, 3000);
         return () => clearInterval(id);
-    }, [selectedParticipant.startNumber, currentFaults, currentRefusals, common.organization.name, started, initTime, currentRun, dispatch]);
+    }, [selectedParticipant.startNumber, currentFaults, currentRefusals, common.organization.name, started, initTime, currentRun, dispatch, currentSize]);
 
     useEffect(() => {
         if (selectedParticipant === defaultParticipant) {
@@ -620,7 +620,6 @@ const Run = (props: Props) => {
                                             const nextStarterSorting = (selectedParticipant.sorting + 1) % (participants ? participants.length : 0)
                                             const nextStarter = participants?.find(p => p.sorting === nextStarterSorting)
                                             setselectedParticipantStartNumber(nextStarter?.startNumber ? nextStarter.startNumber : 0)
-                                            //doPostRequest("0/current/participant", participants[nextIndex].startNumber)
                                         } else {
                                             dispatch(openToast({ message: "Bitte Timer stoppen", type: "warning", headline: "Teilnehmer kann nicht gewechselt werden solange der timer läuft" }))
                                         }

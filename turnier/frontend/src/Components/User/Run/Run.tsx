@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import style from './run.module.scss'
 import { Collapse, Divider, FormControlLabel, Paper, Rating, Stack, Switch, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Typography } from '@mui/material'
 import { useParams } from 'react-router-dom'
-import { checkIfFavorite, doGetRequest, favoriteIdenfitier, getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, maximumTime, runTimeToString, runTimeToStringClock, standardTime } from '../../Common/StaticFunctionsTyped';
+import { checkIfFavorite, doGetRequest, favoriteIdenfitier, getParticipantsForRun, getRanking, getResultFromParticipant, getRunCategory, getTimeFaults, maximumTime, runTimeToString, runTimeToStringClock, standardTime } from '../../Common/StaticFunctionsTyped';
 import { Run as RunType, SkillLevel, Participant, defaultParticipant, RunCategory, Tournament } from '../../../types/ResponseTypes';
 import { minSpeedA3 } from '../../Common/AgilityPO';
 import { useCallback } from 'react';
@@ -33,7 +33,7 @@ const Run = (props: Props) => {
     //Filter all participants for the current run
     const currentRunClass: SkillLevel = params.class ? Math.floor(Number(params.class) / 2) : 0
     const currentSize = params.class ? Number(params.size) : 0
-    const participants = allParticipants?.filter(p => p.skillLevel === currentRunClass && p.size === currentSize)
+    const participants = getParticipantsForRun(allParticipants, currentRunClass, currentSize)
 
     const [selectedParticipantStartNumber, setselectedParticipantStartNumber] = useState(0)
     const unsafeselectedParticipant = participants?.find(p => p.startNumber === selectedParticipantStartNumber)
@@ -465,11 +465,11 @@ const Run = (props: Props) => {
                             </TableHead>
                             <TableBody>
                                 {
-                                    participants?.sort((a, b) => a.sorting - b.sorting).map((p, index) => {
+                                    participants.sort((a, b) => a.sorting - b.sorting).map((p, index) => {
                                         return (
                                             <TableRow key={p.startNumber} className={p.startNumber === selectedParticipantStartNumber &&
                                                 selectedRun.current === currentRun ? style.selected : ""}>
-                                                <TableCell>{p.sorting}</TableCell>
+                                                <TableCell>{index + 1}</TableCell>
                                                 <TableCell>{p.name} </TableCell>
                                                 <TableCell>{p.dog}</TableCell>
                                                 <TableCell align="center">

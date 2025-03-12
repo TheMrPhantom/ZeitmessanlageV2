@@ -226,9 +226,9 @@ class update_data(Resource):
             Participant.turnament_id == t.id, Participant.start_number == request.json["startNumber"]).first()
         participant.skill_level = request.json["skillLevel"]
         participant.size = request.json["size"]
-        participant.paid = request.json["paid"]
-        participant.registered = request.json["registered"]
-        participant.ready = request.json["ready"]
+        participant.paid = request.json["paid"] if "paid" in request.json else False
+        participant.registered = request.json["registered"] if "registered" in request.json else False
+        participant.ready = request.json["ready"] if "ready" in request.json else False
 
         db.session.commit()
 
