@@ -2,7 +2,6 @@ import { Button, Dialog, DialogActions, DialogContent, DialogTitle, Paper, Stack
 import React, { useState } from 'react'
 import style from './participants.module.scss'
 import HowToRegIcon from '@mui/icons-material/HowToReg';
-import AlarmOnIcon from '@mui/icons-material/AlarmOn';
 import PaidIcon from '@mui/icons-material/Paid';
 import { Participant } from '../../../types/ResponseTypes';
 import Spacer from '../../Common/Spacer';
@@ -26,7 +25,7 @@ const Register = (props: Props) => {
             <DialogContent >
                 <Spacer vertical={10} />
                 <TextField label="Suche..." value={search} onChange={(value) => setsearch(value.target.value)} />
-
+                <Spacer vertical={30} />
                 <Stack flexDirection={"column"} gap={2}>
                     {props.participants.filter((p) => {
                         return p.name.toLocaleLowerCase().replaceAll(" ", "").includes(search.toLocaleLowerCase().replaceAll(" ", "")) ||
@@ -71,16 +70,6 @@ const Register = (props: Props) => {
                                             }}
                                         >
                                             <HowToRegIcon />
-                                        </ToggleButton>
-                                        <ToggleButton
-                                            value="ready"
-                                            selected={buttonValues.includes("ready")}
-                                            color={buttonValues.includes("ready") ? 'success' : 'error'}
-                                            onClick={() => {
-                                                props.updateParticipant(participant, "ready")
-                                            }}
-                                        >
-                                            <AlarmOnIcon />
                                         </ToggleButton>
                                     </ToggleButtonGroup>
                                 </Stack>
