@@ -1,3 +1,6 @@
+#ifndef __SEGMENT_H
+#define __SEGMENT_H
+
 void Seven_Segment_Task(void *params);
 
 void setupSevenSegment();
@@ -32,3 +35,5 @@ typedef struct SevenSegmentDisplay
 #define SEVEN_SEGMENT_NETWORK_FAULT 1
 #define SEVEN_SEGMENT_COUNTDOWN 2
 #define SEVEN_SEGMENT_COUNTDOWN_RESET 3
+
+#endif

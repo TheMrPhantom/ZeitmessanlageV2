@@ -40,7 +40,7 @@ QueueHandle_t triggerQueue;
 QueueHandle_t sevenSegmentQueue;
 QueueHandle_t networkFaultQueue;
 QueueHandle_t timeQueue;
-
+QueueHandle_t sendQueue;
 QueueSetHandle_t triggerAndResetQueue;
 
 void app_main(void)
@@ -57,6 +57,7 @@ void app_main(void)
     networkFaultQueue = xQueueCreate(2, sizeof(int));
     sevenSegmentQueue = xQueueCreate(10, sizeof(SevenSegmentDisplay));
     timeQueue = xQueueCreate(1, sizeof(int));
+    sendQueue = xQueueCreate(50, sizeof(char *));
 
     triggerAndResetQueue = xQueueCreateSet(2);
     xQueueAddToSet(triggerQueue, triggerAndResetQueue);
@@ -69,4 +70,5 @@ void app_main(void)
     xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 2048, NULL, 1, NULL);
     xTaskCreatePinnedToCore(Seven_Segment_Task, "Seven_Segment_Task", 4096, NULL, 1, NULL, 1);
     xTaskCreate(Network_Task, "Network_Task", 8192, NULL, 2, NULL);
+    xTaskCreate(Network_Send_Task, "Network_Send_Task", 8192, NULL, 3, NULL);
 }
