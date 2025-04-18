@@ -1,19 +1,4 @@
 #include "Network.h"
-#include <stdio.h>
-#include <string.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
-#include "esp_log.h"
-#include <esp_wifi.h>
-#include <esp_now.h>
-#include <esp_netif.h>
-#include <esp_mac.h>
-#include <esp_event.h>
-#include <esp_flash.h>
-#include <nvs_flash.h>
-#include "Keyboard.h"
-#include "Button.h"
 
 #define min(x, y) (((x) < (y)) ? (x) : (y))
 
@@ -25,6 +10,7 @@
 
 static const char *NETWORK_TAG = "NETWORK";
 QueueHandle_t receivedTimeQueue;
+extern QueueHandle_t sendQueue;
 extern QueueHandle_t buttonQueue;
 extern bool sensors_active;
 
@@ -33,16 +19,48 @@ void init_wifi(void)
     ESP_LOGI(NETWORK_TAG, "Configuring and starting WIFI");
 
     wifi_init_config_t wifi_config = WIFI_INIT_CONFIG_DEFAULT();
-    esp_netif_init();
-    esp_event_loop_create_default();
+    uint8_t custom_mac[6] = {0x06, 0x64, 0x6F, 0x67, 0x2D, 0x03}; // MAC with "dog"
+    esp_err_t error = esp_netif_init();
+    error |= esp_event_loop_create_default();
+    error |= esp_wifi_init(&wifi_config);
+    error |= esp_wifi_set_mode(WIFI_MODE_STA);
+    error |= esp_wifi_set_storage(WIFI_STORAGE_RAM);
+    error |= esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_LR);
+    error |= esp_wifi_set_mac(WIFI_IF_STA, custom_mac);
+    error |= esp_wifi_start();
 
-    nvs_flash_init();
+    if (esp_now_init() == ESP_OK)
+    {
+        ESP_LOGI(NETWORK_TAG, "ESP-NOW Init Success");
+        esp_now_register_recv_cb(receiveCallback);
+        esp_now_register_send_cb(sentCallback);
 
-    esp_wifi_init(&wifi_config);
-    esp_wifi_set_mode(WIFI_MODE_STA);
-    esp_wifi_set_storage(WIFI_STORAGE_RAM);
-    esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_LR);
-    esp_wifi_start();
+        {
+            uint8_t mac[6] = {0x06, 0x64, 0x6F, 0x67, 0x2D, 0x00};
+            error |= add_peer(mac);
+        }
+        {
+            uint8_t mac[6] = {0x06, 0x64, 0x6F, 0x67, 0x2D, 0x01};
+            error |= add_peer(mac);
+        }
+        {
+            uint8_t mac[6] = {0x06, 0x64, 0x6F, 0x67, 0x2D, 0x02};
+            error |= add_peer(mac);
+        }
+
+        if (error != ESP_OK)
+        {
+            ESP_LOGE(NETWORK_TAG, "Failed to add peer: %s", esp_err_to_name(error));
+            vTaskDelay(pdTICKS_TO_MS(3000));
+            esp_restart();
+        }
+    }
+    else
+    {
+        ESP_LOGE(NETWORK_TAG, "ESP-NOW Init Failed");
+        vTaskDelay(pdTICKS_TO_MS(3000));
+        esp_restart();
+    }
 
     ESP_LOGI(NETWORK_TAG, "Wifi configured and started");
 }
@@ -94,74 +112,12 @@ void sentCallback(const uint8_t *macAddr, esp_now_send_status_t status)
     ESP_LOGI(NETWORK_TAG, "Last Packet Send Status: %s", (status == ESP_NOW_SEND_SUCCESS) ? "Delivery Success" : "Delivery Fail");
 }
 
-void broadcast(char *message)
-// Emulates a broadcast
-{
-    const char *BROADCAST_TAG = "NETWORK-BROADCAST";
-
-    ESP_LOGI(BROADCAST_TAG, "Sending message: %s", message);
-    // Broadcast a message to every device in range
-    uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    esp_now_peer_info_t peerInfo = {};
-    memcpy(&peerInfo.peer_addr, broadcastAddress, 6);
-    if (!esp_now_is_peer_exist(broadcastAddress))
-    {
-        esp_now_add_peer(&peerInfo);
-    }
-
-    // Send message
-    esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)message, strlen(message));
-
-    // Print results to serial monitor
-    if (result != ESP_OK)
-    {
-        if (result == ESP_ERR_ESPNOW_NOT_INIT)
-        {
-            ESP_LOGE(BROADCAST_TAG, "ESP-NOW not Init.");
-        }
-        else if (result == ESP_ERR_ESPNOW_ARG)
-        {
-            ESP_LOGE(BROADCAST_TAG, "Invalid Argument");
-        }
-        else if (result == ESP_ERR_ESPNOW_INTERNAL)
-        {
-            ESP_LOGE(BROADCAST_TAG, "Internal Error");
-        }
-        else if (result == ESP_ERR_ESPNOW_NO_MEM)
-        {
-            ESP_LOGE(BROADCAST_TAG, "ESP_ERR_ESPNOW_NO_MEM");
-        }
-        else if (result == ESP_ERR_ESPNOW_NOT_FOUND)
-        {
-            ESP_LOGE(BROADCAST_TAG, "Peer not found.");
-        }
-        else
-        {
-            ESP_LOGE(BROADCAST_TAG, "Unknown error");
-        }
-    }
-}
-
 void Network_Task(void *params)
 {
 
     ESP_LOGI(NETWORK_TAG, "Initialising Network");
-    receivedTimeQueue = xQueueCreate(1, sizeof(int));
 
     init_wifi();
-
-    if (esp_now_init() == ESP_OK)
-    {
-        ESP_LOGI(NETWORK_TAG, "ESP-NOW Init Success");
-        esp_now_register_recv_cb(receiveCallback);
-        esp_now_register_send_cb(sentCallback);
-    }
-    else
-    {
-        ESP_LOGE(NETWORK_TAG, "ESP-NOW Init Failed");
-        vTaskDelay(pdMS_TO_TICKS(3000));
-        esp_restart();
-    }
 
     while (true)
     {
@@ -202,4 +158,91 @@ void Network_Task(void *params)
             free(output);
         }
     }
+}
+
+void queue_to_send(char *message)
+// Emulates a broadcast
+{
+    char *buffer = malloc(strlen(message) + 1);
+    if (buffer == NULL)
+    {
+        ESP_LOGE(NETWORK_TAG, "Failed to allocate memory for message");
+        return;
+    }
+    strcpy(buffer, message);
+    // Send message
+    esp_err_t result = xQueueSend(sendQueue, &buffer, 0);
+    if (result != pdTRUE)
+    {
+        ESP_LOGE(NETWORK_TAG, "Failed to send message to queue");
+        free(buffer);
+        return;
+    }
+}
+
+void send_to_all(char *message)
+// Emulates a broadcast
+{
+    const char *BROADCAST_TAG = "NETWORK-BROADCAST";
+
+    ESP_LOGI(BROADCAST_TAG, "Sending message: %s", message);
+    // Broadcast a message to every device in range
+
+    // Send message
+    esp_err_t result = esp_now_send(NULL, (uint8_t *)message, strlen(message));
+    free(message);
+
+    // Print results to serial monitor
+    if (result != ESP_OK)
+    {
+        if (result == ESP_ERR_ESPNOW_NOT_INIT)
+        {
+            ESP_LOGE(BROADCAST_TAG, "ESP-NOW not Init.");
+        }
+        else if (result == ESP_ERR_ESPNOW_ARG)
+        {
+            ESP_LOGE(BROADCAST_TAG, "Invalid Argument");
+        }
+        else if (result == ESP_ERR_ESPNOW_INTERNAL)
+        {
+            ESP_LOGE(BROADCAST_TAG, "Internal Error");
+        }
+        else if (result == ESP_ERR_ESPNOW_NO_MEM)
+        {
+            ESP_LOGE(BROADCAST_TAG, "ESP_ERR_ESPNOW_NO_MEM");
+        }
+        else if (result == ESP_ERR_ESPNOW_NOT_FOUND)
+        {
+            ESP_LOGE(BROADCAST_TAG, "Peer not found.");
+        }
+        else
+        {
+            ESP_LOGE(BROADCAST_TAG, "Unknown error");
+        }
+    }
+}
+
+void Network_Send_Task(void *params)
+{
+    while (true)
+    {
+        char *message = NULL;
+        if (xQueueReceive(sendQueue, &message, portMAX_DELAY))
+        {
+            send_to_all(message);
+        }
+        else
+        {
+            ESP_LOGE(NETWORK_TAG, "Failed to receive message from queue");
+        }
+    }
+}
+
+esp_err_t add_peer(uint8_t *peer_addr)
+// Add a peer to the peer list
+{
+    esp_now_peer_info_t peerInfo = {};
+    memcpy(peerInfo.peer_addr, peer_addr, ESP_NOW_ETH_ALEN);
+    peerInfo.channel = 0; // Use the current channel
+    return esp_now_add_peer(&peerInfo);
 }

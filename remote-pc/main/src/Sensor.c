@@ -133,7 +133,7 @@ void Sensor_Interrupt_Task(void *params)
                     countdown_sent = 0;
 
                     xQueueSend(buttonQueue, &glow_state, pdMS_TO_TICKS(50));
-                    broadcast("reset");
+                    queue_to_send("reset");
                 }
                 else
                 {
@@ -169,7 +169,7 @@ void Sensor_Interrupt_Task(void *params)
         if (gpio_get_level(BUTTON_TYPE_RESET) == 0 && (TIME_US(now) - TIME_US(reset_pressed) > 1000000) && countdown_sent == 0)
         {
             countdown_sent = 1;
-            broadcast("countdown-7");
+            queue_to_send("countdown-7");
             gettimeofday(&reset_pressed, NULL);
             ESP_LOGI(TAG, "Countdown started");
         }

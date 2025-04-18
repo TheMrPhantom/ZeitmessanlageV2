@@ -28,6 +28,8 @@
 QueueHandle_t sensorInterputQueue;
 QueueHandle_t networkQueue;
 extern QueueHandle_t buttonQueue;
+QueueHandle_t sendQueue;
+
 void app_main(void)
 {
     const char *TAG = "MAIN";
@@ -35,6 +37,7 @@ void app_main(void)
     init_glow_pins();
 
     sensorInterputQueue = xQueueCreate(1, sizeof(sensor_interrupt_t));
+    networkQueue = xQueueCreate(50, sizeof(char *));
 
     init_keyboard();
     init_led();
@@ -45,6 +48,7 @@ void app_main(void)
     xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 8192, NULL, 1, NULL);
     xTaskCreate(Network_Task, "Network_Task", 8192, NULL, 2, NULL);
     xTaskCreate(Button_Task, "Button_Glow_Task", 8192, NULL, 3, NULL);
+    xTaskCreate(Network_Send_Task, "Network_Send_Task", 8192, NULL, 4, NULL);
 
     while (1)
     {
