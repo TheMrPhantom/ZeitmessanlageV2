@@ -25,9 +25,10 @@ void Network_Task(void *params)
     if (esp_now_init() == ESP_OK)
     {
         ESP_LOGI(NETWORK_TAG, "ESP-NOW Init Success");
-        esp_now_register_recv_cb(receiveCallback);
-        esp_now_register_send_cb(sentCallback);
         esp_err_t result = ESP_OK;
+        result |= esp_now_register_recv_cb(receiveCallback);
+        result |= esp_now_register_send_cb(sentCallback);
+
         if (STATION_TYPE == 0)
         {
             uint8_t mac[6] = {0x06, 0x64, 0x6F, 0x67, 0x2D, 0x01};

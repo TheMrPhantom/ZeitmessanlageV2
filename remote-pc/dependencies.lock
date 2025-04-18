@@ -1,10 +1,10 @@
 dependencies:
   espressif/esp_tinyusb:
-    component_hash: 4878831be091116ec8d0e5eaedcae54a5e9866ebf15a44ef101886fd42c0b91f
+    component_hash: 9382e15aaacd3f29e2de2360eb266ef1d7e5ebf4fdefbeaebe146e471d341656
     dependencies:
     - name: idf
       require: private
-      version: '>=5.0'
+      version: ^5.0
     - name: espressif/tinyusb
       registry_url: https://components.espressif.com
       require: public
@@ -12,9 +12,9 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.5.0
+    version: 1.7.2
   espressif/led_strip:
-    component_hash: f907c58f722c58ab8545366668cfd8769cefb7d97a631a14e9d16234cc72bdff
+    component_hash: b578eb926d9f6402fd45398b53c9bd5d1b7a15c1b2974d25aa3088e6c79b0b4c
     dependencies:
     - name: idf
       require: private
@@ -22,9 +22,9 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 3.0.0
+    version: 3.0.1
   espressif/tinyusb:
-    component_hash: 8a9e23b8cdc733b51fed357979139f5ae63a2fed3ce4e7c41d505f685f7d741a
+    component_hash: 10703da2c3cd39a944711ee3d320c6dda54debabf13b4b933a7c90daf102372b
     dependencies:
     - name: idf
       require: private
@@ -36,11 +36,11 @@ dependencies:
     - esp32s2
     - esp32s3
     - esp32p4
-    version: 0.17.0~1
+    version: 0.18.0~2
   idf:
     source:
       type: idf
-    version: 5.3.1
+    version: 5.4.1
 direct_dependencies:
 - espressif/esp_tinyusb
 - espressif/led_strip

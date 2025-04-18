@@ -32,8 +32,8 @@ void init_wifi(void)
     if (esp_now_init() == ESP_OK)
     {
         ESP_LOGI(NETWORK_TAG, "ESP-NOW Init Success");
-        esp_now_register_recv_cb(receiveCallback);
-        esp_now_register_send_cb(sentCallback);
+        error |= esp_now_register_recv_cb(receiveCallback);
+        error |= esp_now_register_send_cb(sentCallback);
 
         {
             uint8_t mac[6] = {0x06, 0x64, 0x6F, 0x67, 0x2D, 0x00};
@@ -65,7 +65,7 @@ void init_wifi(void)
     ESP_LOGI(NETWORK_TAG, "Wifi configured and started");
 }
 
-void receiveCallback(const uint8_t *macAddr, const uint8_t *data, int dataLen)
+void receiveCallback(const esp_now_recv_info_t *esp_now_info, const uint8_t *data, int dataLen)
 // Called when data is received
 {
     // Only allow a maximum of 250 characters in the message + a null terminating byte
