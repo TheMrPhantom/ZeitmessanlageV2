@@ -30,7 +30,7 @@ void init_wifi(void)
     ESP_LOGI(NETWORK_TAG, "Configuring and starting WIFI");
 
     wifi_init_config_t wifi_config = WIFI_INIT_CONFIG_DEFAULT();
-    uint8_t custom_mac[6] = {0x06, 0x64, 0x6F, 0x67, 0x2D, 0x02}; // MAC with "dog"
+    uint8_t custom_mac[6] = {0x06, 0x64, 0x6F, 0x67, 0x2D, 0x00}; // MAC with "dog"
     esp_err_t error = esp_netif_init();
     error |= esp_event_loop_create_default();
     error |= esp_wifi_init(&wifi_config);
