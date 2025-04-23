@@ -29,9 +29,27 @@ jobs:
           target: esp32s3
           path: "measure-stations"
           command: idf.py build
-      - name: Archive build output artifacts
-        uses: actions/upload-artifact@v4
+      - name: esp-idf build
+        uses: espressif/esp-idf-ci-action@v1
         with:
-          name: build
-          path: |
-            measure-stations/build/measure-stations.bin
+          esp_idf_version: v5.3.1
+          target: esp32s3
+          path: "timepanel"
+          command: idf.py build
+      - name: Delete previous 'latest' release (if exists)
+        continue-on-error: true  # this prevents workflow failure if tag doesn't exist
+        uses: dev-drprasad/delete-tag-and-release@v1.1
+        with:
+          tag_name: latest
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create new 'latest' release and upload binary
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: latest
+          name: latest
+          files: |
+            - measure-stations/build/measure-stations.bin
+            - timepanel/build/timepanel.bin
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
