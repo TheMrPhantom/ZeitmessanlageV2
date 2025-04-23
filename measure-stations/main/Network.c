@@ -154,12 +154,12 @@ esp_err_t add_peer(uint8_t *peer_addr)
     return esp_now_add_peer(&peerInfo);
 }
 
-void receiveCallback(const uint8_t *macAddr, const uint8_t *data, int dataLen)
+void receiveCallback(const esp_now_recv_info_t *esp_now_info, const uint8_t *data, int data_len)
 // Called when data is received
 {
     // Only allow a maximum of 250 characters in the message + a null terminating byte
     char buffer[ESP_NOW_MAX_DATA_LEN + 1];
-    int msgLen = min(ESP_NOW_MAX_DATA_LEN, dataLen);
+    int msgLen = min(ESP_NOW_MAX_DATA_LEN, data_len);
     strncpy(buffer, (const char *)data, msgLen);
 
     // Make sure we are null terminated

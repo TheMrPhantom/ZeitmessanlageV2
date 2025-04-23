@@ -18,6 +18,6 @@ void Network_Task(void *params);
 void queue_to_send(char *message);
 void send_to_all(char *message);
 esp_err_t add_peer(uint8_t *peer_addr);
-void receiveCallback(const uint8_t *macAddr, const uint8_t *data, int dataLen);
+void receiveCallback(const esp_now_recv_info_t *esp_now_info, const uint8_t *data, int data_len);
 void sentCallback(const uint8_t *macAddr, esp_now_send_status_t status);
 void Network_Send_Task(void *params);
