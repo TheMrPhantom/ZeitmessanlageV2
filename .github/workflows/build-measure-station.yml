@@ -49,7 +49,7 @@ jobs:
           tag_name: latest
           name: latest
           files: |
-            - measure-stations/build/measure-stations.bin
-            - timepanel/build/timepanel.bin
+            measure-stations/build/measure-stations.bin
+            imepanel/build/timepanel.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
