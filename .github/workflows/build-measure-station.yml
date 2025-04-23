@@ -20,7 +20,7 @@ jobs:
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3.1
-          target: esp32s3
+          target: esp32
           path: "measure-stations"
           command: idf.py build
       - name: Upload measure-stations build output as artifact
@@ -41,7 +41,7 @@ jobs:
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3.1
-          target: esp32s3
+          target: esp32
           path: "timepanel"
           command: idf.py build
       - name: Upload timepanel build output as artifact
@@ -61,7 +61,7 @@ jobs:
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3.1
-          target: esp32s3
+          target: esp32
           path: "remote"
           command: idf.py build
       - name: Upload remote build output as artifact
@@ -101,7 +101,7 @@ jobs:
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3.1
-          target: esp32s3
+          target: esp32
           path: "timepanel-lcd"
           command: idf.py build
       - name: Upload timepanel-lcd build output as artifact
