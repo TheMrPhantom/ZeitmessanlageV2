@@ -118,26 +118,32 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: "recursive"
+
       - name: Download measure-stations artifact
         uses: actions/download-artifact@v4
         with:
           name: measure-stations-bin
+
       - name: Download timepanel artifact
         uses: actions/download-artifact@v4
         with:
           name: timepanel-bin
-      - name: Download remote-bin artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: remote-bin
+
       - name: Download remote artifact
         uses: actions/download-artifact@v4
         with:
+          name: remote-bin
+
+      - name: Download remote-pc artifact
+        uses: actions/download-artifact@v4
+        with:
           name: remote-pc-bin
+
       - name: Download timepanel-lcd artifact
         uses: actions/download-artifact@v4
         with:
           name: timepanel-lcd-bin
+
       - name: Delete previous 'latest' release (if exists)
         continue-on-error: true  # this prevents workflow failure if tag doesn't exist
         uses: dev-drprasad/delete-tag-and-release@v1.1
