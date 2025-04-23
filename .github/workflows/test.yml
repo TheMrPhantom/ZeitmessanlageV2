@@ -17,8 +17,8 @@ jobs:
           echo "hello from $(date)" > dist/your_binary  # Replace this with real build logic
 
       - name: Delete previous 'latest' release (if exists)
-        uses: dev-drprasad/delete-tag-and-release@v1.1
         continue-on-error: true  # this prevents workflow failure if tag doesn't exist
+        uses: dev-drprasad/delete-tag-and-release@v1.1
         with:
           tag_name: latest
         env:
