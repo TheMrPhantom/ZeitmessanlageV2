@@ -1,41 +1,71 @@
-# This is a basic workflow to help you get started with Actions
-
 name: Build projects and upload binaries
 
-# Controls when the workflow will run
 on:
-  # Triggers the workflow on push or pull request events but only for the "master" branch
   push:
     branches: ["master"]
   pull_request:
     types: [opened, synchronize, labeled, unlabeled]
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
 jobs:
-  build:
-    if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build_and_push')" # Skip if 'build_and_push' label not exists
+  build-measure-stations:
+    if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build_and_push')"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
           submodules: "recursive"
-      - name: esp-idf build
+      - name: esp-idf build for measure-stations
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3.1
           target: esp32s3
           path: "measure-stations"
           command: idf.py build
-      - name: esp-idf build
+      - name: Upload measure-stations build output as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: measure-stations-bin
+          path: measure-stations/build/measure-stations.bin
+
+  build-timepanel:
+    if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build_and_push')"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+      - name: esp-idf build for timepanel
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.3.1
           target: esp32s3
           path: "timepanel"
           command: idf.py build
+      - name: Upload timepanel build output as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: timepanel-bin
+          path: timepanel/build/timepanel.bin
+
+  release:
+    needs: [build-measure-stations, build-timepanel]  # Ensures this job runs after both build jobs complete
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+      - name: Download measure-stations artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: measure-stations-bin
+      - name: Download timepanel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: timepanel-bin
       - name: Delete previous 'latest' release (if exists)
         continue-on-error: true  # this prevents workflow failure if tag doesn't exist
         uses: dev-drprasad/delete-tag-and-release@v1.1
@@ -49,7 +79,7 @@ jobs:
           tag_name: latest
           name: latest
           files: |
-            measure-stations/build/measure-stations.bin
-            timepanel/build/timepanel.bin
+            measure-stations.bin
+            timepanel.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
