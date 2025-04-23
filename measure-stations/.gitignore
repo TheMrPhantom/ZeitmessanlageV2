@@ -3,3 +3,4 @@ sdkconfig*
 .vscode/
 build/
 *.log
+!sdkconfig.defaults
