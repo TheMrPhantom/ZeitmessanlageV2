@@ -1,6 +1,7 @@
-sdkconfig.*
+sdkconfig*
 .devcontainer/
 .vscode/
 build/
 *.log
 managed_components/
+!sdkconfig.defaults
