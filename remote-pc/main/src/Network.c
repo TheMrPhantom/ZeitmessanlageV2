@@ -20,8 +20,10 @@ void init_wifi(void)
 
     wifi_init_config_t wifi_config = WIFI_INIT_CONFIG_DEFAULT();
     uint8_t custom_mac[6] = {0x06, 0x64, 0x6F, 0x67, 0x2D, 0x03}; // MAC with "dog"
+
     esp_err_t error = esp_netif_init();
     error |= esp_event_loop_create_default();
+    error |= nvs_flash_init();
     error |= esp_wifi_init(&wifi_config);
     error |= esp_wifi_set_mode(WIFI_MODE_STA);
     error |= esp_wifi_set_storage(WIFI_STORAGE_RAM);
@@ -29,38 +31,13 @@ void init_wifi(void)
     error |= esp_wifi_set_mac(WIFI_IF_STA, custom_mac);
     error |= esp_wifi_start();
 
-    if (esp_now_init() == ESP_OK)
+    if (error != ESP_OK)
     {
-        ESP_LOGI(NETWORK_TAG, "ESP-NOW Init Success");
-        error |= esp_now_register_recv_cb(receiveCallback);
-        error |= esp_now_register_send_cb(sentCallback);
-
-        {
-            uint8_t mac[6] = {0x06, 0x64, 0x6F, 0x67, 0x2D, 0x00};
-            error |= add_peer(mac);
-        }
-        {
-            uint8_t mac[6] = {0x06, 0x64, 0x6F, 0x67, 0x2D, 0x01};
-            error |= add_peer(mac);
-        }
-        {
-            uint8_t mac[6] = {0x06, 0x64, 0x6F, 0x67, 0x2D, 0x02};
-            error |= add_peer(mac);
-        }
-
-        if (error != ESP_OK)
-        {
-            ESP_LOGE(NETWORK_TAG, "Failed to add peer: %s", esp_err_to_name(error));
-            vTaskDelay(pdTICKS_TO_MS(3000));
-            esp_restart();
-        }
-    }
-    else
-    {
-        ESP_LOGE(NETWORK_TAG, "ESP-NOW Init Failed");
-        vTaskDelay(pdTICKS_TO_MS(3000));
+        ESP_LOGE(NETWORK_TAG, "Error starting wifi: %s", esp_err_to_name(error));
+        vTaskDelay(pdMS_TO_TICKS(3000));
         esp_restart();
     }
+    ESP_LOGI(NETWORK_TAG, "Wifi configured and started");
 
     ESP_LOGI(NETWORK_TAG, "Wifi configured and started");
 }
@@ -117,7 +94,43 @@ void Network_Task(void *params)
 
     ESP_LOGI(NETWORK_TAG, "Initialising Network");
 
+    receivedTimeQueue = xQueueCreate(10, sizeof(int));
+
     init_wifi();
+
+    if (esp_now_init() == ESP_OK)
+    {
+        ESP_LOGI(NETWORK_TAG, "ESP-NOW Init Success");
+        esp_err_t error = ESP_OK;
+        error |= esp_now_register_recv_cb(receiveCallback);
+        error |= esp_now_register_send_cb(sentCallback);
+
+        {
+            uint8_t mac[6] = {0x06, 0x64, 0x6F, 0x67, 0x2D, 0x00};
+            error |= add_peer(mac);
+        }
+        {
+            uint8_t mac[6] = {0x06, 0x64, 0x6F, 0x67, 0x2D, 0x01};
+            error |= add_peer(mac);
+        }
+        {
+            uint8_t mac[6] = {0x06, 0x64, 0x6F, 0x67, 0x2D, 0x02};
+            error |= add_peer(mac);
+        }
+
+        if (error != ESP_OK)
+        {
+            ESP_LOGE(NETWORK_TAG, "Failed to add peer: %s", esp_err_to_name(error));
+            vTaskDelay(pdTICKS_TO_MS(3000));
+            esp_restart();
+        }
+    }
+    else
+    {
+        ESP_LOGE(NETWORK_TAG, "ESP-NOW Init Failed");
+        vTaskDelay(pdTICKS_TO_MS(3000));
+        esp_restart();
+    }
 
     while (true)
     {

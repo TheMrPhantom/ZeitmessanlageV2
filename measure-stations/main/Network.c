@@ -118,9 +118,7 @@ void init_wifi(void)
     wifi_init_config_t wifi_config = WIFI_INIT_CONFIG_DEFAULT();
     esp_err_t error = esp_netif_init();
     error |= esp_event_loop_create_default();
-
     error |= nvs_flash_init();
-
     error |= esp_wifi_init(&wifi_config);
     error |= esp_wifi_set_mode(WIFI_MODE_STA);
     error |= esp_wifi_set_storage(WIFI_STORAGE_RAM);

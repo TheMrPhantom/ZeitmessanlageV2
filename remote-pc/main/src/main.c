@@ -38,6 +38,7 @@ void app_main(void)
 
     sensorInterputQueue = xQueueCreate(1, sizeof(sensor_interrupt_t));
     networkQueue = xQueueCreate(50, sizeof(char *));
+    sendQueue = xQueueCreate(50, sizeof(char *));
 
     init_keyboard();
     init_led();
