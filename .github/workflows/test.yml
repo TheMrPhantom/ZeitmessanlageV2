@@ -24,7 +24,7 @@ jobs:
           path: "measure-stations"
           command: idf.py build
       - name: Upload measure-stations build output as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: measure-stations-bin
           path: measure-stations/build/measure-stations.bin
@@ -45,7 +45,7 @@ jobs:
           path: "timepanel"
           command: idf.py build
       - name: Upload timepanel build output as artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: timepanel-bin
           path: timepanel/build/timepanel.bin
@@ -59,11 +59,11 @@ jobs:
         with:
           submodules: "recursive"
       - name: Download measure-stations artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: measure-stations-bin
       - name: Download timepanel artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: timepanel-bin
       - name: Delete previous 'latest' release (if exists)
