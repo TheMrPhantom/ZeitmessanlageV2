@@ -50,6 +50,6 @@ jobs:
           name: latest
           files: |
             measure-stations/build/measure-stations.bin
-            imepanel/build/timepanel.bin
+            timepanel/build/timepanel.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
