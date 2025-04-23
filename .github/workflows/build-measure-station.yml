@@ -16,7 +16,7 @@ on:
 jobs:
   build:
     if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build_and_push')" # Skip if 'build_and_push' label not exists
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
