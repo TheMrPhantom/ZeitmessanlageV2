@@ -54,18 +54,24 @@ void receiveCallback(const esp_now_recv_info_t *esp_now_info, const uint8_t *dat
     buffer[msgLen] = 0;
 
     ESP_LOGI(NETWORK_TAG, "Received Package: %s", buffer);
-    if (strncmp(buffer, "timer-time", 10) == 0 && sensors_active)
+    if (strncmp(buffer, "timer-time", 10) == 0)
     {
-        // Extract the rest of the message without the command
-        char *message = buffer + 10;
-        ESP_LOGI(NETWORK_TAG, "Received timer-time: %s", message);
-        int time = atoi(message);
-        xQueueSend(receivedTimeQueue, &time, 0);
 
         glow_state_t glow_state;
         glow_state.state = 0;
         glow_state.pinNumber = BUTTON_GLOW_TYPE_RESET;
         xQueueSend(buttonQueue, &glow_state, 0);
+
+        if (!sensors_active)
+        {
+            return;
+        }
+
+        // Extract the rest of the message without the command
+        char *message = buffer + 10;
+        ESP_LOGI(NETWORK_TAG, "Received timer-time: %s", message);
+        int time = atoi(message);
+        xQueueSend(receivedTimeQueue, &time, 0);
     }
     else if (strncmp(buffer, "timer-start", 11) == 0)
     {
