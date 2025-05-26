@@ -121,7 +121,7 @@ jobs:
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.1.4
-          target: esp32
+          target: esp32s3
           path: "timepanel-clock-lcd"
           command: idf.py build
       - name: Upload timepanel-clock-lcd build output as artifact
