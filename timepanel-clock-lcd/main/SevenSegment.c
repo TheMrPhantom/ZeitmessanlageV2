@@ -18,6 +18,8 @@ extern QueueHandle_t buzzerQueue;
 
 esp_lcd_touch_handle_t touch = NULL;
 
+static lv_obj_t *avatar;
+
 /* LCD IO and panel */
 static esp_lcd_panel_io_handle_t lcd_io = NULL;
 static esp_lcd_panel_handle_t lcd_panel = NULL;
