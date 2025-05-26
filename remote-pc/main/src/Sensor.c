@@ -146,7 +146,7 @@ void Sensor_Interrupt_Task(void *params)
                         }
                         else if (sensor_interrupt.pinNumber == BUTTON_TYPE_REFUSAL)
                         {
-                            BaseType_t result = sendKey(HID_KEY_V);
+                            BaseType_t result = sendKey(HID_KEY_R);
                             ESP_LOGI(TAG, "Result of sending key: %i", result);
                         }
                         else if (sensor_interrupt.pinNumber == BUTTON_TYPE_DIS)

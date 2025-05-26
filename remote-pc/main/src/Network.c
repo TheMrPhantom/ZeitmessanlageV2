@@ -171,6 +171,7 @@ void Network_Task(void *params)
             ESP_LOGI(NETWORK_TAG, "Sending time: %s", output);
 
             // Print the result using the usb keyboard
+            sendKey(HID_KEY_TAB);
             sendText(output);
             sendKey(HID_KEY_ENTER);
 
