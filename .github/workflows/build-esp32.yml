@@ -100,7 +100,7 @@ jobs:
       - name: esp-idf build for timepanel-lcd
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.1.4
+          esp_idf_version: v5.4.1
           target: esp32
           path: "timepanel-lcd"
           command: idf.py build
