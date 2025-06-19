@@ -93,7 +93,7 @@ void app_main(void)
     resetQueue = xQueueCreate(1, sizeof(int));
     triggerQueue = xQueueCreate(1, sizeof(int));
     networkFaultQueue = xQueueCreate(2, sizeof(int));
-    sevenSegmentQueue = xQueueCreate(10, sizeof(SevenSegmentDisplay));
+    sevenSegmentQueue = xQueueCreate(100, sizeof(SevenSegmentDisplay));
     timeQueue = xQueueCreate(1, sizeof(int));
     sendQueue = xQueueCreate(50, sizeof(char *));
     buzzerQueue = xQueueCreate(10, sizeof(int));
@@ -106,7 +106,7 @@ void app_main(void)
 
     xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 4048, NULL, 8, NULL);
     xTaskCreate(Timer_Task, "Timer_Task", 4048, NULL, 8, NULL);
-    xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 2048, NULL, 8, NULL);
+    xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 4048, NULL, 8, NULL);
     xTaskCreatePinnedToCore(Seven_Segment_Task, "Seven_Segment_Task", 4096, NULL, 8, NULL, 1);
     xTaskCreate(Network_Task, "Network_Task", 8192, NULL, 9, NULL);
     xTaskCreate(Network_Send_Task, "Network_Send_Task", 8192, NULL, 10, NULL);
