@@ -21,6 +21,7 @@ char *TIMER_TAG = "TIMER";
 int timerTriggerCause;
 int timerTime = 0;
 bool timerIsRunning = false;
+int lastTrigger = -1; // -1 means no trigger
 
 void startTimer()
 {
@@ -53,6 +54,7 @@ void Timer_Task(void *params)
                 if (!timerIsRunning)
                 {
                     startTimer();
+                    lastTrigger = timerTriggerCause;
                     int x = -1;
                     xQueueSend(timeQueue, &x, 0);
                     ESP_LOGI(TIMER_TAG, "Started timer");
@@ -67,6 +69,7 @@ void Timer_Task(void *params)
                     SevenSegmentDisplay toSend;
                     toSend.type = SEVEN_SEGMENT_SET_TIME;
                     toSend.time = timeElapsedLocal;
+                    toSend.triggerStation = timerTriggerCause;
                     xQueueSend(sevenSegmentQueue, &toSend, pdMS_TO_TICKS(500));
                     ESP_LOGI(TIMER_TAG, "Stopped timer. Run was %ims", timeElapsedLocal);
                 }
@@ -82,6 +85,7 @@ void Timer_Task(void *params)
                 SevenSegmentDisplay toSend;
                 toSend.type = SEVEN_SEGMENT_SET_TIME;
                 toSend.time = 0;
+                toSend.triggerStation = -1;
                 xQueueSend(sevenSegmentQueue, &toSend, pdMS_TO_TICKS(500));
                 ESP_LOGI(TIMER_TAG, "Reset timer");
             }
@@ -93,7 +97,9 @@ void Timer_Task(void *params)
             SevenSegmentDisplay toSend;
             toSend.type = SEVEN_SEGMENT_SET_TIME;
             toSend.time = currentTime - timerTime;
+            toSend.triggerStation = lastTrigger;
             xQueueSend(sevenSegmentQueue, &toSend, pdMS_TO_TICKS(500));
+            lastTrigger = -1; // Reset last trigger after sending it to the display
         }
     }
 }

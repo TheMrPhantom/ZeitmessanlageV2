@@ -1,4 +1,5 @@
 #include "Network.h"
+#include "Timer.h"
 
 #define min(x, y) (((x) < (y)) ? (x) : (y))
 
@@ -100,7 +101,7 @@ void receiveCallback(const esp_now_recv_info_t *esp_now_info, const uint8_t *dat
         // Protect against triggering 2 times when receiving forwarded message
         if (pdTICKS_TO_MS(xTaskGetTickCount()) - lastStartTriggerReceived > 2000)
         {
-            int cause = 0;
+            int cause = TRIGGER_START;
             xQueueSend(triggerQueue, &cause, 0);
         }
         lastStartTriggerReceived = pdTICKS_TO_MS(xTaskGetTickCount());
@@ -113,7 +114,7 @@ void receiveCallback(const esp_now_recv_info_t *esp_now_info, const uint8_t *dat
         // Protect against triggering 2 times when receiving forwarded message
         if (pdTICKS_TO_MS(xTaskGetTickCount()) - lastStopTriggerReceived > 2000)
         {
-            int cause = 0;
+            int cause = TRIGGER_STOP;
             xQueueSend(triggerQueue, &cause, 0);
         }
         lastStopTriggerReceived = pdTICKS_TO_MS(xTaskGetTickCount());

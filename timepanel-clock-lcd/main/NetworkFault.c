@@ -20,7 +20,7 @@ void sendFaultInformation(bool start, bool stop)
     faultInformation.type = SEVEN_SEGMENT_NETWORK_FAULT;
     faultInformation.startFault = start;
     faultInformation.stopFault = stop;
-    xQueueSend(sevenSegmentQueue, &faultInformation, 0);
+    BaseType_t success = xQueueSend(sevenSegmentQueue, &faultInformation, 0);
 }
 
 void Network_Fault_Task(void *params)
