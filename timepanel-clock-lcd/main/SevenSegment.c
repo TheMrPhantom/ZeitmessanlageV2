@@ -9,6 +9,7 @@
 #include <string.h>
 #include "KeyValue.h"
 #include "Buzzer.h"
+#include "Timer.h"
 
 const char *SEVEN_SEGMENT_TAG = "SevenSegment";
 
@@ -30,6 +31,8 @@ static lv_display_t *lvgl_disp = NULL;
 lv_obj_t *top_label = NULL;
 lv_obj_t *bottom_label = NULL;
 lv_obj_t *reset_buton = NULL;
+lv_obj_t *trigger_reason = NULL;
+lv_timer_t *trigger_timer = NULL;
 
 void Seven_Segment_Task(void *params)
 {
@@ -114,6 +117,10 @@ void Seven_Segment_Task(void *params)
                 if (toDisplay.type == SEVEN_SEGMENT_SET_TIME)
                 {
                     setMilliseconds(toDisplay.time);
+                    if (toDisplay.triggerStation != -1)
+                    {
+                        showTriggerStation(toDisplay.triggerStation);
+                    }
                 }
             }
         }
@@ -297,6 +304,59 @@ void del_reset_button()
         reset_buton = NULL;
     }
     lvgl_port_unlock();
+}
+
+void showTriggerStation(int station)
+{
+    lvgl_port_lock(-1);
+    if (trigger_timer != NULL)
+    {
+        lv_timer_del(trigger_timer);
+        trigger_timer = NULL;
+    }
+    if (trigger_reason != NULL)
+    {
+        lv_obj_del(trigger_reason);
+        trigger_reason = NULL;
+    }
+
+    // create a new label
+    trigger_reason = lv_label_create(lv_scr_act());
+    if (station == TRIGGER_START)
+    {
+        lv_label_set_text(trigger_reason, "Start Triggered");
+    }
+    else if (station == TRIGGER_STOP)
+    {
+        lv_label_set_text(trigger_reason, "Stop Triggered");
+    }
+
+    ESP_LOGI(SEVEN_SEGMENT_TAG, "Show trigger reason: %s", lv_label_get_text(trigger_reason));
+
+    lv_obj_set_style_text_align(trigger_reason, LV_TEXT_ALIGN_CENTER, 0);
+    // Orange color
+    lv_obj_set_style_text_color(trigger_reason, lv_color_hex(0xFFA500), 0);
+    lv_obj_set_style_text_font(trigger_reason, &lv_font_montserrat_20, 0);
+    lv_obj_align(trigger_reason, LV_ALIGN_BOTTOM_MID, 0, -125);
+
+    // make lvgl timer to delete the label after 3 seconds
+    trigger_timer = lv_timer_create(trigger_reason_timer_cb, 5000, NULL);
+
+    lvgl_port_unlock();
+}
+
+void trigger_reason_timer_cb(lv_timer_t *timer)
+{
+    if (trigger_reason != NULL)
+    {
+        lv_obj_del(trigger_reason);
+        trigger_reason = NULL;
+    }
+    if (trigger_timer != NULL)
+    {
+        lv_timer_del(trigger_timer);
+        trigger_timer = NULL;
+    }
 }
 
 void setupSevenSegment()

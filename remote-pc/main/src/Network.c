@@ -148,6 +148,11 @@ void Network_Task(void *params)
             int seconds = ms / 1000;
             int fractional = ms % 1000 / 10; // Get two decimal places
 
+            if (seconds < 10)
+            {
+                continue; // Ignore times less than 12 seconds
+            }
+
             ESP_LOGD(NETWORK_TAG, "Calculated times: %d, %d", seconds, fractional);
 
             // Determine the required length for the string

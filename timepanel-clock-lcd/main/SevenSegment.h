@@ -25,6 +25,8 @@ void setSeconds(long timeToSet);
 void displayFault(int start, int stop, int dots);
 void add_reset_button();
 void del_reset_button();
+void showTriggerStation(int station);
+void trigger_reason_timer_cb(lv_timer_t *timer);
 
 /* End of Adaption */
 
@@ -37,6 +39,7 @@ typedef struct SevenSegmentDisplay
     int type;
     int startFault; // 1 = Fault
     int stopFault;  // 1 = Fault
+    int triggerStation;
 } SevenSegmentDisplay;
 
 #define SEVEN_SEGMENT_SET_TIME 0
