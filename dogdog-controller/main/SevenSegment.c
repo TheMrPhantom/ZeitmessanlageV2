@@ -47,87 +47,6 @@ LV_IMG_DECLARE(hand);
 HistoryEntry history[4];
 int history_index = 0;
 
-void add_to_history()
-{
-    lvgl_port_lock(-1);
-    // get time text from top label
-    char *time_text = lv_label_get_text(top_label);
-    // get faults and refusal from their labels
-    char *fault_text = lv_label_get_text(faults);
-    char *refusal_text = lv_label_get_text(refusals);
-
-    ESP_LOGI(SEVEN_SEGMENT_TAG, "History Entry - Time: %s, Fault: %s, Refusal: %s", time_text, fault_text, refusal_text);
-
-    // Add entry to history
-    HistoryEntry entry;
-    entry.box = lv_obj_create(timing_screen);
-    entry.time = lv_label_create(entry.box);
-    entry.fault = lv_label_create(entry.box);
-    entry.refusal = lv_label_create(entry.box);
-    entry.fault_image = lv_img_create(entry.box);
-    entry.refusal_image = lv_img_create(entry.box);
-
-    lv_img_set_src(entry.fault_image, &hand);
-    lv_img_set_src(entry.refusal_image, &fist);
-    lv_label_set_text(entry.time, time_text);
-    lv_label_set_text(entry.fault, fault_text);
-    lv_label_set_text(entry.refusal, refusal_text);
-
-    if (history_index >= 4)
-    {
-        // delete oldest entry
-        lv_obj_del(history[3].box);
-    }
-    else
-    {
-        history_index++;
-    }
-
-    for (int i = 3; i > 0; i--)
-    {
-        history[i] = history[i - 1];
-    }
-
-    history[0] = entry;
-
-    for (int i = 0; i < history_index; i++)
-    {
-        draw_history_element(&history[i], i);
-    }
-
-    lvgl_port_unlock();
-}
-
-void draw_history_element(HistoryEntry *entry, int index)
-{
-    // make box grey
-    lv_obj_set_style_bg_color(entry->box, lv_color_hex(0xEEEEEE), 0);
-    lv_obj_set_style_bg_opa(entry->box, LV_OPA_COVER, 0);
-    lv_obj_set_size(entry->box, 105, 60);
-    // set no padding
-    lv_obj_set_style_pad_all(entry->box, 0, 0);
-    lv_obj_align(entry->box, LV_ALIGN_TOP_RIGHT, -5, 35 + index * 65);
-
-    // Draw the history entry at the specified index
-    lv_obj_set_style_text_align(entry->time, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_set_style_text_font(entry->time, &lv_font_montserrat_16, 0);
-    lv_obj_align(entry->time, LV_ALIGN_TOP_MID, 0, 3);
-
-    lv_obj_set_style_text_align(entry->fault, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_set_style_text_font(entry->fault, &lv_font_montserrat_16, 0);
-    lv_obj_align(entry->fault, LV_ALIGN_TOP_LEFT, 10, 28);
-
-    lv_obj_align(entry->fault_image, LV_ALIGN_TOP_LEFT, 15, 15);
-    lv_img_set_zoom(entry->fault_image, 128);
-
-    lv_obj_set_style_text_align(entry->refusal, LV_TEXT_ALIGN_LEFT, 0);
-    lv_obj_set_style_text_font(entry->refusal, &lv_font_montserrat_16, 0);
-    lv_obj_align(entry->refusal, LV_ALIGN_TOP_LEFT, 55, 28);
-
-    lv_obj_align(entry->refusal_image, LV_ALIGN_TOP_LEFT, 60, 15);
-    lv_img_set_zoom(entry->refusal_image, 128);
-}
-
 void Seven_Segment_Task(void *params)
 {
     setupSevenSegment();
@@ -452,7 +371,7 @@ void setSeconds(long timeToSet)
 
     int len = snprintf(NULL, 0, "%02d:%02d", minutes, seconds);
     char *longResult = malloc(len + 1);
-    snprintf(longResult, len + 1, "%02d.%02d", minutes, seconds);
+    snprintf(longResult, len + 1, "%02d:%02d", minutes, seconds);
 
     strncpy(numberString, longResult, 5);
     ESP_LOGI(SEVEN_SEGMENT_TAG, "Setting time: %s, %s", numberString, longResult);
@@ -465,6 +384,87 @@ void setSeconds(long timeToSet)
     lv_obj_set_style_text_color(top_label, lv_color_hex(0x00FF00), 0);
     lv_label_set_text(top_label, numberString);
     lvgl_port_unlock();
+}
+
+void add_to_history()
+{
+    lvgl_port_lock(-1);
+    // get time text from top label
+    char *time_text = lv_label_get_text(top_label);
+    // get faults and refusal from their labels
+    char *fault_text = lv_label_get_text(faults);
+    char *refusal_text = lv_label_get_text(refusals);
+
+    ESP_LOGI(SEVEN_SEGMENT_TAG, "History Entry - Time: %s, Fault: %s, Refusal: %s", time_text, fault_text, refusal_text);
+
+    // Add entry to history
+    HistoryEntry entry;
+    entry.box = lv_obj_create(timing_screen);
+    entry.time = lv_label_create(entry.box);
+    entry.fault = lv_label_create(entry.box);
+    entry.refusal = lv_label_create(entry.box);
+    entry.fault_image = lv_img_create(entry.box);
+    entry.refusal_image = lv_img_create(entry.box);
+
+    lv_img_set_src(entry.fault_image, &hand);
+    lv_img_set_src(entry.refusal_image, &fist);
+    lv_label_set_text(entry.time, time_text);
+    lv_label_set_text(entry.fault, fault_text);
+    lv_label_set_text(entry.refusal, refusal_text);
+
+    if (history_index >= 4)
+    {
+        // delete oldest entry
+        lv_obj_del(history[3].box);
+    }
+    else
+    {
+        history_index++;
+    }
+
+    for (int i = 3; i > 0; i--)
+    {
+        history[i] = history[i - 1];
+    }
+
+    history[0] = entry;
+
+    for (int i = 0; i < history_index; i++)
+    {
+        draw_history_element(&history[i], i);
+    }
+
+    lvgl_port_unlock();
+}
+
+void draw_history_element(HistoryEntry *entry, int index)
+{
+    // make box grey
+    lv_obj_set_style_bg_color(entry->box, lv_color_hex(0xEEEEEE), 0);
+    lv_obj_set_style_bg_opa(entry->box, LV_OPA_COVER, 0);
+    lv_obj_set_size(entry->box, 105, 60);
+    // set no padding
+    lv_obj_set_style_pad_all(entry->box, 0, 0);
+    lv_obj_align(entry->box, LV_ALIGN_TOP_RIGHT, -5, 35 + index * 65);
+
+    // Draw the history entry at the specified index
+    lv_obj_set_style_text_align(entry->time, LV_TEXT_ALIGN_LEFT, 0);
+    lv_obj_set_style_text_font(entry->time, &lv_font_montserrat_16, 0);
+    lv_obj_align(entry->time, LV_ALIGN_TOP_MID, 0, 3);
+
+    lv_obj_set_style_text_align(entry->fault, LV_TEXT_ALIGN_LEFT, 0);
+    lv_obj_set_style_text_font(entry->fault, &lv_font_montserrat_16, 0);
+    lv_obj_align(entry->fault, LV_ALIGN_TOP_LEFT, 10, 28);
+
+    lv_obj_align(entry->fault_image, LV_ALIGN_TOP_LEFT, 15, 15);
+    lv_img_set_zoom(entry->fault_image, 128);
+
+    lv_obj_set_style_text_align(entry->refusal, LV_TEXT_ALIGN_LEFT, 0);
+    lv_obj_set_style_text_font(entry->refusal, &lv_font_montserrat_16, 0);
+    lv_obj_align(entry->refusal, LV_ALIGN_TOP_LEFT, 55, 28);
+
+    lv_obj_align(entry->refusal_image, LV_ALIGN_TOP_LEFT, 60, 15);
+    lv_img_set_zoom(entry->refusal_image, 128);
 }
 
 void add_reset_button()
