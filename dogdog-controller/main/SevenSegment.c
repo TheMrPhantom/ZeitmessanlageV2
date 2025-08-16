@@ -16,8 +16,7 @@ extern QueueHandle_t sevenSegmentQueue;
 extern QueueHandle_t resetQueue;
 extern QueueHandle_t buzzerQueue;
 
-esp_lcd_touch_handle_t touch = NULL;
-
+static esp_lcd_touch_handle_t touch = NULL;
 static lv_obj_t *avatar;
 
 /* LCD IO and panel */
@@ -27,19 +26,20 @@ static esp_lcd_panel_handle_t lcd_panel = NULL;
 /* LVGL display and touch */
 static lv_display_t *lvgl_disp = NULL;
 
-lv_obj_t *splash_screen = NULL;
-lv_obj_t *timing_screen = NULL;
+/* UI elements */
+static lv_obj_t *splash_screen = NULL;
+static lv_obj_t *timing_screen = NULL;
+static lv_obj_t *top_label = NULL;
+static lv_obj_t *bottom_label = NULL;
+static lv_obj_t *reset_button = NULL;
+static lv_obj_t *fist_image = NULL;
+static lv_obj_t *hand_image = NULL;
+static lv_obj_t *refusals = NULL;
+static lv_obj_t *faults = NULL;
+static lv_obj_t *start_label = NULL;
+static lv_obj_t *end_label = NULL;
 
-lv_obj_t *top_label = NULL;
-lv_obj_t *bottom_label = NULL;
-lv_obj_t *reset_button = NULL;
-lv_obj_t *fist_image = NULL;
-lv_obj_t *hand_image = NULL;
-lv_obj_t *refusals = NULL;
-lv_obj_t *faults = NULL;
-lv_obj_t *start_label = NULL;
-lv_obj_t *end_label = NULL;
-
+/* Font and image declarations */
 LV_FONT_DECLARE(monospace);
 LV_IMG_DECLARE(fist);
 LV_IMG_DECLARE(hand);
@@ -55,140 +55,79 @@ void Seven_Segment_Task(void *params)
         SevenSegmentDisplay toDisplay;
         if (xQueueReceive(sevenSegmentQueue, &toDisplay, portMAX_DELAY))
         {
-            if (toDisplay.type == SEVEN_SEGMENT_NETWORK_FAULT)
+            switch (toDisplay.type)
             {
+            case SEVEN_SEGMENT_NETWORK_FAULT:
                 displayFault(toDisplay.startFault, toDisplay.stopFault);
-            }
-            else if (toDisplay.type == SEVEN_SEGMENT_COUNTDOWN)
-            {
+                break;
 
-                int startTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
-                int endTime = startTime + toDisplay.time;
-                int remainingTime = endTime - (int)pdTICKS_TO_MS(xTaskGetTickCount());
+            case SEVEN_SEGMENT_COUNTDOWN:
+                handleCountdown(toDisplay);
+                break;
 
-                setSeconds(remainingTime / 1000);
-                xQueueSend(buzzerQueue, &(int){BUZZER_7_MINUTE_TIMER_START}, 0);
-                vTaskDelay(pdMS_TO_TICKS(2000));
-
-                startTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
-                endTime = startTime + toDisplay.time;
-                remainingTime = endTime - (int)pdTICKS_TO_MS(xTaskGetTickCount());
-
-                int skip_zero = 0;
-
-                while (remainingTime > 0)
-                {
-                    setSeconds(remainingTime / 1000);
-                    remainingTime = endTime - (int)pdTICKS_TO_MS(xTaskGetTickCount());
-
-                    if (xQueueReceive(sevenSegmentQueue, &toDisplay, pdMS_TO_TICKS(200)))
-                    {
-                        if (toDisplay.type == SEVEN_SEGMENT_COUNTDOWN_RESET)
-                        {
-                            skip_zero = 1;
-                            break;
-                        }
-                        else if (toDisplay.type == SEVEN_SEGMENT_COUNTDOWN)
-                        {
-                            startTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
-                            endTime = startTime + toDisplay.time * 1000;
-                            remainingTime = endTime - (int)pdTICKS_TO_MS(xTaskGetTickCount());
-                        }
-                        else if (toDisplay.type == SEVEN_SEGMENT_NETWORK_FAULT)
-                        {
-                            networkFault = toDisplay.startFault || toDisplay.stopFault;
-                        }
-                    }
-                }
-                if (skip_zero == 0)
-                {
-                    for (int i = 0; i < 4 && skip_zero == 0; i++)
-                    {
-                        vTaskDelay(pdMS_TO_TICKS(500));
-                        clearSevenSegment();
-                        vTaskDelay(pdMS_TO_TICKS(500));
-                        setSeconds(0);
-                        xQueueSend(buzzerQueue, &(int){BUZZER_7_MINUTE_TIMER_END}, 0);
-                    }
-                    vTaskDelay(pdMS_TO_TICKS(2000));
-                }
-            }
-            if (!networkFault)
-            {
-                if (toDisplay.type == SEVEN_SEGMENT_SET_TIME)
+            case SEVEN_SEGMENT_SET_TIME:
+                if (!networkFault)
                 {
                     setMilliseconds(toDisplay.time);
                 }
+                break;
+
+            default:
+                ESP_LOGW(SEVEN_SEGMENT_TAG, "Unknown display type");
+                break;
             }
         }
     }
-}
-
-void clearSevenSegment()
-{
-    lvgl_port_lock(-1);
-    if (top_label != NULL)
-    {
-        lv_obj_del(top_label);
-        top_label = NULL;
-    }
-    if (bottom_label != NULL)
-    {
-        lv_obj_del(bottom_label);
-        bottom_label = NULL;
-    }
-    del_reset_button();
-    lvgl_port_unlock();
 }
 
 esp_err_t app_lcd_init(void)
 {
     esp_err_t ret = ESP_OK;
 
-    /* LCD backlight */
+    // Configure LCD backlight GPIO
     gpio_config_t bk_gpio_config = {
         .mode = GPIO_MODE_OUTPUT,
         .pin_bit_mask = 1ULL << LCD_GPIO_BL};
     ESP_ERROR_CHECK(gpio_config(&bk_gpio_config));
 
-    /* LCD initialization */
+    // Initialize SPI bus
     ESP_LOGD(SEVEN_SEGMENT_TAG, "Initialize SPI bus");
-    const spi_bus_config_t buscfg = {
+    spi_bus_config_t buscfg = {
         .sclk_io_num = LCD_GPIO_SCLK,
         .mosi_io_num = LCD_GPIO_MOSI,
         .miso_io_num = GPIO_NUM_NC,
         .quadwp_io_num = GPIO_NUM_NC,
         .quadhd_io_num = GPIO_NUM_NC,
-        .max_transfer_sz = LCD_H_RES * LCD_DRAW_BUFF_HEIGHT * sizeof(uint16_t),
-    };
+        .max_transfer_sz = LCD_H_RES * LCD_DRAW_BUFF_HEIGHT * sizeof(uint16_t)};
     ESP_RETURN_ON_ERROR(spi_bus_initialize(LCD_SPI_NUM, &buscfg, SPI_DMA_CH_AUTO), SEVEN_SEGMENT_TAG, "SPI init failed");
 
+    // Install panel IO
     ESP_LOGD(SEVEN_SEGMENT_TAG, "Install panel IO");
-    const esp_lcd_panel_io_spi_config_t io_config = {
+    esp_lcd_panel_io_spi_config_t io_config = {
         .dc_gpio_num = LCD_GPIO_DC,
         .cs_gpio_num = LCD_GPIO_CS,
         .pclk_hz = LCD_PIXEL_CLK_HZ,
         .lcd_cmd_bits = LCD_CMD_BITS,
         .lcd_param_bits = LCD_PARAM_BITS,
         .spi_mode = 0,
-        .trans_queue_depth = 10,
-    };
+        .trans_queue_depth = 10};
     ESP_GOTO_ON_ERROR(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)LCD_SPI_NUM, &io_config, &lcd_io), err, SEVEN_SEGMENT_TAG, "New panel IO failed");
 
+    // Install LCD driver
     ESP_LOGD(SEVEN_SEGMENT_TAG, "Install LCD driver");
-    const esp_lcd_panel_dev_config_t panel_config = {
+    esp_lcd_panel_dev_config_t panel_config = {
         .reset_gpio_num = LCD_GPIO_RST,
         .color_space = LCD_COLOR_SPACE,
-        .bits_per_pixel = LCD_BITS_PER_PIXEL,
-    };
+        .bits_per_pixel = LCD_BITS_PER_PIXEL};
     ESP_GOTO_ON_ERROR(esp_lcd_new_panel_st7789(lcd_io, &panel_config, &lcd_panel), err, SEVEN_SEGMENT_TAG, "New panel failed");
 
+    // Initialize LCD panel
     esp_lcd_panel_reset(lcd_panel);
     esp_lcd_panel_init(lcd_panel);
     esp_lcd_panel_mirror(lcd_panel, true, true);
     esp_lcd_panel_disp_on_off(lcd_panel, true);
 
-    /* LCD backlight on */
+    // Turn on LCD backlight
     ESP_ERROR_CHECK(gpio_set_level(LCD_GPIO_BL, LCD_BL_ON_LEVEL));
 
     esp_lcd_panel_set_gap(lcd_panel, 0, 0);
@@ -197,15 +136,7 @@ esp_err_t app_lcd_init(void)
     return ret;
 
 err:
-    if (lcd_panel)
-    {
-        esp_lcd_panel_del(lcd_panel);
-    }
-    if (lcd_io)
-    {
-        esp_lcd_panel_io_del(lcd_io);
-    }
-    spi_bus_free(LCD_SPI_NUM);
+    cleanup_lcd_resources();
     return ret;
 }
 
@@ -214,13 +145,13 @@ void lvgl_touch_cb(lv_indev_drv_t *drv, lv_indev_data_t *data)
     esp_lcd_touch_handle_t touch = (esp_lcd_touch_handle_t)drv->user_data;
     assert(touch);
 
-    uint16_t tp_x;
-    uint16_t tp_y;
+    uint16_t tp_x, tp_y;
     uint8_t tp_cnt = 0;
-    /* Read data from touch controller into memory */
+
+    // Read touch data
     esp_lcd_touch_read_data(touch);
-    /* Read data from touch controller */
     bool tp_pressed = esp_lcd_touch_get_coordinates(touch, &tp_x, &tp_y, NULL, &tp_cnt, 1);
+
     if (tp_pressed && tp_cnt > 0)
     {
         data->point.x = tp_x;
@@ -236,19 +167,18 @@ void lvgl_touch_cb(lv_indev_drv_t *drv, lv_indev_data_t *data)
 
 esp_err_t app_lvgl_init(void)
 {
-    /* Initialize LVGL */
-    const lvgl_port_cfg_t lvgl_cfg = {
-        .task_priority = 4,     /* LVGL task priority */
-        .task_stack = 16096,    /* LVGL task stack size */
-        .task_affinity = -1,    /* LVGL task pinned to core (-1 is no affinity) */
-        .task_max_sleep_ms = 8, /* Maximum sleep in LVGL task */
-        .timer_period_ms = 1    /* LVGL timer tick period in ms */
-    };
+    // Initialize LVGL
+    lvgl_port_cfg_t lvgl_cfg = {
+        .task_priority = 4,
+        .task_stack = 16096,
+        .task_affinity = -1,
+        .task_max_sleep_ms = 8,
+        .timer_period_ms = 1};
     ESP_RETURN_ON_ERROR(lvgl_port_init(&lvgl_cfg), SEVEN_SEGMENT_TAG, "LVGL port initialization failed");
 
-    /* Add LCD screen */
+    // Add LCD screen
     ESP_LOGD(SEVEN_SEGMENT_TAG, "Add LCD screen");
-    const lvgl_port_display_cfg_t disp_cfg = {
+    lvgl_port_display_cfg_t disp_cfg = {
         .io_handle = lcd_io,
         .panel_handle = lcd_panel,
         .buffer_size = LCD_H_RES * LCD_DRAW_BUFF_HEIGHT * sizeof(uint16_t),
@@ -256,51 +186,14 @@ esp_err_t app_lvgl_init(void)
         .hres = LCD_H_RES,
         .vres = LCD_V_RES,
         .monochrome = false,
-        /* Rotation values must be same as used in esp_lcd for initial settings of the screen */
         .rotation = {
             .swap_xy = true,
             .mirror_x = false,
-            .mirror_y = false,
-        },
-        .flags = {
-            .buff_dma = true,
-        }};
+            .mirror_y = false},
+        .flags = {.buff_dma = true}};
     lvgl_disp = lvgl_port_add_disp(&disp_cfg);
 
     return ESP_OK;
-}
-
-void add_reset_button()
-{
-    lvgl_port_lock(-1);
-    if (reset_button == NULL)
-    {
-        reset_button = lv_btn_create(timing_screen);
-        lv_obj_set_size(reset_button, 200, 50);
-        lv_obj_align(reset_button, LV_ALIGN_BOTTOM_MID, 0, -25);
-
-        lv_obj_t *reset_label = lv_label_create(reset_button);
-        lv_label_set_text(reset_label, "Reset");
-        lv_obj_set_style_text_align(reset_label, LV_TEXT_ALIGN_CENTER, 0);
-        lv_obj_set_style_text_color(reset_label, lv_color_hex(0xFFFFFF), 0);
-        lv_obj_set_style_text_font(reset_label, &lv_font_montserrat_20, 0);
-
-        // Add callback to reset button
-        lv_obj_add_event_cb(reset_button, reset_btn_event_cb,
-                            LV_EVENT_CLICKED, NULL);
-    }
-    lvgl_port_unlock();
-}
-
-void del_reset_button()
-{
-    lvgl_port_lock(-1);
-    if (reset_button != NULL)
-    {
-        lv_obj_del(reset_button);
-        reset_button = NULL;
-    }
-    lvgl_port_unlock();
 }
 
 void setupSevenSegment()
@@ -361,6 +254,16 @@ void setupSevenSegment()
     */
 
     lvgl_port_lock(-1);
+    setup_splashscreen();
+
+    setup_timing_screen();
+
+    lv_scr_load_anim(timing_screen, LV_SCR_LOAD_ANIM_MOVE_TOP, 500, 0, false);
+    lvgl_port_unlock();
+}
+
+void setup_splashscreen()
+{
     splash_screen = lv_scr_act();
     lv_obj_set_style_bg_color(splash_screen, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(splash_screen, LV_OPA_COVER, 0);
@@ -374,7 +277,10 @@ void setupSevenSegment()
     lvgl_port_unlock();
     vTaskDelay(pdMS_TO_TICKS(5000));
     lvgl_port_lock(-1);
+}
 
+void setup_timing_screen()
+{
     timing_screen = lv_obj_create(NULL);
     lv_obj_set_style_bg_color(timing_screen, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(timing_screen, LV_OPA_COVER, 0);
@@ -420,37 +326,167 @@ void setupSevenSegment()
 
     add_reset_button();
 
-    int NUM_SENSORS_LEFT = 10;
-    int NUM_SENSORS_RIGHT = 10;
-    bool sensor_connected_left[10];
-    bool sensor_connected_right[10];
-    sensor_connected_left[0] = true;
-    sensor_connected_left[1] = false;
-    sensor_connected_left[2] = true;
-    sensor_connected_left[3] = false;
-    sensor_connected_left[4] = true;
-    sensor_connected_left[5] = false;
-    sensor_connected_left[6] = true;
-    sensor_connected_left[7] = false;
-    sensor_connected_left[8] = true;
-    sensor_connected_left[9] = false;
-
-    sensor_connected_right[0] = true;
-    sensor_connected_right[1] = true;
-    sensor_connected_right[2] = false;
-    sensor_connected_right[3] = false;
-    sensor_connected_right[4] = true;
-    sensor_connected_right[5] = false;
-    sensor_connected_right[6] = true;
-    sensor_connected_right[7] = false;
-    sensor_connected_right[8] = true;
-    sensor_connected_right[9] = true;
+    const int NUM_SENSORS_LEFT = 10, NUM_SENSORS_RIGHT = 10;
+    bool sensor_connected_left[10] = {true, false, true, false, true, false, true, false, true, false};
+    bool sensor_connected_right[10] = {true, true, false, false, true, false, true, false, true, true};
 
     draw_sensor_status(sensor_connected_left, sensor_connected_right, NUM_SENSORS_LEFT, NUM_SENSORS_RIGHT);
     draw_connection_status(true, false);
+}
 
-    lv_scr_load_anim(timing_screen, LV_SCR_LOAD_ANIM_MOVE_TOP, 500, 0, false);
+void setMilliseconds(long timeToSet)
+{
+    timeToSet = timeToSet - timeToSet % 10; // Round down to nearest 10 ms
+    float sec = timeToSet / 1000.0f;
+    char numberString[8]; // Enough for "9999.99\0"
+    numberString[7] = 0x00;
+
+    // Always show two decimals, regardless of value
+    snprintf(numberString, sizeof(numberString), "%.2f", sec);
+
+    // TODO: Show milliseconds
+    lvgl_port_lock(-1);
+    lv_label_set_text(top_label, numberString);
+    lv_obj_set_style_text_color(top_label, lv_color_hex(0x000000), 0);
     lvgl_port_unlock();
+}
+
+void setSeconds(long timeToSet)
+{
+
+    int minutes = timeToSet / 60;
+    int seconds = timeToSet % 60;
+    char numberString[6];
+    numberString[5] = 0x00;
+
+    int len = snprintf(NULL, 0, "%02d:%02d", minutes, seconds);
+    char *longResult = malloc(len + 1);
+    snprintf(longResult, len + 1, "%02d.%02d", minutes, seconds);
+
+    strncpy(numberString, longResult, 5);
+    ESP_LOGI(SEVEN_SEGMENT_TAG, "Setting time: %s, %s", numberString, longResult);
+    free(longResult);
+
+    lvgl_port_lock(-1);
+    add_reset_button();
+
+    lv_obj_align(top_label, LV_ALIGN_CENTER, 0, -50);
+    lv_obj_set_style_text_color(top_label, lv_color_hex(0x00FF00), 0);
+    lv_label_set_text(top_label, numberString);
+    lvgl_port_unlock();
+}
+
+void add_reset_button()
+{
+    lvgl_port_lock(-1);
+    if (reset_button == NULL)
+    {
+        reset_button = lv_btn_create(timing_screen);
+        lv_obj_set_size(reset_button, 200, 50);
+        lv_obj_align(reset_button, LV_ALIGN_BOTTOM_MID, 0, -25);
+
+        lv_obj_t *reset_label = lv_label_create(reset_button);
+        lv_label_set_text(reset_label, "Reset");
+        lv_obj_set_style_text_align(reset_label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_color(reset_label, lv_color_hex(0xFFFFFF), 0);
+        lv_obj_set_style_text_font(reset_label, &lv_font_montserrat_20, 0);
+
+        // Add callback to reset button
+        lv_obj_add_event_cb(reset_button, reset_btn_event_cb,
+                            LV_EVENT_CLICKED, NULL);
+    }
+    lvgl_port_unlock();
+}
+
+void del_reset_button()
+{
+    lvgl_port_lock(-1);
+    if (reset_button != NULL)
+    {
+        lv_obj_del(reset_button);
+        reset_button = NULL;
+    }
+    lvgl_port_unlock();
+}
+
+void handleCountdown(SevenSegmentDisplay toDisplay)
+{
+    int startTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
+    int endTime = startTime + toDisplay.time;
+    int remainingTime = endTime - (int)pdTICKS_TO_MS(xTaskGetTickCount());
+
+    setSeconds(remainingTime / 1000);
+    xQueueSend(buzzerQueue, &(int){BUZZER_7_MINUTE_TIMER_START}, 0);
+    vTaskDelay(pdMS_TO_TICKS(2000));
+
+    startTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
+    endTime = startTime + toDisplay.time;
+    remainingTime = endTime - (int)pdTICKS_TO_MS(xTaskGetTickCount());
+
+    while (remainingTime > 0)
+    {
+        setSeconds(remainingTime / 1000);
+        remainingTime = endTime - (int)pdTICKS_TO_MS(xTaskGetTickCount());
+
+        if (xQueueReceive(sevenSegmentQueue, &toDisplay, pdMS_TO_TICKS(200)))
+        {
+            if (toDisplay.type == SEVEN_SEGMENT_COUNTDOWN_RESET)
+            {
+                return;
+            }
+            else if (toDisplay.type == SEVEN_SEGMENT_COUNTDOWN)
+            {
+                startTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
+                endTime = startTime + toDisplay.time * 1000;
+                remainingTime = endTime - (int)pdTICKS_TO_MS(xTaskGetTickCount());
+            }
+        }
+    }
+
+    finalizeCountdown();
+}
+
+void finalizeCountdown()
+{
+    for (int i = 0; i < 4; i++)
+    {
+        vTaskDelay(pdMS_TO_TICKS(500));
+        clearSevenSegment();
+        vTaskDelay(pdMS_TO_TICKS(500));
+        setSeconds(0);
+        xQueueSend(buzzerQueue, &(int){BUZZER_7_MINUTE_TIMER_END}, 0);
+    }
+    vTaskDelay(pdMS_TO_TICKS(2000));
+}
+
+void clearSevenSegment()
+{
+    lvgl_port_lock(-1);
+    if (top_label)
+    {
+        lv_obj_del(top_label);
+        top_label = NULL;
+    }
+    if (bottom_label)
+    {
+        lv_obj_del(bottom_label);
+        bottom_label = NULL;
+    }
+    del_reset_button();
+    lvgl_port_unlock();
+}
+
+void cleanup_lcd_resources()
+{
+    if (lcd_panel)
+    {
+        esp_lcd_panel_del(lcd_panel);
+    }
+    if (lcd_io)
+    {
+        esp_lcd_panel_io_del(lcd_io);
+    }
+    spi_bus_free(LCD_SPI_NUM);
 }
 
 void draw_connection_status(bool start_alive, bool end_alive)
@@ -572,51 +608,6 @@ void reset_btn_event_cb(lv_event_t *e)
     int toSend = 0;
     xQueueSend(resetQueue, &toSend, 0);
     resetCountdown();
-}
-
-void setMilliseconds(long timeToSet)
-{
-    timeToSet = timeToSet - timeToSet % 10; // Round down to nearest 10 ms
-    float sec = timeToSet / 1000.0f;
-    char numberString[8]; // Enough for "9999.99\0"
-    numberString[7] = 0x00;
-
-    // Always show two decimals, regardless of value
-    snprintf(numberString, sizeof(numberString), "%.2f", sec);
-
-    // TODO: Show milliseconds
-    lvgl_port_lock(-1);
-    lv_label_set_text(top_label, numberString);
-    lv_obj_set_style_text_color(top_label, lv_color_hex(0x000000), 0);
-    lvgl_port_unlock();
-}
-
-/*
-    Will be displayed as minute:seconds
-*/
-void setSeconds(long timeToSet)
-{
-
-    int minutes = timeToSet / 60;
-    int seconds = timeToSet % 60;
-    char numberString[6];
-    numberString[5] = 0x00;
-
-    int len = snprintf(NULL, 0, "%02d:%02d", minutes, seconds);
-    char *longResult = malloc(len + 1);
-    snprintf(longResult, len + 1, "%02d.%02d", minutes, seconds);
-
-    strncpy(numberString, longResult, 5);
-    ESP_LOGI(SEVEN_SEGMENT_TAG, "Setting time: %s, %s", numberString, longResult);
-    free(longResult);
-
-    lvgl_port_lock(-1);
-    add_reset_button();
-
-    lv_obj_align(top_label, LV_ALIGN_CENTER, 0, -50);
-    lv_obj_set_style_text_color(top_label, lv_color_hex(0x00FF00), 0);
-    lv_label_set_text(top_label, numberString);
-    lvgl_port_unlock();
 }
 
 void resetCountdown()

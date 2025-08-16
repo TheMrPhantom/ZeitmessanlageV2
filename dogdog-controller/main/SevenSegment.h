@@ -14,10 +14,25 @@
 #include "esp_lcd_touch_cst816s.h"
 #include <esp_system.h>
 #include "soc/soc.h"
+
+typedef struct SevenSegmentDisplay
+{
+    int time;
+    int type;
+    int startFault; // 1 = Fault
+    int stopFault;  // 1 = Fault
+} SevenSegmentDisplay;
+
 void Seven_Segment_Task(void *params);
 
 void setupSevenSegment();
 
+void setup_timing_screen();
+
+void setup_splashscreen();
+void finalizeCountdown();
+void cleanup_lcd_resources();
+void handleCountdown(SevenSegmentDisplay toDisplay);
 void draw_vertical_line(int x_pos);
 void draw_sensor_status(bool *sensor_connected_left, bool *sensor_connected_right, int num_sensors_left, int num_sensors_right);
 void draw_line(int x1, int y1, int x2, int y2);
@@ -35,14 +50,6 @@ void del_reset_button();
 
 void resetCountdown();
 void reset_btn_event_cb(lv_event_t *e);
-
-typedef struct SevenSegmentDisplay
-{
-    int time;
-    int type;
-    int startFault; // 1 = Fault
-    int stopFault;  // 1 = Fault
-} SevenSegmentDisplay;
 
 #define SEVEN_SEGMENT_SET_TIME 0
 #define SEVEN_SEGMENT_NETWORK_FAULT 1
