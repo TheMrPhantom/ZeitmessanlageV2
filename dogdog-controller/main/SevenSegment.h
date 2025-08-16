@@ -23,6 +23,16 @@ typedef struct SevenSegmentDisplay
     int stopFault;  // 1 = Fault
 } SevenSegmentDisplay;
 
+typedef struct HistoryEntry
+{
+    lv_obj_t *time;
+    lv_obj_t *fault;
+    lv_obj_t *fault_image;
+    lv_obj_t *refusal;
+    lv_obj_t *refusal_image;
+    lv_obj_t *box;
+} HistoryEntry;
+
 void Seven_Segment_Task(void *params);
 
 void setupSevenSegment();
@@ -37,7 +47,8 @@ void draw_vertical_line(int x_pos);
 void draw_sensor_status(bool *sensor_connected_left, bool *sensor_connected_right, int num_sensors_left, int num_sensors_right);
 void draw_line(int x1, int y1, int x2, int y2);
 void draw_connection_status(bool start_alive, bool end_alive);
-
+void add_to_history();
+void draw_history_element(HistoryEntry *entry, int index);
 /* Adapt to LCD */
 void setMilliseconds(long timeToSet);
 void setSeconds(long timeToSet);
@@ -54,6 +65,7 @@ void reset_btn_event_cb(lv_event_t *e);
 #define SEVEN_SEGMENT_NETWORK_FAULT 1
 #define SEVEN_SEGMENT_COUNTDOWN 2
 #define SEVEN_SEGMENT_COUNTDOWN_RESET 3
+#define SEVEN_SEGMENT_STORE_TO_HISTORY 4
 
 /* LCD size */
 #define LCD_H_RES (480)

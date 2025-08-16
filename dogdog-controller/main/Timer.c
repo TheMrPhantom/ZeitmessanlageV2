@@ -65,7 +65,7 @@ void Timer_Task(void *params)
                     xQueueSend(timeQueue, &timeElapsedLocal, 0);
 
                     SevenSegmentDisplay toSend;
-                    toSend.type = SEVEN_SEGMENT_SET_TIME;
+                    toSend.type = SEVEN_SEGMENT_STORE_TO_HISTORY;
                     toSend.time = timeElapsedLocal;
                     xQueueSend(sevenSegmentQueue, &toSend, pdMS_TO_TICKS(500));
                     ESP_LOGI(TIMER_TAG, "Stopped timer. Run was %ims", timeElapsedLocal);

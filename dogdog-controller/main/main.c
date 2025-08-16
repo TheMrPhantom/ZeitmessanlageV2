@@ -131,6 +131,36 @@ void app_main(void)
     vTaskDelay(pdMS_TO_TICKS(8746));
     receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
 
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
+
+    vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
+    receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
+
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
+
+    vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
+    receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
+
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
+
+    vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
+    receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
+
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
+
+    vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
+    receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
+
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
+
+    vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
+    receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
+
     vTaskDelay(pdMS_TO_TICKS(5000));
     receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
     vTaskDelay(pdMS_TO_TICKS(16273));
