@@ -66,10 +66,7 @@ void Seven_Segment_Task(void *params)
                 break;
 
             case SEVEN_SEGMENT_SET_TIME:
-                if (!networkFault)
-                {
-                    setMilliseconds(toDisplay.time);
-                }
+                setMilliseconds(toDisplay.time);
                 break;
 
             default:
@@ -451,29 +448,14 @@ void finalizeCountdown()
     for (int i = 0; i < 4; i++)
     {
         vTaskDelay(pdMS_TO_TICKS(500));
-        clearSevenSegment();
+        lvgl_port_lock(-1);
+        lv_obj_set_style_text_color(top_label, lv_color_hex(0xFF0000), 0);
+        lvgl_port_unlock();
         vTaskDelay(pdMS_TO_TICKS(500));
         setSeconds(0);
         xQueueSend(buzzerQueue, &(int){BUZZER_7_MINUTE_TIMER_END}, 0);
     }
     vTaskDelay(pdMS_TO_TICKS(2000));
-}
-
-void clearSevenSegment()
-{
-    lvgl_port_lock(-1);
-    if (top_label)
-    {
-        lv_obj_del(top_label);
-        top_label = NULL;
-    }
-    if (bottom_label)
-    {
-        lv_obj_del(bottom_label);
-        bottom_label = NULL;
-    }
-    del_reset_button();
-    lvgl_port_unlock();
 }
 
 void cleanup_lcd_resources()

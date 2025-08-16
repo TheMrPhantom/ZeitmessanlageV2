@@ -39,7 +39,6 @@ void draw_line(int x1, int y1, int x2, int y2);
 void draw_connection_status(bool start_alive, bool end_alive);
 
 /* Adapt to LCD */
-void clearSevenSegment();
 void setMilliseconds(long timeToSet);
 void setSeconds(long timeToSet);
 void displayFault(int start, int stop);
