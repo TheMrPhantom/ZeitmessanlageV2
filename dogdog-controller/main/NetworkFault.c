@@ -26,17 +26,15 @@ void sendFaultInformation(bool start, bool stop)
 void Network_Fault_Task(void *params)
 {
 
-    const int timeoutTime = pdMS_TO_TICKS(7000);
+    const int timeoutTime = pdMS_TO_TICKS(2000);
 
     int lastSeenStart = -timeoutTime;
     int lastSeenStop = -timeoutTime;
 
-    bool fault = true;
-
     while (1)
     {
         int received = NOTHING_ALIVE;
-        if (xQueueReceive(networkFaultQueue, &received, pdMS_TO_TICKS(100)))
+        if (xQueueReceive(networkFaultQueue, &received, pdMS_TO_TICKS(500)))
         {
             if (received == START_ALIVE)
             {
@@ -53,18 +51,6 @@ void Network_Fault_Task(void *params)
         bool startFault = currentTime - lastSeenStart > timeoutTime;
         bool stopFault = currentTime - lastSeenStop > timeoutTime;
 
-        if (startFault || stopFault)
-        {
-            fault = true;
-            sendFaultInformation(startFault, stopFault);
-        }
-        else
-        {
-            if (fault)
-            {
-                fault = false;
-                sendFaultInformation(startFault, stopFault);
-            }
-        }
+        sendFaultInformation(startFault, stopFault);
     }
 }

@@ -112,6 +112,7 @@ void app_main(void)
     xTaskCreate(Network_Send_Task, "Network_Send_Task", 8192, NULL, 10, NULL);
     xTaskCreate(Buzzer_Task, "Buzzer_Task", 4048, NULL, 7, NULL);
 
+    /*
     vTaskDelay(pdMS_TO_TICKS(4000));
     receiveCallback(NULL, (const uint8_t *)"alive-start", strlen("alive-start"));
     vTaskDelay(pdMS_TO_TICKS(1000));
@@ -124,7 +125,6 @@ void app_main(void)
     receiveCallback(NULL, (const uint8_t *)"alive-stop", strlen("alive-stop"));
 
     xTaskCreate(test, "test", 4048, NULL, 3, NULL);
-
     vTaskDelay(pdMS_TO_TICKS(5000));
     receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
 
@@ -180,4 +180,5 @@ void app_main(void)
 
     vTaskDelay(pdMS_TO_TICKS(1000 * 60 * 7 + 15));
     receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
+    */
 }

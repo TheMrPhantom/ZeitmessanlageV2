@@ -134,11 +134,41 @@ void receiveCallback(const esp_now_recv_info_t *esp_now_info, const uint8_t *dat
         xQueueSend(resetQueue, &toSend, 0);
         resetCountdown();
     }
-    else if (strncmp(buffer, "countdown-7", 12) == 0)
+    else if (strncmp(buffer, "countdown-7", 11) == 0)
     {
         SevenSegmentDisplay toSend;
         toSend.type = SEVEN_SEGMENT_COUNTDOWN;
         toSend.time = 60 * 7 * 1000;
+        xQueueSend(sevenSegmentQueue, &toSend, 0);
+    }
+
+    if (strncmp(buffer, "alive-", 6) == 0)
+    {
+        int sensorAmount = msgLen - 11;
+
+        SensorStatus sensorStatus;
+        if (strncmp(buffer, "alive-start", 11) == 0)
+        {
+            sensorStatus.sensor = SENSOR_START;
+        }
+        else
+        {
+            sensorStatus.sensor = SENSOR_STOP;
+        }
+
+        sensorStatus.num_sensors = sensorAmount;
+        sensorStatus.status = calloc(sensorAmount, sizeof(bool));
+
+        // Print connected sensors amount
+        ESP_LOGI(NETWORK_TAG, "Connected sensors amount: %d", sensorAmount);
+        for (int i = 0; i < sensorAmount; i++)
+        {
+            ESP_LOGI(NETWORK_TAG, "Sensor %d status: %d", i, (buffer[11 + i] == '1'));
+            sensorStatus.status[i] = (buffer[11 + i] == '1');
+        }
+        SevenSegmentDisplay toSend;
+        toSend.type = SEVEN_SEGMENT_SENSOR_STATUS;
+        toSend.sensorStatus = sensorStatus;
         xQueueSend(sevenSegmentQueue, &toSend, 0);
     }
 }

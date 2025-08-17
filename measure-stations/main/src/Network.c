@@ -17,10 +17,11 @@ extern QueueHandle_t sendQueue;
 
 void Network_Task(void *params)
 {
-
     ESP_LOGI(NETWORK_TAG, "Initialising Network");
 
     init_wifi();
+
+    xTaskCreate(Network_Send_Task, "Network_Send_Task", 8192, NULL, 3, NULL);
 
     if (esp_now_init() == ESP_OK)
     {
@@ -79,17 +80,6 @@ void Network_Task(void *params)
             if (trigger == Buzzer_INDICATE_ERROR)
             {
                 sensorFault = !sensorFault;
-            }
-        }
-        if (!sensorFault)
-        {
-            if (STATION_TYPE == 0)
-            {
-                queue_to_send("alive-start");
-            }
-            else if (STATION_TYPE == 1)
-            {
-                queue_to_send("alive-stop");
             }
         }
     }
@@ -172,11 +162,11 @@ void receiveCallback(const esp_now_recv_info_t *esp_now_info, const uint8_t *dat
         // Is start
         if (strncmp(buffer, "trigger-stop", 12) == 0)
         {
-            queue_to_send("trigger-stop");
+            queue_to_send(buffer);
         }
-        if (strncmp(buffer, "alive-stop", 13) == 0)
+        if (strncmp(buffer, "alive-stop", 10) == 0)
         {
-            queue_to_send("alive-stop");
+            queue_to_send(buffer);
         }
     }
     else if (STATION_TYPE == 1)
@@ -184,12 +174,12 @@ void receiveCallback(const esp_now_recv_info_t *esp_now_info, const uint8_t *dat
         // Is stop
         if (strncmp(buffer, "trigger-start", 13) == 0)
         {
-            queue_to_send("trigger-start");
+            queue_to_send(buffer);
         }
 
         if (strncmp(buffer, "alive-start", 11) == 0)
         {
-            queue_to_send("alive-start");
+            queue_to_send(buffer);
         }
     }
 }

@@ -4,3 +4,4 @@ sdkconfig*
 build/
 *.log
 !sdkconfig.defaults
+managed_components/

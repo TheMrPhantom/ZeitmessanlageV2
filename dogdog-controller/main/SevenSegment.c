@@ -38,6 +38,8 @@ static lv_obj_t *refusals = NULL;
 static lv_obj_t *faults = NULL;
 static lv_obj_t *start_label = NULL;
 static lv_obj_t *end_label = NULL;
+static lv_obj_t *sensor_left = NULL;
+static lv_obj_t *sensor_right = NULL;
 
 /* Font and image declarations */
 LV_FONT_DECLARE(monospace);
@@ -76,6 +78,12 @@ void Seven_Segment_Task(void *params)
                 // Implement storing to history
                 setMilliseconds(toDisplay.time);
                 add_to_history();
+                break;
+            case SEVEN_SEGMENT_SENSOR_STATUS:
+                lvgl_port_lock(-1);
+                draw_sensor_status_single(toDisplay.sensorStatus.sensor, toDisplay.sensorStatus.status, toDisplay.sensorStatus.num_sensors);
+                free(toDisplay.sensorStatus.status);
+                lvgl_port_unlock();
                 break;
 
             default:
@@ -337,8 +345,8 @@ void setup_timing_screen()
     add_reset_button();
 
     const int NUM_SENSORS_LEFT = 10, NUM_SENSORS_RIGHT = 10;
-    bool sensor_connected_left[10] = {true, false, true, false, true, false, true, false, true, false};
-    bool sensor_connected_right[10] = {true, true, false, false, true, false, true, false, true, true};
+    bool sensor_connected_left[10] = {0};
+    bool sensor_connected_right[10] = {0};
 
     draw_sensor_status(sensor_connected_left, sensor_connected_right, NUM_SENSORS_LEFT, NUM_SENSORS_RIGHT);
     draw_connection_status(true, false);
@@ -579,6 +587,15 @@ void draw_connection_status(bool start_alive, bool end_alive)
         lv_obj_align(end_label, LV_ALIGN_TOP_LEFT, 70, 33);
     }
 
+    if (!start_alive)
+    {
+        draw_sensor_status_single(SENSOR_START, NULL, -1);
+    }
+    if (!end_alive)
+    {
+        draw_sensor_status_single(SENSOR_STOP, NULL, -1);
+    }
+
     lv_label_set_text(start_label, LV_SYMBOL_WIFI);
     lv_obj_set_style_text_color(start_label, start_alive ? lv_color_hex(0x00FF00) : lv_color_hex(0xFF0000), 0);
 
@@ -588,11 +605,43 @@ void draw_connection_status(bool start_alive, bool end_alive)
 
 void draw_sensor_status(bool *sensor_connected_left, bool *sensor_connected_right, int num_sensors_left, int num_sensors_right)
 {
-    // use FontAwesome lvsymbol_ok text
-    for (int i = 0; i < num_sensors_left; i++)
+    draw_sensor_status_single(SENSOR_START, sensor_connected_left, num_sensors_left);
+    draw_sensor_status_single(SENSOR_STOP, sensor_connected_right, num_sensors_right);
+}
+
+void draw_sensor_status_single(int sensor, bool *status, int num)
+{
+    lv_obj_t *sensor_box = NULL;
+    if (sensor == SENSOR_START)
     {
-        lv_obj_t *text = lv_label_create(timing_screen);
-        if (sensor_connected_left[i])
+        if (sensor_left != NULL)
+        {
+            lv_obj_del(sensor_left);
+        }
+        sensor_left = lv_obj_create(timing_screen);
+        sensor_box = sensor_left;
+        lv_obj_align(sensor_left, LV_ALIGN_TOP_LEFT, 22, 57);
+        // set size
+        lv_obj_set_size(sensor_left, 25, num * 25 + 5);
+        lv_obj_set_style_pad_all(sensor_left, 0, 0);
+    }
+    else
+    {
+        if (sensor_right != NULL)
+        {
+            lv_obj_del(sensor_right);
+        }
+        sensor_right = lv_obj_create(timing_screen);
+        sensor_box = sensor_right;
+        lv_obj_align(sensor_right, LV_ALIGN_TOP_LEFT, 67, 57);
+        // set size
+        lv_obj_set_size(sensor_right, 25, num * 25 + 3);
+        lv_obj_set_style_pad_all(sensor_right, 0, 0);
+    }
+    for (int i = 0; i < num; i++)
+    {
+        lv_obj_t *text = lv_label_create(sensor_box);
+        if (status[i])
         {
             lv_label_set_text(text, LV_SYMBOL_OK);
             lv_obj_set_style_text_color(text, lv_color_hex(0x00FF00), 0); // green
@@ -603,36 +652,8 @@ void draw_sensor_status(bool *sensor_connected_left, bool *sensor_connected_righ
             lv_obj_set_style_text_color(text, lv_color_hex(0xFF0000), 0); // red
         }
         lv_obj_set_style_text_font(text, &lv_font_montserrat_20, 0);
-        lv_obj_align(text, LV_ALIGN_TOP_LEFT, 25, 60 + i * 25);
+        lv_obj_align(text, LV_ALIGN_TOP_MID, 0, i * 25);
     }
-
-    for (int i = 0; i < num_sensors_right; i++)
-    {
-        lv_obj_t *text = lv_label_create(timing_screen);
-        if (sensor_connected_right[i])
-        {
-            lv_label_set_text(text, LV_SYMBOL_OK);
-            lv_obj_set_style_text_color(text, lv_color_hex(0x00FF00), 0); // green
-        }
-        else
-        {
-            lv_label_set_text(text, LV_SYMBOL_CLOSE);
-            lv_obj_set_style_text_color(text, lv_color_hex(0xFF0000), 0); // red
-        }
-        lv_obj_set_style_text_font(text, &lv_font_montserrat_20, 0);
-        lv_obj_align(text, LV_ALIGN_TOP_LEFT, 70, 60 + i * 25);
-    }
-
-    // draw grey box as lines around each sensor cluster
-    draw_line(20, 60 + (num_sensors_left) * 25, 20, 55);
-    draw_line(20, 55, 50, 55);
-    draw_line(50, 55, 50, 60 + (num_sensors_left) * 25);
-    draw_line(20, 60 + (num_sensors_left) * 25, 50, 60 + (num_sensors_left) * 25);
-
-    draw_line(65, 60 + (num_sensors_right) * 25, 65, 55);
-    draw_line(65, 55, 95, 55);
-    draw_line(95, 55, 95, 60 + (num_sensors_right) * 25);
-    draw_line(65, 60 + (num_sensors_right) * 25, 95, 60 + (num_sensors_right) * 25);
 }
 
 void draw_vertical_line(int x_pos)

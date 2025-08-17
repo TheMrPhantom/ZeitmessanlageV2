@@ -15,12 +15,20 @@
 #include <esp_system.h>
 #include "soc/soc.h"
 
+typedef struct SensorStatus
+{
+    int sensor;
+    bool *status;
+    int num_sensors;
+} SensorStatus;
+
 typedef struct SevenSegmentDisplay
 {
     int time;
     int type;
-    int startFault; // 1 = Fault
-    int stopFault;  // 1 = Fault
+    int startFault;            // 1 = Fault
+    int stopFault;             // 1 = Fault
+    SensorStatus sensorStatus; // Used for SEVEN_SEGMENT_SENSOR_STATUS
 } SevenSegmentDisplay;
 
 typedef struct HistoryEntry
@@ -45,6 +53,7 @@ void cleanup_lcd_resources();
 void handleCountdown(SevenSegmentDisplay toDisplay);
 void draw_vertical_line(int x_pos);
 void draw_sensor_status(bool *sensor_connected_left, bool *sensor_connected_right, int num_sensors_left, int num_sensors_right);
+void draw_sensor_status_single(int sensor, bool *status, int num);
 void draw_line(int x1, int y1, int x2, int y2);
 void draw_connection_status(bool start_alive, bool end_alive);
 void add_to_history();
@@ -66,6 +75,10 @@ void reset_btn_event_cb(lv_event_t *e);
 #define SEVEN_SEGMENT_COUNTDOWN 2
 #define SEVEN_SEGMENT_COUNTDOWN_RESET 3
 #define SEVEN_SEGMENT_STORE_TO_HISTORY 4
+#define SEVEN_SEGMENT_SENSOR_STATUS 5
+
+#define SENSOR_START 0
+#define SENSOR_STOP 1
 
 /* LCD size */
 #define LCD_H_RES (480)

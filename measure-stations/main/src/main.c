@@ -25,6 +25,7 @@
 #include "Sensor.h"
 #include "Network.h"
 #include "Buzzer.h"
+#include "LED.h"
 
 QueueHandle_t sensorInterputQueue;
 QueueHandle_t networkQueue;
@@ -34,6 +35,8 @@ QueueHandle_t buzzerQueue;
 QueueHandle_t faultQueue;
 QueueSetHandle_t networkAndResetQueue;
 QueueHandle_t sendQueue;
+
+TaskHandle_t networkTask;
 
 void app_main(void)
 {
@@ -46,10 +49,9 @@ void app_main(void)
     faultQueue = xQueueCreate(5, sizeof(int));
     sendQueue = xQueueCreate(50, sizeof(char *));
 
-    xTaskCreate(Buzzer_Task, "Buzzer_Task", 2048, NULL, 1, NULL);
-    xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 2048, NULL, 1, NULL);
-    xTaskCreate(Network_Task, "Network_Task", 8192, NULL, 2, NULL);
-    xTaskCreate(Network_Send_Task, "Network_Send_Task", 8192, NULL, 3, NULL);
+    xTaskCreate(Buzzer_Task, "Buzzer_Task", 8192, NULL, 1, NULL);
+    xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 8192, NULL, 3, NULL);
+    xTaskCreate(Network_Task, "Network_Task", 8192 * 2, NULL, 2, &networkTask);
 
     int buzzerType = BUZZER_STARTUP;
     xQueueSend(buzzerQueue, &buzzerType, 0);
