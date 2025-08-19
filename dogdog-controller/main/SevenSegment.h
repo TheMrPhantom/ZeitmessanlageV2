@@ -76,6 +76,10 @@ void reset_btn_event_cb(lv_event_t *e);
 #define SEVEN_SEGMENT_COUNTDOWN_RESET 3
 #define SEVEN_SEGMENT_STORE_TO_HISTORY 4
 #define SEVEN_SEGMENT_SENSOR_STATUS 5
+#define SEVEN_SEGMENT_INCREASE_FAULT 6
+#define SEVEN_SEGMENT_INCREASE_REFUSAL 7
+#define SEVEN_SEGMENT_RESET_FAULT_REFUSAL 8
+#define SEVEN_SEGMENT_DIS 9
 
 #define SENSOR_START 0
 #define SENSOR_STOP 1
@@ -100,7 +104,7 @@ void reset_btn_event_cb(lv_event_t *e);
 #define LCD_GPIO_MOSI (GPIO_NUM_35)
 #define LCD_GPIO_RST (GPIO_NUM_38)
 #define LCD_GPIO_DC (GPIO_NUM_40)
-#define LCD_GPIO_CS (GPIO_NUM_34)
+#define LCD_GPIO_CS (GPIO_NUM_39)
 #define LCD_GPIO_BL (GPIO_NUM_21)
 
 #define USE_TOUCH 0

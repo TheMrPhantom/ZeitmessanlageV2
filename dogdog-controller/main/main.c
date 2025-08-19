@@ -33,13 +33,15 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "nvs_flash.h"
-#include "Sensor.h"
 #include "Timer.h"
 #include "Network.h"
 #include "SevenSegment.h"
 #include "NetworkFault.h"
 #include "KeyValue.h"
 #include "Buzzer.h"
+#include "Keyboard.h"
+#include "ButtonInput.h"
+#include "Button.h"
 
 QueueHandle_t sensorInterputQueue;
 QueueHandle_t resetQueue;
@@ -50,6 +52,7 @@ QueueHandle_t timeQueue;
 QueueHandle_t sendQueue;
 QueueHandle_t buzzerQueue;
 QueueSetHandle_t triggerAndResetQueue;
+TaskHandle_t buttonTask;
 
 static const char *TAG = "Main";
 
@@ -104,13 +107,17 @@ void app_main(void)
 
     increaseKey("startups");
 
-    xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 4048, NULL, 8, NULL);
-    xTaskCreate(Timer_Task, "Timer_Task", 4048, NULL, 8, NULL);
+    init_keyboard();
+    init_glow_pins();
+
+    xTaskCreate(Timer_Task, "Timer_Task", 4048, NULL, 9, NULL);
     xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 2048, NULL, 8, NULL);
     xTaskCreatePinnedToCore(Seven_Segment_Task, "Seven_Segment_Task", 16096, NULL, 8, NULL, 1);
     xTaskCreate(Network_Task, "Network_Task", 8192, NULL, 9, NULL);
     xTaskCreate(Network_Send_Task, "Network_Send_Task", 8192, NULL, 10, NULL);
     xTaskCreate(Buzzer_Task, "Buzzer_Task", 4048, NULL, 7, NULL);
+    xTaskCreate(Button_Input_Task, "Button_Input_Task", 8192, NULL, 8, NULL);
+    xTaskCreate(Button_Task, "Button_Task", 8192, NULL, 3, &buttonTask);
 
     /*
     vTaskDelay(pdMS_TO_TICKS(4000));

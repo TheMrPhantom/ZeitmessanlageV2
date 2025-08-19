@@ -9,12 +9,15 @@
 #include <string.h>
 #include "KeyValue.h"
 #include "Buzzer.h"
+#include "freertos/semphr.h"
+#include "Keyboard.h"
 
 const char *SEVEN_SEGMENT_TAG = "SevenSegment";
 
 extern QueueHandle_t sevenSegmentQueue;
 extern QueueHandle_t resetQueue;
 extern QueueHandle_t buzzerQueue;
+extern TaskHandle_t buttonTask;
 
 static esp_lcd_touch_handle_t touch = NULL;
 static lv_obj_t *avatar;
@@ -48,6 +51,7 @@ LV_IMG_DECLARE(hand);
 
 HistoryEntry history[4];
 int history_index = 0;
+bool isDis = false;
 
 void Seven_Segment_Task(void *params)
 {
@@ -85,7 +89,71 @@ void Seven_Segment_Task(void *params)
                 free(toDisplay.sensorStatus.status);
                 lvgl_port_unlock();
                 break;
-
+            case SEVEN_SEGMENT_INCREASE_FAULT:
+                lvgl_port_lock(-1);
+                if (faults)
+                {
+                    char *text = lv_label_get_text(faults);
+                    ESP_LOGI(SEVEN_SEGMENT_TAG, "Current faults: %s", text);
+                    int fault_count = atoi(text);
+                    fault_count++;
+                    // figure out string length
+                    int length = snprintf(NULL, 0, "%d", fault_count);
+                    char *new_text = malloc(length + 1);
+                    snprintf(new_text, length + 1, "%d", fault_count);
+                    ESP_LOGI(SEVEN_SEGMENT_TAG, "New faults: %s", new_text);
+                    lv_label_set_text(faults, new_text);
+                    free(new_text);
+                }
+                else
+                {
+                    ESP_LOGE(SEVEN_SEGMENT_TAG, "Faults label not found");
+                }
+                lvgl_port_unlock();
+                break;
+            case SEVEN_SEGMENT_INCREASE_REFUSAL:
+                if (refusals)
+                {
+                    char *text = lv_label_get_text(refusals);
+                    ESP_LOGI(SEVEN_SEGMENT_TAG, "Current refusals: %s", text);
+                    int refusal_count = atoi(text);
+                    refusal_count++;
+                    // figure out string length
+                    int length = snprintf(NULL, 0, "%d", refusal_count);
+                    char *new_text = malloc(length + 1);
+                    snprintf(new_text, length + 1, "%d", refusal_count);
+                    ESP_LOGI(SEVEN_SEGMENT_TAG, "New refusals: %s", new_text);
+                    lv_label_set_text(refusals, new_text);
+                    free(new_text);
+                }
+                else
+                {
+                    ESP_LOGE(SEVEN_SEGMENT_TAG, "Refusals label not found");
+                }
+                lvgl_port_unlock();
+                break;
+            case SEVEN_SEGMENT_RESET_FAULT_REFUSAL:
+                lvgl_port_lock(-1);
+                if (faults && refusals)
+                {
+                    lv_label_set_text(faults, "0");
+                    lv_label_set_text(refusals, "0");
+                    isDis = false;
+                    setMilliseconds(0);
+                }
+                else
+                {
+                    ESP_LOGE(SEVEN_SEGMENT_TAG, "Labels not found");
+                }
+                lvgl_port_unlock();
+                break;
+            case SEVEN_SEGMENT_DIS:
+                lvgl_port_lock(-1);
+                isDis = true;
+                lv_label_set_text(top_label, "DIS");
+                lv_obj_set_style_text_color(top_label, lv_color_hex(0xFF0000), 0);
+                lvgl_port_unlock();
+                break;
             default:
                 ESP_LOGW(SEVEN_SEGMENT_TAG, "Unknown display type");
                 break;
@@ -215,6 +283,7 @@ void setupSevenSegment()
     /* LCD HW initialization */
     ESP_ERROR_CHECK(app_lcd_init());
 
+    /*
     ESP_LOGI(SEVEN_SEGMENT_TAG, "Initialize I2C bus");
     esp_log_level_set("lcd_panel.io.i2c", ESP_LOG_NONE);
     esp_log_level_set("CST816S", ESP_LOG_NONE);
@@ -250,7 +319,7 @@ void setupSevenSegment()
             .mirror_y = 0,
         },
     };
-
+*/
     ESP_LOGI(SEVEN_SEGMENT_TAG, "Initialize touch controller");
     // esp_lcd_touch_new_i2c_cst816s(tp_io_handle, &tp_cfg, &touch);
 
@@ -271,7 +340,7 @@ void setupSevenSegment()
     setup_splashscreen();
 
     setup_timing_screen();
-
+    xTaskNotifyGive(buttonTask);
     lv_scr_load_anim(timing_screen, LV_SCR_LOAD_ANIM_MOVE_TOP, 500, 0, false);
     lvgl_port_unlock();
 }
@@ -342,7 +411,7 @@ void setup_timing_screen()
     // set to 0
     lv_label_set_text(faults, "0");
 
-    add_reset_button();
+    // add_reset_button();
 
     const int NUM_SENSORS_LEFT = 10, NUM_SENSORS_RIGHT = 10;
     bool sensor_connected_left[10] = {0};
@@ -364,8 +433,16 @@ void setMilliseconds(long timeToSet)
 
     // TODO: Show milliseconds
     lvgl_port_lock(-1);
-    lv_label_set_text(top_label, numberString);
-    lv_obj_set_style_text_color(top_label, lv_color_hex(0x000000), 0);
+    if (isDis)
+    {
+        lv_label_set_text(top_label, "DIS");
+        lv_obj_set_style_text_color(top_label, lv_color_hex(0xFF0000), 0);
+    }
+    else
+    {
+        lv_label_set_text(top_label, numberString);
+        lv_obj_set_style_text_color(top_label, lv_color_hex(0x000000), 0);
+    }
     lvgl_port_unlock();
 }
 
@@ -386,7 +463,7 @@ void setSeconds(long timeToSet)
     free(longResult);
 
     lvgl_port_lock(-1);
-    add_reset_button();
+    // add_reset_button();
 
     lv_obj_align(top_label, LV_ALIGN_CENTER, 0, -50);
     lv_obj_set_style_text_color(top_label, lv_color_hex(0x00FF00), 0);
@@ -404,6 +481,20 @@ void add_to_history()
     char *refusal_text = lv_label_get_text(refusals);
 
     ESP_LOGI(SEVEN_SEGMENT_TAG, "History Entry - Time: %s, Fault: %s, Refusal: %s", time_text, fault_text, refusal_text);
+
+    // send time text to keyboard
+    if (!isDis)
+    {
+        sendKey(HID_KEY_TAB);
+        sendText(time_text);
+        sendKey(HID_KEY_ENTER);
+    }
+    else
+    {
+        sendKey(HID_KEY_TAB);
+        sendText("15.00");
+        sendKey(HID_KEY_ENTER);
+    }
 
     // Add entry to history
     HistoryEntry entry;
@@ -531,6 +622,7 @@ void handleCountdown(SevenSegmentDisplay toDisplay)
         {
             if (toDisplay.type == SEVEN_SEGMENT_COUNTDOWN_RESET)
             {
+                setMilliseconds(0);
                 return;
             }
             else if (toDisplay.type == SEVEN_SEGMENT_COUNTDOWN)

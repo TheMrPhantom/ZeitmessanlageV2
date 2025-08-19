@@ -7,6 +7,7 @@
 #include "SevenSegment.h"
 #include "KeyValue.h"
 #include "Buzzer.h"
+#include "Button.h"
 
 extern QueueHandle_t sevenSegmentQueue;
 
@@ -14,6 +15,7 @@ extern QueueHandle_t resetQueue;
 extern QueueHandle_t triggerQueue;
 extern QueueHandle_t timeQueue;
 extern QueueHandle_t buzzerQueue;
+extern QueueHandle_t buttonQueue;
 
 extern QueueSetHandle_t triggerAndResetQueue;
 
@@ -27,12 +29,23 @@ void startTimer()
     timerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
     timerIsRunning = true;
     xQueueSend(buzzerQueue, &(int){BUZZER_TRIGGER}, 0);
+    glow_state_t glow_state;
+    glow_state.state = 1;
+    glow_state.pinNumber = BUTTON_GLOW_TYPE_RESET;
+    xQueueSend(buttonQueue, &glow_state, 0);
+    SevenSegmentDisplay toSend;
+    toSend.type = SEVEN_SEGMENT_RESET_FAULT_REFUSAL;
+    xQueueSend(sevenSegmentQueue, &toSend, pdMS_TO_TICKS(500));
     increaseKey("triggers");
 }
 
 void stopTimer()
 {
     xQueueSend(buzzerQueue, &(int){BUZZER_TRIGGER}, 0);
+    glow_state_t glow_state;
+    glow_state.state = 0;
+    glow_state.pinNumber = BUTTON_GLOW_TYPE_RESET;
+    xQueueSend(buttonQueue, &glow_state, 0);
     timerIsRunning = false;
 }
 
