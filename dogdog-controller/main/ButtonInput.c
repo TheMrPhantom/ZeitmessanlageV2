@@ -91,7 +91,7 @@ void Button_Input_Task(void *params)
             timeval_t now;
             gettimeofday(&now, NULL);
 
-            if (gpio_get_level(sensor_interrupt.pinNumber) == 0 && (TIME_US(now) - TIME_US(last_button_interrupt) > 100000))
+            if (gpio_get_level(sensor_interrupt.pinNumber) == 0 && (TIME_US(now) - TIME_US(last_button_interrupt) > 300000))
             {
                 gettimeofday(&last_button_interrupt, NULL);
 
