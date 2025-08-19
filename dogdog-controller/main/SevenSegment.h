@@ -43,6 +43,10 @@ typedef struct HistoryEntry
 
 void Seven_Segment_Task(void *params);
 
+void increase_refusals();
+
+void inrease_fault();
+
 void setupSevenSegment();
 
 void setup_timing_screen();

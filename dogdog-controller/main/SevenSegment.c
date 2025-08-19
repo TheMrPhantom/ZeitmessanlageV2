@@ -90,47 +90,10 @@ void Seven_Segment_Task(void *params)
                 lvgl_port_unlock();
                 break;
             case SEVEN_SEGMENT_INCREASE_FAULT:
-                lvgl_port_lock(-1);
-                if (faults)
-                {
-                    char *text = lv_label_get_text(faults);
-                    ESP_LOGI(SEVEN_SEGMENT_TAG, "Current faults: %s", text);
-                    int fault_count = atoi(text);
-                    fault_count++;
-                    // figure out string length
-                    int length = snprintf(NULL, 0, "%d", fault_count);
-                    char *new_text = malloc(length + 1);
-                    snprintf(new_text, length + 1, "%d", fault_count);
-                    ESP_LOGI(SEVEN_SEGMENT_TAG, "New faults: %s", new_text);
-                    lv_label_set_text(faults, new_text);
-                    free(new_text);
-                }
-                else
-                {
-                    ESP_LOGE(SEVEN_SEGMENT_TAG, "Faults label not found");
-                }
-                lvgl_port_unlock();
+                inrease_fault();
                 break;
             case SEVEN_SEGMENT_INCREASE_REFUSAL:
-                if (refusals)
-                {
-                    char *text = lv_label_get_text(refusals);
-                    ESP_LOGI(SEVEN_SEGMENT_TAG, "Current refusals: %s", text);
-                    int refusal_count = atoi(text);
-                    refusal_count++;
-                    // figure out string length
-                    int length = snprintf(NULL, 0, "%d", refusal_count);
-                    char *new_text = malloc(length + 1);
-                    snprintf(new_text, length + 1, "%d", refusal_count);
-                    ESP_LOGI(SEVEN_SEGMENT_TAG, "New refusals: %s", new_text);
-                    lv_label_set_text(refusals, new_text);
-                    free(new_text);
-                }
-                else
-                {
-                    ESP_LOGE(SEVEN_SEGMENT_TAG, "Refusals label not found");
-                }
-                lvgl_port_unlock();
+                increase_refusals();
                 break;
             case SEVEN_SEGMENT_RESET_FAULT_REFUSAL:
                 lvgl_port_lock(-1);
@@ -160,6 +123,54 @@ void Seven_Segment_Task(void *params)
             }
         }
     }
+}
+
+void increase_refusals()
+{
+    lvgl_port_lock(-1);
+    if (refusals)
+    {
+        char *text = lv_label_get_text(refusals);
+        ESP_LOGI(SEVEN_SEGMENT_TAG, "Current refusals: %s", text);
+        int refusal_count = atoi(text);
+        refusal_count++;
+        // figure out string length
+        int length = snprintf(NULL, 0, "%d", refusal_count);
+        char *new_text = malloc(length + 1);
+        snprintf(new_text, length + 1, "%d", refusal_count);
+        ESP_LOGI(SEVEN_SEGMENT_TAG, "New refusals: %s", new_text);
+        lv_label_set_text(refusals, new_text);
+        free(new_text);
+    }
+    else
+    {
+        ESP_LOGE(SEVEN_SEGMENT_TAG, "Refusals label not found");
+    }
+    lvgl_port_unlock();
+}
+
+void inrease_fault()
+{
+    lvgl_port_lock(-1);
+    if (faults)
+    {
+        char *text = lv_label_get_text(faults);
+        ESP_LOGI(SEVEN_SEGMENT_TAG, "Current faults: %s", text);
+        int fault_count = atoi(text);
+        fault_count++;
+        // figure out string length
+        int length = snprintf(NULL, 0, "%d", fault_count);
+        char *new_text = malloc(length + 1);
+        snprintf(new_text, length + 1, "%d", fault_count);
+        ESP_LOGI(SEVEN_SEGMENT_TAG, "New faults: %s", new_text);
+        lv_label_set_text(faults, new_text);
+        free(new_text);
+    }
+    else
+    {
+        ESP_LOGE(SEVEN_SEGMENT_TAG, "Faults label not found");
+    }
+    lvgl_port_unlock();
 }
 
 esp_err_t app_lcd_init(void)
@@ -283,64 +294,21 @@ void setupSevenSegment()
     /* LCD HW initialization */
     ESP_ERROR_CHECK(app_lcd_init());
 
-    /*
-    ESP_LOGI(SEVEN_SEGMENT_TAG, "Initialize I2C bus");
-    esp_log_level_set("lcd_panel.io.i2c", ESP_LOG_NONE);
-    esp_log_level_set("CST816S", ESP_LOG_NONE);
-    const i2c_config_t i2c_conf = {
-        .mode = I2C_MODE_MASTER,
-        .sda_io_num = PIN_NUM_TOUCH_SDA,
-        .sda_pullup_en = GPIO_PULLUP_ENABLE,
-        .scl_io_num = PIN_NUM_TOUCH_SCL,
-        .scl_pullup_en = GPIO_PULLUP_ENABLE,
-        .master.clk_speed = 100 * 1000,
-    };
-    i2c_param_config(TOUCH_HOST, &i2c_conf);
-
-    i2c_driver_install(TOUCH_HOST, i2c_conf.mode, 0, 0, 0);
-
-    esp_lcd_panel_io_handle_t tp_io_handle = NULL;
-    const esp_lcd_panel_io_i2c_config_t tp_io_config = ESP_LCD_TOUCH_IO_I2C_CST816S_CONFIG();
-    // Attach the TOUCH to the I2C bus
-    esp_lcd_new_panel_io_i2c((esp_lcd_i2c_bus_handle_t)TOUCH_HOST, &tp_io_config, &tp_io_handle);
-
-    const esp_lcd_touch_config_t tp_cfg = {
-        .x_max = LCD_H_RES,
-        .y_max = LCD_V_RES,
-        .rst_gpio_num = PIN_NUM_TOUCH_RST,
-        .int_gpio_num = PIN_NUM_TOUCH_INT,
-        .levels = {
-            .reset = 0,
-            .interrupt = 0,
-        },
-        .flags = {
-            .swap_xy = 0,
-            .mirror_x = 0,
-            .mirror_y = 0,
-        },
-    };
-*/
     ESP_LOGI(SEVEN_SEGMENT_TAG, "Initialize touch controller");
     // esp_lcd_touch_new_i2c_cst816s(tp_io_handle, &tp_cfg, &touch);
 
     /* LVGL initialization */
     ESP_ERROR_CHECK(app_lvgl_init());
 
-    /*
-    static lv_indev_drv_t indev_drv; // Input device driver (Touch)
-    lv_indev_drv_init(&indev_drv);
-    indev_drv.type = LV_INDEV_TYPE_POINTER;
-    indev_drv.disp = lvgl_disp;
-    indev_drv.read_cb = lvgl_touch_cb;
-    indev_drv.user_data = touch;
-    lv_indev_drv_register(&indev_drv);
-    */
-
     lvgl_port_lock(-1);
     setup_splashscreen();
 
     setup_timing_screen();
     xTaskNotifyGive(buttonTask);
+
+    // Buzz for startup
+    xQueueSend(buzzerQueue, &(int){BUZZER_STARTUP}, 0);
+
     lv_scr_load_anim(timing_screen, LV_SCR_LOAD_ANIM_MOVE_TOP, 500, 0, false);
     lvgl_port_unlock();
 }
@@ -630,6 +598,17 @@ void handleCountdown(SevenSegmentDisplay toDisplay)
                 startTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
                 endTime = startTime + toDisplay.time * 1000;
                 remainingTime = endTime - (int)pdTICKS_TO_MS(xTaskGetTickCount());
+            }
+            else if (toDisplay.type == SEVEN_SEGMENT_SENSOR_STATUS)
+            {
+                lvgl_port_lock(-1);
+                draw_sensor_status_single(toDisplay.sensorStatus.sensor, toDisplay.sensorStatus.status, toDisplay.sensorStatus.num_sensors);
+                free(toDisplay.sensorStatus.status);
+                lvgl_port_unlock();
+            }
+            else if (toDisplay.type == SEVEN_SEGMENT_NETWORK_FAULT)
+            {
+                displayFault(toDisplay.startFault, toDisplay.stopFault);
             }
         }
     }

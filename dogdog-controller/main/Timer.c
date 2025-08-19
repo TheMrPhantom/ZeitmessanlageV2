@@ -23,16 +23,23 @@ char *TIMER_TAG = "TIMER";
 int timerTriggerCause;
 int timerTime = 0;
 bool timerIsRunning = false;
+extern bool sensors_active;
 
 void startTimer()
 {
     timerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
     timerIsRunning = true;
-    xQueueSend(buzzerQueue, &(int){BUZZER_TRIGGER}, 0);
+
+    if (sensors_active)
+    {
+        xQueueSend(buzzerQueue, &(int){BUZZER_TRIGGER}, 0);
+    }
+
     glow_state_t glow_state;
     glow_state.state = 1;
     glow_state.pinNumber = BUTTON_GLOW_TYPE_RESET;
     xQueueSend(buttonQueue, &glow_state, 0);
+
     SevenSegmentDisplay toSend;
     toSend.type = SEVEN_SEGMENT_RESET_FAULT_REFUSAL;
     xQueueSend(sevenSegmentQueue, &toSend, pdMS_TO_TICKS(500));
@@ -41,7 +48,11 @@ void startTimer()
 
 void stopTimer()
 {
-    xQueueSend(buzzerQueue, &(int){BUZZER_TRIGGER}, 0);
+    if (sensors_active)
+    {
+        xQueueSend(buzzerQueue, &(int){BUZZER_TRIGGER}, 0);
+    }
+
     glow_state_t glow_state;
     glow_state.state = 0;
     glow_state.pinNumber = BUTTON_GLOW_TYPE_RESET;
