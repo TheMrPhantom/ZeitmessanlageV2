@@ -186,9 +186,9 @@ esp_err_t app_lcd_init(void)
     // Initialize SPI bus
     ESP_LOGD(SEVEN_SEGMENT_TAG, "Initialize SPI bus");
     spi_bus_config_t buscfg = {
-        .sclk_io_num = LCD_GPIO_SCLK,
-        .mosi_io_num = LCD_GPIO_MOSI,
-        .miso_io_num = GPIO_NUM_NC,
+        .sclk_io_num = CONFIG_SCLK_GPIO,
+        .mosi_io_num = CONFIG_MOSI_GPIO,
+        .miso_io_num = CONFIG_MISO_GPIO,
         .quadwp_io_num = GPIO_NUM_NC,
         .quadhd_io_num = GPIO_NUM_NC,
         .max_transfer_sz = LCD_H_RES * LCD_DRAW_BUFF_HEIGHT * sizeof(uint16_t)};
