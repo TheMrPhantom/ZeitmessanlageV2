@@ -100,25 +100,10 @@ void reset_btn_event_cb(lv_event_t *e);
 #define LCD_COLOR_SPACE (ESP_LCD_COLOR_SPACE_BGR)
 #define LCD_BITS_PER_PIXEL (16)
 #define LCD_DRAW_BUFF_DOUBLE (1)
-#define LCD_DRAW_BUFF_HEIGHT (20)
+#define LCD_DRAW_BUFF_HEIGHT (15)
 #define LCD_BL_ON_LEVEL (1)
 
-/* LCD pins */
-#define LCD_GPIO_SCLK (GPIO_NUM_36)
-#define LCD_GPIO_MOSI (GPIO_NUM_35)
-#define LCD_GPIO_RST (GPIO_NUM_38)
-#define LCD_GPIO_DC (GPIO_NUM_40)
-#define LCD_GPIO_CS (GPIO_NUM_39)
-#define LCD_GPIO_BL (GPIO_NUM_21)
-
 #define USE_TOUCH 0
-
-#define TOUCH_HOST I2C_NUM_0
-
-#define PIN_NUM_TOUCH_SCL (GPIO_NUM_10)
-#define PIN_NUM_TOUCH_SDA (GPIO_NUM_11)
-#define PIN_NUM_TOUCH_RST (GPIO_NUM_13)
-#define PIN_NUM_TOUCH_INT (GPIO_NUM_14)
 
 esp_err_t app_lcd_init(void);
 void lvgl_touch_cb(lv_indev_drv_t *drv, lv_indev_data_t *data);

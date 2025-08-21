@@ -11,6 +11,7 @@
 #include "Buzzer.h"
 #include "freertos/semphr.h"
 #include "Keyboard.h"
+#include "GPIOPins.h"
 
 const char *SEVEN_SEGMENT_TAG = "SevenSegment";
 
@@ -186,13 +187,13 @@ esp_err_t app_lcd_init(void)
     // Initialize SPI bus
     ESP_LOGD(SEVEN_SEGMENT_TAG, "Initialize SPI bus");
     spi_bus_config_t buscfg = {
-        .sclk_io_num = CONFIG_SCLK_GPIO,
-        .mosi_io_num = CONFIG_MOSI_GPIO,
-        .miso_io_num = CONFIG_MISO_GPIO,
+        .sclk_io_num = LCD_GPIO_SCLK,
+        .mosi_io_num = LCD_GPIO_MOSI,
+        .miso_io_num = GPIO_NUM_NC,
         .quadwp_io_num = GPIO_NUM_NC,
         .quadhd_io_num = GPIO_NUM_NC,
         .max_transfer_sz = LCD_H_RES * LCD_DRAW_BUFF_HEIGHT * sizeof(uint16_t)};
-    ESP_RETURN_ON_ERROR(spi_bus_initialize(LCD_SPI_NUM, &buscfg, SPI_DMA_CH_AUTO), SEVEN_SEGMENT_TAG, "SPI init failed");
+    ESP_RETURN_ON_ERROR(spi_bus_initialize(LCD_SPI_HOST, &buscfg, SPI_DMA_CH_AUTO), SEVEN_SEGMENT_TAG, "SPI init failed");
 
     // Install panel IO
     ESP_LOGD(SEVEN_SEGMENT_TAG, "Install panel IO");
@@ -204,7 +205,7 @@ esp_err_t app_lcd_init(void)
         .lcd_param_bits = LCD_PARAM_BITS,
         .spi_mode = 0,
         .trans_queue_depth = 10};
-    ESP_GOTO_ON_ERROR(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)LCD_SPI_NUM, &io_config, &lcd_io), err, SEVEN_SEGMENT_TAG, "New panel IO failed");
+    ESP_GOTO_ON_ERROR(esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)LCD_SPI_HOST, &io_config, &lcd_io), err, SEVEN_SEGMENT_TAG, "New panel IO failed");
 
     // Install LCD driver
     ESP_LOGD(SEVEN_SEGMENT_TAG, "Install LCD driver");

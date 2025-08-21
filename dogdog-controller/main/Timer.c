@@ -8,6 +8,7 @@
 #include "KeyValue.h"
 #include "Buzzer.h"
 #include "Button.h"
+#include "GPIOPins.h"
 
 extern QueueHandle_t sevenSegmentQueue;
 
@@ -37,7 +38,7 @@ void startTimer()
 
     glow_state_t glow_state;
     glow_state.state = 1;
-    glow_state.pinNumber = BUTTON_GLOW_TYPE_RESET;
+    glow_state.pinNumber = BUTTON_GLOW_GPIO_TYPE_RESET;
     xQueueSend(buttonQueue, &glow_state, 0);
 
     SevenSegmentDisplay toSend;
@@ -55,7 +56,7 @@ void stopTimer()
 
     glow_state_t glow_state;
     glow_state.state = 0;
-    glow_state.pinNumber = BUTTON_GLOW_TYPE_RESET;
+    glow_state.pinNumber = BUTTON_GLOW_GPIO_TYPE_RESET;
     xQueueSend(buttonQueue, &glow_state, 0);
     timerIsRunning = false;
 }

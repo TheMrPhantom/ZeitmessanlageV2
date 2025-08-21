@@ -14,6 +14,7 @@
 #include "Keyboard.h"
 #include "Network.h"
 #include "Button.h"
+#include "GPIOPins.h"
 
 #if CONFIG_START
 #define STATION_TYPE 0
@@ -26,7 +27,11 @@ extern QueueHandle_t buttonQueue;
 extern QueueHandle_t resetQueue;
 extern QueueHandle_t sevenSegmentQueue;
 static const char *TAG = "SENSOR";
-const int sensorButtonPins[] = {BUTTON_TYPE_ACTIVATE, BUTTON_TYPE_DIS, BUTTON_TYPE_FAULT, BUTTON_TYPE_REFUSAL, BUTTON_TYPE_RESET};
+const int sensorButtonPins[] = {BUTTON_INPUT_GPIO_TYPE_ACTIVATE,
+                                BUTTON_INPUT_GPIO_TYPE_DIS,
+                                BUTTON_INPUT_GPIO_TYPE_FAULT,
+                                BUTTON_INPUT_GPIO_TYPE_REFUSAL,
+                                BUTTON_INPUT_GPIO_TYPE_RESET};
 
 bool sensors_active = false;
 
@@ -97,7 +102,7 @@ void Button_Input_Task(void *params)
 
                 ESP_LOGI(TAG, "Confirmed interrupt of Pin: %i", sensor_interrupt.pinNumber);
 
-                if (sensor_interrupt.pinNumber == BUTTON_TYPE_ACTIVATE)
+                if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_ACTIVATE)
                 {
                     sensors_active = !sensors_active;
 
@@ -105,7 +110,7 @@ void Button_Input_Task(void *params)
                     if (sensors_active)
                     {
                         glow_state.state = 1;
-                        glow_state.pinNumber = BUTTON_GLOW_TYPE_ACTIVATE;
+                        glow_state.pinNumber = BUTTON_GLOW_GPIO_TYPE_ACTIVATE;
                         xQueueSend(buttonQueue, &glow_state, pdMS_TO_TICKS(50));
                     }
                     else
@@ -114,20 +119,20 @@ void Button_Input_Task(void *params)
                     }
                     ESP_LOGI(TAG, "Sensors are now %s", sensors_active ? "active" : "inactive");
 
-                    glow_state.pinNumber = BUTTON_GLOW_TYPE_FAULT;
+                    glow_state.pinNumber = BUTTON_GLOW_GPIO_TYPE_FAULT;
                     xQueueSend(buttonQueue, &glow_state, pdMS_TO_TICKS(50));
 
-                    glow_state.pinNumber = BUTTON_GLOW_TYPE_REFUSAL;
+                    glow_state.pinNumber = BUTTON_GLOW_GPIO_TYPE_REFUSAL;
                     xQueueSend(buttonQueue, &glow_state, pdMS_TO_TICKS(50));
 
-                    glow_state.pinNumber = BUTTON_GLOW_TYPE_DIS;
+                    glow_state.pinNumber = BUTTON_GLOW_GPIO_TYPE_DIS;
                     xQueueSend(buttonQueue, &glow_state, pdMS_TO_TICKS(50));
                 }
-                else if (sensor_interrupt.pinNumber == BUTTON_TYPE_RESET)
+                else if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_RESET)
                 {
                     glow_state_t glow_state;
                     glow_state.state = 0;
-                    glow_state.pinNumber = BUTTON_GLOW_TYPE_RESET;
+                    glow_state.pinNumber = BUTTON_GLOW_GPIO_TYPE_RESET;
 
                     gettimeofday(&reset_pressed, NULL);
                     countdown_sent = 0;
@@ -147,7 +152,7 @@ void Button_Input_Task(void *params)
                 {
                     if (sensors_active)
                     {
-                        if (sensor_interrupt.pinNumber == BUTTON_TYPE_FAULT)
+                        if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_FAULT)
                         {
                             BaseType_t result = sendKey(HID_KEY_F);
                             SevenSegmentDisplay toSendSevenSegment;
@@ -155,7 +160,7 @@ void Button_Input_Task(void *params)
                             xQueueSend(sevenSegmentQueue, &toSendSevenSegment, 0);
                             ESP_LOGI(TAG, "Result of sending key: %i", result);
                         }
-                        else if (sensor_interrupt.pinNumber == BUTTON_TYPE_REFUSAL)
+                        else if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_REFUSAL)
                         {
                             BaseType_t result = sendKey(HID_KEY_R);
                             SevenSegmentDisplay toSendSevenSegment;
@@ -163,7 +168,7 @@ void Button_Input_Task(void *params)
                             xQueueSend(sevenSegmentQueue, &toSendSevenSegment, 0);
                             ESP_LOGI(TAG, "Result of sending key: %i", result);
                         }
-                        else if (sensor_interrupt.pinNumber == BUTTON_TYPE_DIS)
+                        else if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_DIS)
                         {
                             BaseType_t result = sendKey(HID_KEY_D);
                             ESP_LOGI(TAG, "Result of sending key: %i", result);
@@ -183,7 +188,7 @@ void Button_Input_Task(void *params)
         timeval_t now;
         gettimeofday(&now, NULL);
 
-        if (gpio_get_level(BUTTON_TYPE_RESET) == 0 && (TIME_US(now) - TIME_US(reset_pressed) > 1000000) && countdown_sent == 0)
+        if (gpio_get_level(BUTTON_INPUT_GPIO_TYPE_RESET) == 0 && (TIME_US(now) - TIME_US(reset_pressed) > 1000000) && countdown_sent == 0)
         {
             countdown_sent = 1;
             SevenSegmentDisplay toSend;

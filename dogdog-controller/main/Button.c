@@ -6,14 +6,15 @@
 #include <sys/time.h>
 #include <freertos/semphr.h>
 #include "esp_log.h"
+#include "GPIOPins.h"
 
 static const char *TAG = "BUTTON";
 
-const int sensorGlowPins[] = {BUTTON_GLOW_TYPE_ACTIVATE,
-                              BUTTON_GLOW_TYPE_DIS,
-                              BUTTON_GLOW_TYPE_FAULT,
-                              BUTTON_GLOW_TYPE_REFUSAL,
-                              BUTTON_GLOW_TYPE_RESET};
+const int sensorGlowPins[] = {BUTTON_GLOW_GPIO_TYPE_ACTIVATE,
+                              BUTTON_GLOW_GPIO_TYPE_DIS,
+                              BUTTON_GLOW_GPIO_TYPE_FAULT,
+                              BUTTON_GLOW_GPIO_TYPE_REFUSAL,
+                              BUTTON_GLOW_GPIO_TYPE_RESET};
 
 QueueHandle_t buttonQueue;
 extern bool sensors_active;
@@ -41,28 +42,28 @@ void Button_Task(void *params)
 {
     buttonQueue = xQueueCreate(15, sizeof(glow_state_t));
 
-    gpio_set_level(BUTTON_GLOW_TYPE_ACTIVATE, 1);
-    gpio_set_level(BUTTON_GLOW_TYPE_RESET, 1);
+    gpio_set_level(BUTTON_GLOW_GPIO_TYPE_ACTIVATE, 1);
+    gpio_set_level(BUTTON_GLOW_GPIO_TYPE_RESET, 1);
     vTaskDelay(pdMS_TO_TICKS(400));
 
-    gpio_set_level(BUTTON_GLOW_TYPE_FAULT, 1);
-    gpio_set_level(BUTTON_GLOW_TYPE_DIS, 1);
+    gpio_set_level(BUTTON_GLOW_GPIO_TYPE_FAULT, 1);
+    gpio_set_level(BUTTON_GLOW_GPIO_TYPE_DIS, 1);
     vTaskDelay(pdMS_TO_TICKS(400));
 
-    gpio_set_level(BUTTON_GLOW_TYPE_REFUSAL, 1);
+    gpio_set_level(BUTTON_GLOW_GPIO_TYPE_REFUSAL, 1);
     vTaskDelay(pdMS_TO_TICKS(400));
 
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-    gpio_set_level(BUTTON_GLOW_TYPE_REFUSAL, 0);
+    gpio_set_level(BUTTON_GLOW_GPIO_TYPE_REFUSAL, 0);
     vTaskDelay(pdMS_TO_TICKS(400));
 
-    gpio_set_level(BUTTON_GLOW_TYPE_FAULT, 0);
-    gpio_set_level(BUTTON_GLOW_TYPE_DIS, 0);
+    gpio_set_level(BUTTON_GLOW_GPIO_TYPE_FAULT, 0);
+    gpio_set_level(BUTTON_GLOW_GPIO_TYPE_DIS, 0);
     vTaskDelay(pdMS_TO_TICKS(400));
 
-    gpio_set_level(BUTTON_GLOW_TYPE_ACTIVATE, 0);
-    gpio_set_level(BUTTON_GLOW_TYPE_RESET, 0);
+    gpio_set_level(BUTTON_GLOW_GPIO_TYPE_ACTIVATE, 0);
+    gpio_set_level(BUTTON_GLOW_GPIO_TYPE_RESET, 0);
     vTaskDelay(pdMS_TO_TICKS(400));
 
     while (1)
@@ -83,14 +84,14 @@ void Button_Task(void *params)
 
                 if (active_glowing)
                 {
-                    glow_state.pinNumber = BUTTON_GLOW_TYPE_ACTIVATE;
+                    glow_state.pinNumber = BUTTON_GLOW_GPIO_TYPE_ACTIVATE;
                     glow_state.state = 0;
                     xQueueSend(buttonQueue, &glow_state, pdMS_TO_TICKS(50));
                     active_glowing = false;
                 }
                 else
                 {
-                    glow_state.pinNumber = BUTTON_GLOW_TYPE_ACTIVATE;
+                    glow_state.pinNumber = BUTTON_GLOW_GPIO_TYPE_ACTIVATE;
                     glow_state.state = 1;
                     xQueueSend(buttonQueue, &glow_state, pdMS_TO_TICKS(50));
                     active_glowing = true;
