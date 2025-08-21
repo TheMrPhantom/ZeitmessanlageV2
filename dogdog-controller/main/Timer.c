@@ -21,14 +21,15 @@ extern QueueHandle_t buttonQueue;
 extern QueueSetHandle_t triggerAndResetQueue;
 
 char *TIMER_TAG = "TIMER";
-int timerTriggerCause;
-int timerTime = 0;
+TimerTrigger timerTriggerCause;
+int64_t timerTime = 0;
+int resetCause = 0;
 bool timerIsRunning = false;
 extern bool sensors_active;
 
-void startTimer()
+void startTimer(int64_t timestamp)
 {
-    timerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
+    timerTime = timestamp;
     timerIsRunning = true;
 
     if (sensors_active)
@@ -66,25 +67,28 @@ void Timer_Task(void *params)
 
     while (true)
     {
+        bool start_hurdle = false;
+
         QueueHandle_t selectedQueue = xQueueSelectFromSet(triggerAndResetQueue, pdMS_TO_TICKS(10));
         if (selectedQueue != NULL)
         {
             if (selectedQueue == triggerQueue)
             {
                 xQueueReceive(triggerQueue, &timerTriggerCause, 0);
-                ESP_LOGI(TIMER_TAG, "Received %i", timerTriggerCause);
+                ESP_LOGI(TIMER_TAG, "Received trigger! From start? -> %d", timerTriggerCause.is_start);
 
                 // The trigger was the sensor
                 if (!timerIsRunning)
                 {
-                    startTimer();
+                    start_hurdle = timerTriggerCause.is_start;
+                    startTimer(timerTriggerCause.timestamp);
                     int x = -1;
                     xQueueSend(timeQueue, &x, 0);
                     ESP_LOGI(TIMER_TAG, "Started timer");
                 }
-                else
+                else if (timerIsRunning && timerTriggerCause.is_start != start_hurdle)
                 {
-                    int timeElapsedLocal = (int)pdTICKS_TO_MS(xTaskGetTickCount()) - timerTime;
+                    int timeElapsedLocal = timerTriggerCause.timestamp - timerTime;
                     stopTimer();
 
                     xQueueSend(timeQueue, &timeElapsedLocal, 0);
@@ -98,7 +102,7 @@ void Timer_Task(void *params)
             }
             else if (selectedQueue == resetQueue)
             {
-                xQueueReceive(resetQueue, &timerTriggerCause, 0);
+                xQueueReceive(resetQueue, &resetCause, 0);
                 stopTimer();
 
                 int x = -2;
@@ -114,10 +118,19 @@ void Timer_Task(void *params)
 
         if (timerIsRunning)
         {
-            int currentTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
+            timeval_t current_time;
+            gettimeofday(&current_time, NULL);
+            int64_t elapsed_time = TIME_US(current_time) - timerTime;
+
+            if (elapsed_time < 0)
+            {
+                ESP_LOGW(TIMER_TAG, "Negative elapsed time detected: %lld", elapsed_time);
+                elapsed_time = 0; // Reset to zero if negative
+            }
+
             SevenSegmentDisplay toSend;
             toSend.type = SEVEN_SEGMENT_SET_TIME;
-            toSend.time = currentTime - timerTime;
+            toSend.time = elapsed_time / 1000;
             xQueueSend(sevenSegmentQueue, &toSend, pdMS_TO_TICKS(500));
         }
     }
