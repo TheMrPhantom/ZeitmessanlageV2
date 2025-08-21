@@ -1,0 +1,278 @@
+#include <stdio.h>
+#include <inttypes.h>
+#include "sdkconfig.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "esp_chip_info.h"
+#include "esp_flash.h"
+#include "esp_system.h"
+#include "esp_log.h"
+#include "driver/gpio.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+
+#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "driver/gpio.h"
+#include "Sensor.h"
+#include "Buzzer.h"
+#include "Network.h"
+#include "LED.h"
+
+#if CONFIG_START
+#define STATION_TYPE 0
+#elif CONFIG_STOP
+#define STATION_TYPE 1
+#endif
+
+extern QueueHandle_t sensorInterputQueue;
+extern QueueHandle_t triggerQueue;
+extern QueueHandle_t buzzerQueue;
+extern QueueHandle_t faultQueue;
+QueueHandle_t sensorStatusQueue;
+
+TaskHandle_t sensorTask;
+
+char *TAG = "SENSOR";
+const int sensorPins[] = {22};
+const int sensorCooldown = 3500;
+const int faultCooldown = 3000;
+
+int faultTime = 0;
+bool faultWarning = false;
+bool fault = false;
+
+static void IRAM_ATTR gpio_interrupt_handler(void *args)
+{
+    int pinNumber = (int)args;
+    // read pin state
+    int pinState = gpio_get_level(pinNumber);
+    if (pinState == 1)
+    {
+        xQueueSendFromISR(sensorInterputQueue, &pinNumber, NULL);
+    }
+    xQueueSendFromISR(sensorStatusQueue, &pinNumber, NULL);
+}
+
+void init_Pins()
+{
+    for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
+    {
+        ESP_LOGI(TAG, "Configuring IO Pin %i", sensorPins[i]);
+        esp_rom_gpio_pad_select_gpio(sensorPins[i]);
+        gpio_set_direction(sensorPins[i], GPIO_MODE_INPUT);
+        gpio_pulldown_en(sensorPins[i]);
+        gpio_pullup_dis(sensorPins[i]);
+        gpio_set_intr_type(sensorPins[i], GPIO_INTR_ANYEDGE);
+    }
+
+    ESP_LOGI(TAG, "Done configuring IO");
+
+    gpio_install_isr_service(0);
+
+    for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
+    {
+        ESP_LOGI(TAG, "Configuring ISR for Pin %i", sensorPins[i]);
+        gpio_isr_handler_add(sensorPins[i], gpio_interrupt_handler, (void *)sensorPins[i]);
+    }
+
+    ESP_LOGI(TAG, "Done configuring ISR");
+}
+
+void Sensor_Interrupt_Task(void *params)
+{
+    ESP_LOGI(TAG, "Setting up Sensors");
+    init_Pins();
+    sensorStatusQueue = xQueueCreate(1, sizeof(char *));
+    xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 2048, NULL, 1, &sensorTask);
+    int numPins = sizeof(sensorPins) / sizeof(int);
+    xTaskCreate(LED_Task, "LED_Task", 4048, &numPins, 1, NULL);
+    // Wait for led
+
+    int pinNumber = 0;
+    int lastTriggerTime = 0;
+
+    while (true)
+    {
+        if (xQueueReceive(sensorInterputQueue, &pinNumber, pdMS_TO_TICKS(500)))
+        {
+            ESP_LOGI(TAG, "Checking interrupt of Pin: %i", pinNumber);
+
+            vTaskDelay(pdMS_TO_TICKS(3));
+
+            if (gpio_get_level(pinNumber) == 1)
+            {
+                ESP_LOGI(TAG, "Confirmed interrupt of Pin: %i", pinNumber);
+                if (lastTriggerTime < (int)pdTICKS_TO_MS(xTaskGetTickCount()) - sensorCooldown)
+                {
+                    if (!fault)
+                    {
+                        int cause = 0;
+                        lastTriggerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
+                        ESP_LOGI(TAG, "Interrupt of Pin: %i", pinNumber);
+
+                        xQueueSend(triggerQueue, &cause, 0);
+
+                        cause = Buzzer_TRIGGER;
+                        xQueueSend(buzzerQueue, &cause, 0);
+                    }
+                    else
+                    {
+                        ESP_LOGI(TAG, "Triggered but fault was detected so no signal will be sent");
+                    }
+                }
+            }
+        }
+
+        // Check for faults only 4 seconds after startup
+        if (pdTICKS_TO_MS(xTaskGetTickCount()) > 4000)
+        {
+            bool isCurrentlyGood = true;
+            int currentFaults = 0;
+            for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
+            {
+                int level = gpio_get_level(sensorPins[i]);
+                currentFaults += level;
+            }
+
+            if (currentFaults > 0)
+            {
+                isCurrentlyGood = false;
+            }
+
+            if (!faultWarning && !isCurrentlyGood)
+            {
+                // Currently disconnected but not in warning state -> aktivate warning state
+                faultTime = xTaskGetTickCount();
+                faultWarning = true;
+            }
+
+            if (faultWarning)
+            {
+                if (pdTICKS_TO_MS(xTaskGetTickCount()) - pdTICKS_TO_MS(faultTime) > faultCooldown && !fault)
+                {
+                    // Currently in warning state, timout reached but no fault activated yet -> go into fault state
+                    fault = true;
+
+                    int cause = Buzzer_INDICATE_ERROR;
+                    xQueueSend(buzzerQueue, &cause, 0);
+                    xQueueSend(faultQueue, &cause, 0);
+
+                    ESP_LOGI(TAG, "Sensor connection is lost");
+                }
+            }
+
+            if (isCurrentlyGood)
+            {
+                if (fault)
+                {
+                    // No more fault
+                    int cause = Buzzer_INDICATE_ERROR;
+                    xQueueSend(buzzerQueue, &cause, 0);
+                    xQueueSend(faultQueue, &cause, 0);
+                    ESP_LOGI(TAG, "Sensor connection restored");
+                }
+                faultWarning = false;
+                fault = false;
+            }
+        }
+    }
+}
+
+/*
+ * Reads every second if the sensor has contact and sends it to the controller as one message
+ */
+void Sensor_Status_Task(void *params)
+{
+
+    timeval_t last_time_clean[sizeof(sensorPins) / sizeof(int)];
+    timeval_t current_time;
+    timeval_t last_time_sent;
+    gettimeofday(&last_time_sent, NULL);
+    bool last_state[sizeof(sensorPins) / sizeof(int)];
+    for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
+    {
+        gettimeofday(&last_time_clean[i], NULL);
+        last_state[i] = gpio_get_level(sensorPins[i]);
+    }
+
+    char *sensorStatus = calloc((sizeof(sensorPins) / sizeof(int) + 12), sizeof(char));
+
+    ESP_LOGI(TAG, "Waiting for LED Task");
+
+    // Wait for led task notification
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+
+    ESP_LOGI(TAG, "LED Task is ready");
+
+    while (true)
+    {
+        int pinNumber;
+        BaseType_t newDataReceived = xQueueReceive(sensorStatusQueue, &pinNumber, pdMS_TO_TICKS(1000));
+        gettimeofday(&current_time, NULL);
+        // check if any of the gpio pins are high with bit mask call
+        bool any_tiggered = 0;
+        for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
+        {
+            any_tiggered |= gpio_get_level(sensorPins[i]);
+        }
+
+        if (STATION_TYPE == 0)
+        {
+            sprintf(sensorStatus, "alive-start");
+        }
+        else if (STATION_TYPE == 1)
+        {
+            sprintf(sensorStatus, "alive-stop-");
+        }
+
+        for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
+        {
+            int level = gpio_get_level(sensorPins[i]);
+            sensorStatus[i + 11] = level == 1 ? '0' : '1';
+
+            if (any_tiggered)
+            {
+                // Set led to green if 0 and red if 1
+
+                if (level == 0)
+                {
+                    set_led(i, 0, 150, 0); // Set LED to green
+                    gettimeofday(&last_time_clean[i], NULL);
+                }
+                else
+                {
+                    set_led(i, 150, 0, 0); // Set LED to red
+                }
+            }
+            else
+            {
+                if (level == 0 && last_state[i] == 1)
+                {
+                    gettimeofday(&last_time_clean[i], NULL);
+                }
+
+                gettimeofday(&current_time, NULL);
+                // If no sensor is triggered, turn off the LED if it was previously on for 4 seconds
+                if (TIME_US(current_time) - TIME_US(last_time_clean[i]) > 4000000)
+                {
+                    set_led(i, 0, 0, 0); // Turn off LED
+                }
+                else
+                {
+                    set_led(i, 0, 150, 0); // Set LED to green
+                }
+            }
+            last_state[i] = level;
+        }
+
+        if (!newDataReceived || TIME_US(current_time) - TIME_US(last_time_sent) > 1000000)
+        {
+            ESP_LOGI(TAG, "Sending sensor status: %s", sensorStatus);
+            gettimeofday(&last_time_sent, NULL);
+            queue_to_send(sensorStatus);
+        }
+    }
+}
