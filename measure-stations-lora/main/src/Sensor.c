@@ -18,8 +18,8 @@
 #include "driver/gpio.h"
 #include "Sensor.h"
 #include "Buzzer.h"
-#include "Network.h"
 #include "LED.h"
+#include "LoraNetwork.h"
 
 #if CONFIG_START
 #define STATION_TYPE 0
@@ -31,12 +31,13 @@ extern QueueHandle_t sensorInterputQueue;
 extern QueueHandle_t triggerQueue;
 extern QueueHandle_t buzzerQueue;
 extern QueueHandle_t faultQueue;
+extern QueueHandle_t loraSendQueue;
 QueueHandle_t sensorStatusQueue;
 
 TaskHandle_t sensorTask;
 
 char *TAG = "SENSOR";
-const int sensorPins[] = {22};
+const int sensorPins[] = {GPIO_NUM_20};
 const int sensorCooldown = 3500;
 const int faultCooldown = 3000;
 
@@ -69,8 +70,6 @@ void init_Pins()
     }
 
     ESP_LOGI(TAG, "Done configuring IO");
-
-    gpio_install_isr_service(0);
 
     for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
     {
@@ -198,8 +197,6 @@ void Sensor_Status_Task(void *params)
         last_state[i] = gpio_get_level(sensorPins[i]);
     }
 
-    char *sensorStatus = calloc((sizeof(sensorPins) / sizeof(int) + 12), sizeof(char));
-
     ESP_LOGI(TAG, "Waiting for LED Task");
 
     // Wait for led task notification
@@ -219,19 +216,14 @@ void Sensor_Status_Task(void *params)
             any_tiggered |= gpio_get_level(sensorPins[i]);
         }
 
-        if (STATION_TYPE == 0)
-        {
-            sprintf(sensorStatus, "alive-start");
-        }
-        else if (STATION_TYPE == 1)
-        {
-            sprintf(sensorStatus, "alive-stop-");
-        }
+        PacketTypeSensorState sensors_state;
+        sensors_state.num_sensors = sizeof(sensorPins) / sizeof(int);
+        sensors_state.sensor_states = 0;
 
         for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
         {
             int level = gpio_get_level(sensorPins[i]);
-            sensorStatus[i + 11] = level == 1 ? '0' : '1';
+            sensors_state.sensor_states |= ((uint64_t)level << i);
 
             if (any_tiggered)
             {
@@ -270,9 +262,12 @@ void Sensor_Status_Task(void *params)
 
         if (!newDataReceived || TIME_US(current_time) - TIME_US(last_time_sent) > 1000000)
         {
-            ESP_LOGI(TAG, "Sending sensor status: %s", sensorStatus);
-            gettimeofday(&last_time_sent, NULL);
-            queue_to_send(sensorStatus);
+            DogDogPacket *packet = create_dogdog_packet_from_sensor_state_information(&sensors_state);
+            if (packet)
+            {
+                // Send the packet
+                xQueueSend(loraSendQueue, &packet, 0);
+            }
         }
     }
 }

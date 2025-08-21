@@ -8,9 +8,6 @@
 #include "ra01s.h" // For LoRaSend/LoRaReceive
 #include "driver/gpio.h"
 #include "GPIOPins.h"
-#include "Timer.h"
-#include "NetworkFault.h"
-#include "SevenSegment.h"
 
 static const char *TAG_LORA = "LoraNetwork";
 
@@ -289,7 +286,7 @@ void init_lora(void)
     ESP_LOGI("LORA", "Frequency is 868MHz");
     float tcxoVoltage = 3.3;     // use TCXO
     bool useRegulatorLDO = true; // use DCDC + LDO
-    LoRaDebugPrint(true);
+
     // LoRaDebugPrint(true);
     if (LoRaBegin(frequencyInHz, txPowerInDbm, tcxoVoltage, useRegulatorLDO) != 0)
     {
@@ -372,7 +369,7 @@ void LoraReceiveTask(void *pvParameters)
                 packet->local_time_received = local_time_received;
                 GetPacketStatus(&packet->rssi, &packet->snr);
 
-                ESP_LOGI(pcTaskGetName(NULL), "rssi=%d[dBm] snr=%d[dB]", packet->rssi, packet->snr);
+                log_dogdog_packet(packet);
 
                 HandleReceivedPacket(packet);
 
@@ -462,56 +459,27 @@ void HandleReceivedPacket(DogDogPacket *packet)
     {
     case LORA_TIME_SYNC:
     {
-        // The controller should not receive time synchronization information
+        // TODO
         break;
     }
     case LORA_TRIGGER:
     {
-        PacketTypeTrigger *trigger = create_trigger_information(packet);
-        TimerTrigger timerTriggerCause;
-        timerTriggerCause.is_start = packet->station_id == START_ID;
-        timerTriggerCause.timestamp = trigger->timestamp;
-
-        xQueueSend(triggerQueue, &timerTriggerCause, portMAX_DELAY);
-        // Process trigger information
-        free(trigger);
+        // Measure station never gets this info
         break;
     }
     case LORA_FINAL_TIME:
     {
-        // The controller should not receive final time information
+        // Measure station never gets this info
         break;
     }
     case LORA_SENSOR_STATE:
     {
-        PacketTypeSensorState *sensor_state = create_sensor_state_information(packet);
-        // Process sensor state information
-        bool is_start = packet->station_id == START_ID ? START_ALIVE : STOP_ALIVE;
-
-        xQueueSend(networkFaultQueue, &is_start, portMAX_DELAY);
-
-        SensorStatus sensorStatus;
-        sensorStatus.sensor = packet->station_id == START_ID ? SENSOR_START : SENSOR_STOP;
-        sensorStatus.num_sensors = sensor_state->num_sensors;
-        sensorStatus.status = calloc(sensorStatus.num_sensors, sizeof(bool));
-
-        ESP_LOGI(pcTaskGetName(NULL), "Connected sensors amount: %d", sensorStatus.num_sensors);
-        for (int i = 0; i < sensorStatus.num_sensors; i++)
-        {
-            sensorStatus.status[i] = (sensor_state->sensor_states & (1ULL << i)) != 0;
-        }
-
-        SevenSegmentDisplay toSend;
-        toSend.type = SEVEN_SEGMENT_SENSOR_STATUS;
-        toSend.sensorStatus = sensorStatus;
-        xQueueSend(sevenSegmentQueue, &toSend, 0);
-
-        free(sensor_state);
+        // Measure station never gets this info
         break;
     }
     case LORA_ACK:
     {
-        // The controller should not receive ACK information
+        // TODO
         break;
     }
     default:

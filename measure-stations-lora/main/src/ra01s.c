@@ -10,7 +10,6 @@
 #include <driver/spi_master.h>
 #include <driver/gpio.h>
 #include "esp_log.h"
-#include "SevenSegment.h"
 #include "ra01s.h"
 #include "GPIOPins.h"
 

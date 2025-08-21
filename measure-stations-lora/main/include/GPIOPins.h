@@ -1,0 +1,13 @@
+#include <driver/spi_master.h>
+
+#define LORA_SPI_HOST (SPI2_HOST)
+
+#define LORA_GPIO_MISO (GPIO_NUM_13)
+#define LORA_GPIO_MOSI (GPIO_NUM_11)
+#define LORA_GPIO_SCLK (GPIO_NUM_12)
+#define LORA_GPIO_NSS (GPIO_NUM_10)
+#define LORA_GPIO_RST (GPIO_NUM_7)
+#define LORA_GPIO_BUSY (GPIO_NUM_9)
+#define LORA_GPIO_TXEN (GPIO_NUM_5)
+#define LORA_GPIO_RXEN (GPIO_NUM_4)
+#define LORA_GPIO_DIO1 (GPIO_NUM_6)

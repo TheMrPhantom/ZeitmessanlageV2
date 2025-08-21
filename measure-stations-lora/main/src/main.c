@@ -23,9 +23,9 @@
 #include "freertos/queue.h"
 #include "driver/gpio.h"
 #include "Sensor.h"
-#include "Network.h"
 #include "Buzzer.h"
 #include "LED.h"
+#include "LoraNetwork.h"
 
 QueueHandle_t sensorInterputQueue;
 QueueHandle_t networkQueue;
@@ -49,9 +49,14 @@ void app_main(void)
     faultQueue = xQueueCreate(5, sizeof(int));
     sendQueue = xQueueCreate(50, sizeof(char *));
 
+    gpio_install_isr_service(0);
+    init_lora();
+
     xTaskCreate(Buzzer_Task, "Buzzer_Task", 8192, NULL, 1, NULL);
     xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 8192, NULL, 3, NULL);
-    xTaskCreate(Network_Task, "Network_Task", 8192 * 2, NULL, 2, &networkTask);
+
+    xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 24, NULL);
+    xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 23, NULL);
 
     int buzzerType = BUZZER_STARTUP;
     xQueueSend(buzzerQueue, &buzzerType, 0);
