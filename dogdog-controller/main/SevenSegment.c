@@ -138,6 +138,12 @@ void increase_refusals()
         // figure out string length
         int length = snprintf(NULL, 0, "%d", refusal_count);
         char *new_text = malloc(length + 1);
+        if (!new_text)
+        {
+            ESP_LOGE(SEVEN_SEGMENT_TAG, "Failed to allocate memory for new_text");
+            lvgl_port_unlock();
+            return;
+        }
         snprintf(new_text, length + 1, "%d", refusal_count);
         ESP_LOGI(SEVEN_SEGMENT_TAG, "New refusals: %s", new_text);
         lv_label_set_text(refusals, new_text);
@@ -162,6 +168,12 @@ void inrease_fault()
         // figure out string length
         int length = snprintf(NULL, 0, "%d", fault_count);
         char *new_text = malloc(length + 1);
+        if (!new_text)
+        {
+            ESP_LOGE(SEVEN_SEGMENT_TAG, "Failed to allocate memory for new_text");
+            lvgl_port_unlock();
+            return;
+        }
         snprintf(new_text, length + 1, "%d", fault_count);
         ESP_LOGI(SEVEN_SEGMENT_TAG, "New faults: %s", new_text);
         lv_label_set_text(faults, new_text);
@@ -425,6 +437,11 @@ void setSeconds(long timeToSet)
 
     int len = snprintf(NULL, 0, "%02d:%02d", minutes, seconds);
     char *longResult = malloc(len + 1);
+    if (!longResult)
+    {
+        ESP_LOGE(SEVEN_SEGMENT_TAG, "Failed to allocate memory for longResult");
+        return;
+    }
     snprintf(longResult, len + 1, "%02d:%02d", minutes, seconds);
 
     strncpy(numberString, longResult, 5);

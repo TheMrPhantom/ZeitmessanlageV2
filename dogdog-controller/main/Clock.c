@@ -27,6 +27,11 @@ void init_external_clock()
 
     i2c_master_bus_handle_t *bus_handle =
         (i2c_master_bus_handle_t *)malloc(sizeof(i2c_master_bus_handle_t));
+    if (!bus_handle)
+    {
+        ESP_LOGE("CLOCK", "Failed to allocate memory for i2c_master_bus_handle_t");
+        return;
+    }
     i2c_master_bus_config_t i2c_mst_config = {
         .clk_source = I2C_CLK_SRC_DEFAULT,
         .i2c_port = -1,

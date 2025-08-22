@@ -58,6 +58,11 @@ bool is_packet_from_dogdog(uint8_t *data)
 PacketTypeTimeSync *create_time_sync_information(DogDogPacket *packet)
 {
     PacketTypeTimeSync *packet_type = calloc(1, sizeof(PacketTypeTimeSync));
+    if (!packet_type)
+    {
+        ESP_LOGE(TAG_LORA, "Failed to allocate memory for PacketTypeTimeSync");
+        return NULL;
+    }
     // four bytes of the packet payload are int64 time stamp
     packet_type->timestamp = *((int64_t *)packet->payload);
     return packet_type;
@@ -66,6 +71,11 @@ PacketTypeTimeSync *create_time_sync_information(DogDogPacket *packet)
 PacketTypeTrigger *create_trigger_information(DogDogPacket *packet)
 {
     PacketTypeTrigger *packet_type = calloc(1, sizeof(PacketTypeTrigger));
+    if (!packet_type)
+    {
+        ESP_LOGE(TAG_LORA, "Failed to allocate memory for PacketTypeTrigger");
+        return NULL;
+    }
     // four bytes of the packet payload are int64 time stamp
     packet_type->timestamp = *((int64_t *)packet->payload);
     memcpy(&packet_type->sensor_state, packet->payload + sizeof(int64_t), sizeof(PacketTypeSensorState));
@@ -75,6 +85,11 @@ PacketTypeTrigger *create_trigger_information(DogDogPacket *packet)
 PacketTypeFinalTime *create_final_time_information(DogDogPacket *packet)
 {
     PacketTypeFinalTime *packet_type = calloc(1, sizeof(PacketTypeFinalTime));
+    if (!packet_type)
+    {
+        ESP_LOGE(TAG_LORA, "Failed to allocate memory for PacketTypeFinalTime");
+        return NULL;
+    }
     // four bytes of the packet payload are int64 time stamp
     packet_type->timestamp = ((int64_t *)packet->payload);
     return packet_type;
@@ -83,6 +98,11 @@ PacketTypeFinalTime *create_final_time_information(DogDogPacket *packet)
 PacketTypeSensorState *create_sensor_state_information(DogDogPacket *packet)
 {
     PacketTypeSensorState *packet_type = calloc(1, sizeof(PacketTypeSensorState));
+    if (!packet_type)
+    {
+        ESP_LOGE(TAG_LORA, "Failed to allocate memory for PacketTypeSensorState");
+        return NULL;
+    }
     // first byte of the packet payload is the number of sensors
     packet_type->num_sensors = packet->payload[0];
     // remaining bytes are the sensor states
@@ -97,6 +117,11 @@ PacketTypeAck *create_ack_information(DogDogPacket *packet)
 {
 
     PacketTypeAck *packet_type = calloc(1, sizeof(PacketTypeAck));
+    if (!packet_type)
+    {
+        ESP_LOGE(TAG_LORA, "Failed to allocate memory for PacketTypeAck");
+        return NULL;
+    }
     packet_type->station_id = packet->payload[0];
     packet_type->packet_id = packet->payload[1];
     return packet_type;
