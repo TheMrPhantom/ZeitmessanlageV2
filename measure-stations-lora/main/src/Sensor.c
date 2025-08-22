@@ -257,8 +257,8 @@ void Sensor_Status_Task(void *params)
                 }
 
                 gettimeofday(&current_time, NULL);
-                // If no sensor is triggered, turn off the LED if it was previously on for 4 seconds
-                if (TIME_US(current_time) - TIME_US(last_time_clean[i]) > 4000000)
+                // If no sensor is triggered, turn off the LED if it was previously on for 8 seconds
+                if (TIME_US(current_time) - TIME_US(last_time_clean[i]) > 8000000)
                 {
                     set_led(i, 0, 0, 0); // Turn off LED
                 }
@@ -270,7 +270,7 @@ void Sensor_Status_Task(void *params)
             last_state[i] = level;
         }
 
-        if (!newDataReceived || TIME_US(current_time) - TIME_US(last_time_sent) > 100000)
+        if (!newDataReceived || TIME_US(current_time) - TIME_US(last_time_sent) > 1000000)
         {
             // invert the result
             sensors_state.sensor_states = ~sensors_state.sensor_states;

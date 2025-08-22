@@ -240,6 +240,13 @@ DogDogPacket *create_dogdog_packet_from_ack_information(PacketTypeAck *ack)
     return packet;
 }
 
+void confirm_station_alive(DogDogPacket *packet)
+{
+    int is_start = packet->station_id == START_ID ? START_ALIVE : STOP_ALIVE;
+
+    xQueueSend(networkFaultQueue, &is_start, portMAX_DELAY);
+}
+
 void log_dogdog_packet(DogDogPacket *packet)
 {
     char *packet_type_str;
@@ -506,6 +513,8 @@ void HandleReceivedPacket(DogDogPacket *packet)
             }
         }
 
+        // confirm_station_alive(packet);
+
         // Send ack
         PacketTypeAck ack;
         ack.station_id = packet->station_id;
@@ -528,9 +537,7 @@ void HandleReceivedPacket(DogDogPacket *packet)
     {
         PacketTypeSensorState *sensor_state = create_sensor_state_information(packet);
         // Process sensor state information
-        bool is_start = packet->station_id == START_ID ? START_ALIVE : STOP_ALIVE;
-
-        xQueueSend(networkFaultQueue, &is_start, portMAX_DELAY);
+        confirm_station_alive(packet);
 
         SensorStatus sensorStatus;
         sensorStatus.sensor = packet->station_id == START_ID ? SENSOR_START : SENSOR_STOP;

@@ -7,7 +7,7 @@
 #include "LED.h"
 
 // GPIO assignment
-#define LED_STRIP_GPIO_PIN 17
+#define LED_STRIP_GPIO_PIN 48
 // 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
 #define LED_STRIP_RMT_RES_HZ (10 * 1000 * 1000)
 

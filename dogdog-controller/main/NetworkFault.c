@@ -8,6 +8,7 @@
 #include "NetworkFault.h"
 #include <esp_system.h>
 #include "SevenSegment.h"
+#include "Clock.h"
 
 extern QueueHandle_t networkFaultQueue;
 extern QueueHandle_t sevenSegmentQueue;
@@ -28,25 +29,32 @@ void Network_Fault_Task(void *params)
 
     const int timeoutTime = pdMS_TO_TICKS(7000);
 
-    int lastSeenStart = -timeoutTime;
-    int lastSeenStop = -timeoutTime;
+    int64_t lastSeenStart = -timeoutTime;
+    int64_t lastSeenStop = -timeoutTime;
 
     while (1)
     {
         int received = NOTHING_ALIVE;
         if (xQueueReceive(networkFaultQueue, &received, pdMS_TO_TICKS(500)))
         {
+            ESP_LOGI(NETWORK_FAUT_TAG, "Received network fault message: %d", received);
+            timeval_t now;
+            gettimeofday(&now, NULL);
             if (received == START_ALIVE)
             {
-                lastSeenStart = xTaskGetTickCount();
+
+                lastSeenStart = TIME_US(now) / 1000;
             }
             else if (received == STOP_ALIVE)
             {
-                lastSeenStop = xTaskGetTickCount();
+                lastSeenStop = TIME_US(now) / 1000;
             }
         }
 
-        int currentTime = xTaskGetTickCount();
+        timeval_t now;
+        gettimeofday(&now, NULL);
+
+        int currentTime = TIME_US(now) / 1000;
 
         bool startFault = currentTime - lastSeenStart > timeoutTime;
         bool stopFault = currentTime - lastSeenStop > timeoutTime;

@@ -45,6 +45,10 @@
 #include "ra01s.h"
 #include "LoraNetwork.h"
 #include "Timer.h"
+#include <stdio.h>
+#include "esp-idf-ds3231.h"
+#include "GPIOPins.h"
+#include "Clock.h"
 
 QueueHandle_t sensorInterputQueue;
 QueueHandle_t resetQueue;
@@ -91,6 +95,7 @@ void test(void)
 
 void app_main(void)
 {
+
     // Initialize LoRa
     nvs_flash_init();
     gpio_install_isr_service(0);
@@ -112,17 +117,15 @@ void app_main(void)
 
     increaseKey("startups");
 
+    init_external_clock();
     init_keyboard();
     init_glow_pins();
     init_lora();
 
     xTaskCreate(Timer_Task, "Timer_Task", 4048, NULL, 12, NULL);
-    xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 2048, NULL, 7, NULL);
+    xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 4048, NULL, 7, NULL);
     xTaskCreatePinnedToCore(Seven_Segment_Task, "Seven_Segment_Task", 16096, NULL, 8, NULL, 1);
-    xTaskCreate(Buzzer_Task, "Buzzer_Task", 4048, NULL, 7, NULL);
-
-    // xTaskCreate(Network_Task, "Network_Task", 8192, NULL, 9, NULL);
-    // xTaskCreate(Network_Send_Task, "Network_Send_Task", 8192, NULL, 10, NULL);
+    // xTaskCreate(Buzzer_Task, "Buzzer_Task", 4048, NULL, 7, NULL);
 
     xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 23, NULL);
     xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 23, NULL);
@@ -131,73 +134,75 @@ void app_main(void)
     xTaskCreate(Button_Input_Task, "Button_Input_Task", 8192, NULL, 8, NULL);
     xTaskCreate(Button_Task, "Button_Task", 8192, NULL, 3, &buttonTask);
 
+    // xTaskCreate(ClockTask, "ClockTask", 4048, NULL, 1, NULL);
+
     /*
-    vTaskDelay(pdMS_TO_TICKS(4000));
-    receiveCallback(NULL, (const uint8_t *)"alive-start", strlen("alive-start"));
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    receiveCallback(NULL, (const uint8_t *)"alive-start", strlen("alive-start"));
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    receiveCallback(NULL, (const uint8_t *)"alive-start", strlen("alive-start"));
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    receiveCallback(NULL, (const uint8_t *)"alive-start", strlen("alive-start"));
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    receiveCallback(NULL, (const uint8_t *)"alive-stop", strlen("alive-stop"));
+vTaskDelay(pdMS_TO_TICKS(4000));
+receiveCallback(NULL, (const uint8_t *)"alive-start", strlen("alive-start"));
+vTaskDelay(pdMS_TO_TICKS(1000));
+receiveCallback(NULL, (const uint8_t *)"alive-start", strlen("alive-start"));
+vTaskDelay(pdMS_TO_TICKS(1000));
+receiveCallback(NULL, (const uint8_t *)"alive-start", strlen("alive-start"));
+vTaskDelay(pdMS_TO_TICKS(1000));
+receiveCallback(NULL, (const uint8_t *)"alive-start", strlen("alive-start"));
+vTaskDelay(pdMS_TO_TICKS(1000));
+receiveCallback(NULL, (const uint8_t *)"alive-stop", strlen("alive-stop"));
 
-    xTaskCreate(test, "test", 4048, NULL, 3, NULL);
-    vTaskDelay(pdMS_TO_TICKS(5000));
-    receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
+xTaskCreate(test, "test", 4048, NULL, 3, NULL);
+vTaskDelay(pdMS_TO_TICKS(5000));
+receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
 
-    vTaskDelay(pdMS_TO_TICKS(8746));
-    receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
+vTaskDelay(pdMS_TO_TICKS(8746));
+receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
 
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
+vTaskDelay(pdMS_TO_TICKS(1000));
+receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
 
-    vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
-    receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
+vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
+receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
 
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
+vTaskDelay(pdMS_TO_TICKS(1000));
+receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
 
-    vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
-    receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
+vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
+receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
 
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
+vTaskDelay(pdMS_TO_TICKS(1000));
+receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
 
-    vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
-    receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
+vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
+receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
 
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
+vTaskDelay(pdMS_TO_TICKS(1000));
+receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
 
-    vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
-    receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
+vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
+receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
 
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
+vTaskDelay(pdMS_TO_TICKS(1000));
+receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
 
-    vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
-    receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
+vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
+receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
 
-    vTaskDelay(pdMS_TO_TICKS(5000));
-    receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
-    vTaskDelay(pdMS_TO_TICKS(16273));
-    receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
+vTaskDelay(pdMS_TO_TICKS(5000));
+receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
+vTaskDelay(pdMS_TO_TICKS(16273));
+receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
 
-    vTaskDelay(pdMS_TO_TICKS(5000));
-    receiveCallback(NULL, (const uint8_t *)"reset", strlen("reset"));
+vTaskDelay(pdMS_TO_TICKS(5000));
+receiveCallback(NULL, (const uint8_t *)"reset", strlen("reset"));
 
-    vTaskDelay(pdMS_TO_TICKS(5000));
-    receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
+vTaskDelay(pdMS_TO_TICKS(5000));
+receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
 
-    vTaskDelay(pdMS_TO_TICKS(5000));
-    receiveCallback(NULL, (const uint8_t *)"reset", strlen("reset"));
+vTaskDelay(pdMS_TO_TICKS(5000));
+receiveCallback(NULL, (const uint8_t *)"reset", strlen("reset"));
 
-    vTaskDelay(pdMS_TO_TICKS(5000));
-    receiveCallback(NULL, (const uint8_t *)"countdown-7", strlen("countdown-7"));
+vTaskDelay(pdMS_TO_TICKS(5000));
+receiveCallback(NULL, (const uint8_t *)"countdown-7", strlen("countdown-7"));
 
-    vTaskDelay(pdMS_TO_TICKS(1000 * 60 * 7 + 15));
-    receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
-    */
+vTaskDelay(pdMS_TO_TICKS(1000 * 60 * 7 + 15));
+receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
+*/
 }

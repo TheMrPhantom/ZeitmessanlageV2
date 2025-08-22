@@ -83,6 +83,8 @@ DogDogPacket *create_dogdog_packet_from_final_time_information(PacketTypeFinalTi
 DogDogPacket *create_dogdog_packet_from_sensor_state_information(PacketTypeSensorState *sensor_state);
 DogDogPacket *create_dogdog_packet_from_ack_information(PacketTypeAck *ack);
 
+void confirm_station_alive(DogDogPacket *packet);
+
 void log_dogdog_packet(DogDogPacket *packet);
 
 static void IRAM_ATTR lora_module_rx_isr(void *arg);
