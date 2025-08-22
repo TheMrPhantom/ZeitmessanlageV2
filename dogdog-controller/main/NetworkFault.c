@@ -62,8 +62,8 @@ void Network_Fault_Task(void *params)
         bool startFault = currentTime - lastSeenStart > timeoutTime;
         bool stopFault = currentTime - lastSeenStop > timeoutTime;
 
-        int to_send_for_start = startFault ? 2 : 0;
-        int to_send_for_stop = stopFault ? 2 : 0;
+        int to_send_for_start = startFault ? 2 : last_start_state;
+        int to_send_for_stop = stopFault ? 2 : last_stop_state;
 
         if (received.station != NOTHING_ALIVE)
         {
