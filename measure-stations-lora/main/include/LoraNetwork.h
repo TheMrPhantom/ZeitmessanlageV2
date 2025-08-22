@@ -31,7 +31,7 @@ typedef struct DogDogPacket
     int64_t local_time_received;
     int8_t rssi;
     int8_t snr;
-    uint16_t length;  // Length of the payload
+    uint16_t payload_length;  // Length of the payload
     uint8_t *payload; // Variable length payload
 } DogDogPacket;
 

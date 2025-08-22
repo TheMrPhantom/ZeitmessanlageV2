@@ -40,6 +40,7 @@ char *TAG = "SENSOR";
 const int sensorPins[] = {GPIO_NUM_20};
 const int sensorCooldown = 3500;
 const int faultCooldown = 3000;
+extern int64_t time_offset_to_controller;
 
 int faultTime = 0;
 bool faultWarning = false;
@@ -85,7 +86,7 @@ void Sensor_Interrupt_Task(void *params)
     ESP_LOGI(TAG, "Setting up Sensors");
     init_Pins();
     sensorStatusQueue = xQueueCreate(1, sizeof(char *));
-    xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 2048, NULL, 1, &sensorTask);
+    xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 2048 * 2, NULL, 1, &sensorTask);
     int numPins = sizeof(sensorPins) / sizeof(int);
     xTaskCreate(LED_Task, "LED_Task", 4048, &numPins, 1, NULL);
     // Wait for led
@@ -112,7 +113,16 @@ void Sensor_Interrupt_Task(void *params)
                         lastTriggerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
                         ESP_LOGI(TAG, "Interrupt of Pin: %i", pinNumber);
 
-                        xQueueSend(triggerQueue, &cause, 0);
+                        timeval_t current_time;
+                        gettimeofday(&current_time, NULL);
+
+                        int64_t timestamp = TIME_US(current_time) + time_offset_to_controller;
+
+                        PacketTypeTrigger trigger;
+                        trigger.timestamp = timestamp;
+
+                        DogDogPacket *packet = create_dogdog_packet_from_trigger_information(&trigger);
+                        send_dogdog_packet(packet);
 
                         cause = Buzzer_TRIGGER;
                         xQueueSend(buzzerQueue, &cause, 0);
@@ -207,7 +217,7 @@ void Sensor_Status_Task(void *params)
     while (true)
     {
         int pinNumber;
-        BaseType_t newDataReceived = xQueueReceive(sensorStatusQueue, &pinNumber, pdMS_TO_TICKS(1000));
+        BaseType_t newDataReceived = xQueueReceive(sensorStatusQueue, &pinNumber, pdMS_TO_TICKS(5000));
         gettimeofday(&current_time, NULL);
         // check if any of the gpio pins are high with bit mask call
         bool any_tiggered = 0;
@@ -262,6 +272,8 @@ void Sensor_Status_Task(void *params)
 
         if (!newDataReceived || TIME_US(current_time) - TIME_US(last_time_sent) > 1000000)
         {
+            // invert the result
+            sensors_state.sensor_states = ~sensors_state.sensor_states;
             DogDogPacket *packet = create_dogdog_packet_from_sensor_state_information(&sensors_state);
             if (packet)
             {

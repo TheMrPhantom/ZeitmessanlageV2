@@ -56,6 +56,7 @@ QueueHandle_t sendQueue;
 QueueHandle_t buzzerQueue;
 QueueSetHandle_t triggerAndResetQueue;
 TaskHandle_t buttonTask;
+QueueHandle_t loraSendQueue;
 
 static const char *TAG = "Main";
 
@@ -104,7 +105,7 @@ void app_main(void)
     timeQueue = xQueueCreate(1, sizeof(int));
     sendQueue = xQueueCreate(50, sizeof(char *));
     buzzerQueue = xQueueCreate(10, sizeof(int));
-
+    loraSendQueue = xQueueCreate(20, sizeof(DogDogPacket *));
     triggerAndResetQueue = xQueueCreateSet(2);
     xQueueAddToSet(triggerQueue, triggerAndResetQueue);
     xQueueAddToSet(resetQueue, triggerAndResetQueue);
@@ -123,7 +124,7 @@ void app_main(void)
     // xTaskCreate(Network_Task, "Network_Task", 8192, NULL, 9, NULL);
     // xTaskCreate(Network_Send_Task, "Network_Send_Task", 8192, NULL, 10, NULL);
 
-    xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 24, NULL);
+    xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 23, NULL);
     xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 23, NULL);
     xTaskCreate(LoraSyncTask, "LoraSyncTask", 4048, NULL, 8, NULL);
 

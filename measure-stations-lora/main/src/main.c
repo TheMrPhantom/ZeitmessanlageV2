@@ -35,6 +35,7 @@ QueueHandle_t buzzerQueue;
 QueueHandle_t faultQueue;
 QueueSetHandle_t networkAndResetQueue;
 QueueHandle_t sendQueue;
+QueueHandle_t loraSendQueue;
 
 TaskHandle_t networkTask;
 
@@ -48,15 +49,16 @@ void app_main(void)
     buzzerQueue = xQueueCreate(5, sizeof(int));
     faultQueue = xQueueCreate(5, sizeof(int));
     sendQueue = xQueueCreate(50, sizeof(char *));
+    loraSendQueue = xQueueCreate(40, sizeof(DogDogPacket *));
 
     gpio_install_isr_service(0);
     init_lora();
 
-    xTaskCreate(Buzzer_Task, "Buzzer_Task", 8192, NULL, 1, NULL);
-    xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 8192, NULL, 3, NULL);
+    // xTaskCreate(Buzzer_Task, "Buzzer_Task", 8192, NULL, 12, NULL);
+    xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 8192 * 2, NULL, 3, NULL);
 
     xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 24, NULL);
-    xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 23, NULL);
+    xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 12, NULL);
 
     int buzzerType = BUZZER_STARTUP;
     xQueueSend(buzzerQueue, &buzzerType, 0);

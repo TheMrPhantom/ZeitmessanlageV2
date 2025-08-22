@@ -371,6 +371,11 @@
 #define SX126x_TXMODE_SYNC                            0x02
 #define SX126x_TXMODE_BACK2RX                         0x04
 
+#include <sys/time.h>
+typedef struct timeval timeval_t;
+
+#define TIME_US(t) ((int64_t)t.tv_sec * 1000000L + (int64_t)t.tv_usec)
+
 // Public function
 void     LoRaInit(void);
 int16_t  LoRaBegin(uint32_t frequencyInHz, int8_t txPowerInDbm, float tcxoVoltage, bool useRegulatorLDO);

@@ -48,7 +48,7 @@ void init_led(int num_leds)
 void set_led(uint8_t led, uint8_t r, uint8_t g, uint8_t b)
 {
 
-    ESP_LOGI(TAG, "Start blinking LED strip");
+    // ESP_LOGI(TAG, "Start blinking LED strip");
 
     /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
 

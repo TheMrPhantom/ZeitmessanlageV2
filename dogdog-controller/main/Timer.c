@@ -65,9 +65,10 @@ void stopTimer()
 void Timer_Task(void *params)
 {
 
+    bool start_hurdle = false;
+
     while (true)
     {
-        bool start_hurdle = false;
 
         QueueHandle_t selectedQueue = xQueueSelectFromSet(triggerAndResetQueue, pdMS_TO_TICKS(10));
         if (selectedQueue != NULL)
@@ -86,9 +87,9 @@ void Timer_Task(void *params)
                     xQueueSend(timeQueue, &x, 0);
                     ESP_LOGI(TIMER_TAG, "Started timer");
                 }
-                else if (timerIsRunning && timerTriggerCause.is_start != start_hurdle)
+                else if (timerIsRunning /*&& timerTriggerCause.is_start != start_hurdle*/)
                 {
-                    int timeElapsedLocal = timerTriggerCause.timestamp - timerTime;
+                    int timeElapsedLocal = (timerTriggerCause.timestamp - timerTime) / 1000;
                     stopTimer();
 
                     xQueueSend(timeQueue, &timeElapsedLocal, 0);
@@ -98,6 +99,11 @@ void Timer_Task(void *params)
                     toSend.time = timeElapsedLocal;
                     xQueueSend(sevenSegmentQueue, &toSend, pdMS_TO_TICKS(500));
                     ESP_LOGI(TIMER_TAG, "Stopped timer. Run was %ims", timeElapsedLocal);
+                }
+                else if (timerIsRunning && timerTriggerCause.is_start == start_hurdle)
+                {
+                    // If we reach this point, it means the timer was running and we received a conflicting start/stop signal
+                    ESP_LOGW(TIMER_TAG, "Conflicting timer signal received");
                 }
             }
             else if (selectedQueue == resetQueue)

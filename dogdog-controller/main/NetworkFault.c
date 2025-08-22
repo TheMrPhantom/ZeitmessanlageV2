@@ -26,7 +26,7 @@ void sendFaultInformation(bool start, bool stop)
 void Network_Fault_Task(void *params)
 {
 
-    const int timeoutTime = pdMS_TO_TICKS(2000);
+    const int timeoutTime = pdMS_TO_TICKS(7000);
 
     int lastSeenStart = -timeoutTime;
     int lastSeenStop = -timeoutTime;
