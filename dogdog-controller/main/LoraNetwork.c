@@ -253,7 +253,7 @@ void confirm_station_alive(DogDogPacket *packet)
     {
         status.signal = 1;
     }
-    if (packet->snr < 0)
+    if (packet->snr < -10)
     {
         status.signal = -9;
     }
