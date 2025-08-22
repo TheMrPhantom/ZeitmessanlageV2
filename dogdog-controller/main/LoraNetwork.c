@@ -411,6 +411,11 @@ void LoraReceiveTask(void *pvParameters)
                 }
 
                 DogDogPacket *packet = create_dogdog_packet_from_bytes(buf, rxLen);
+                if (!packet)
+                {
+                    ESP_LOGE(TAG_LORA, "Failed to allocate DogDogPacket");
+                    continue;
+                }
                 packet->local_time_received = local_time_received;
                 GetPacketStatus(&packet->rssi, &packet->snr);
 
@@ -495,7 +500,11 @@ void LoraSyncTask(void *pvParameters)
         gettimeofday(&timestamp, NULL);
         time_sync.timestamp = TIME_US(timestamp);
         DogDogPacket *packet = create_dogdog_packet_from_time_sync_information(&time_sync);
-
+        if (!packet)
+        {
+            ESP_LOGE(TAG_LORA, "Failed to allocate DogDogPacket for time sync");
+            continue;
+        }
         xQueueSend(loraSendQueue, &packet, portMAX_DELAY);
 
         vTaskDelay(pdMS_TO_TICKS(10000));
@@ -518,6 +527,11 @@ void HandleReceivedPacket(DogDogPacket *packet)
     case LORA_TRIGGER:
     {
         PacketTypeTrigger *trigger = create_trigger_information(packet);
+        if (!trigger)
+        {
+            ESP_LOGE(TAG_LORA, "Failed to allocate PacketTypeTrigger");
+            break;
+        }
         TimerTrigger timerTriggerCause;
         timerTriggerCause.is_start = packet->station_id == START_ID;
         timerTriggerCause.timestamp = trigger->timestamp;
@@ -563,6 +577,11 @@ void HandleReceivedPacket(DogDogPacket *packet)
         ack.packet_id = packet->packet_id;
 
         DogDogPacket *ack_packet = create_dogdog_packet_from_ack_information(&ack);
+        if (!ack_packet)
+        {
+            ESP_LOGE(TAG_LORA, "Failed to allocate DogDogPacket for ACK");
+            break;
+        }
         vTaskDelay(pdMS_TO_TICKS(1000));
         xQueueSend(loraSendQueue, &ack_packet, portMAX_DELAY);
 
@@ -578,6 +597,11 @@ void HandleReceivedPacket(DogDogPacket *packet)
     case LORA_SENSOR_STATE:
     {
         PacketTypeSensorState *sensor_state = create_sensor_state_information(packet);
+        if (!sensor_state)
+        {
+            ESP_LOGE(TAG_LORA, "Failed to allocate PacketTypeSensorState");
+            break;
+        }
         // Process sensor state information
         confirm_station_alive(packet);
 
