@@ -34,7 +34,6 @@
 #include "freertos/queue.h"
 #include "nvs_flash.h"
 #include "Timer.h"
-#include "Network.h"
 #include "SevenSegment.h"
 #include "NetworkFault.h"
 #include "KeyValue.h"
@@ -63,35 +62,6 @@ TaskHandle_t buttonTask;
 QueueHandle_t loraSendQueue;
 
 static const char *TAG = "Main";
-
-void test(void)
-{
-    for (int i = 0; i < 15; i++)
-    {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        receiveCallback(NULL, (const uint8_t *)"alive-start", strlen("alive-start"));
-        receiveCallback(NULL, (const uint8_t *)"alive-stop", strlen("alive-stop"));
-    }
-
-    for (int i = 0; i < 10; i++)
-    {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        receiveCallback(NULL, (const uint8_t *)"alive-start", strlen("alive-start"));
-    }
-
-    for (int i = 0; i < 10; i++)
-    {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        receiveCallback(NULL, (const uint8_t *)"alive-stop", strlen("alive-stop"));
-    }
-
-    for (;;)
-    {
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        receiveCallback(NULL, (const uint8_t *)"alive-start", strlen("alive-start"));
-        receiveCallback(NULL, (const uint8_t *)"alive-stop", strlen("alive-stop"));
-    }
-}
 
 void app_main(void)
 {
@@ -135,74 +105,4 @@ void app_main(void)
     xTaskCreate(Button_Task, "Button_Task", 8192, NULL, 3, &buttonTask);
 
     // xTaskCreate(ClockTask, "ClockTask", 4048, NULL, 1, NULL);
-
-    /*
-vTaskDelay(pdMS_TO_TICKS(4000));
-receiveCallback(NULL, (const uint8_t *)"alive-start", strlen("alive-start"));
-vTaskDelay(pdMS_TO_TICKS(1000));
-receiveCallback(NULL, (const uint8_t *)"alive-start", strlen("alive-start"));
-vTaskDelay(pdMS_TO_TICKS(1000));
-receiveCallback(NULL, (const uint8_t *)"alive-start", strlen("alive-start"));
-vTaskDelay(pdMS_TO_TICKS(1000));
-receiveCallback(NULL, (const uint8_t *)"alive-start", strlen("alive-start"));
-vTaskDelay(pdMS_TO_TICKS(1000));
-receiveCallback(NULL, (const uint8_t *)"alive-stop", strlen("alive-stop"));
-
-xTaskCreate(test, "test", 4048, NULL, 3, NULL);
-vTaskDelay(pdMS_TO_TICKS(5000));
-receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
-
-vTaskDelay(pdMS_TO_TICKS(8746));
-receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
-
-vTaskDelay(pdMS_TO_TICKS(1000));
-receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
-
-vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
-receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
-
-vTaskDelay(pdMS_TO_TICKS(1000));
-receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
-
-vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
-receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
-
-vTaskDelay(pdMS_TO_TICKS(1000));
-receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
-
-vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
-receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
-
-vTaskDelay(pdMS_TO_TICKS(1000));
-receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
-
-vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
-receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
-
-vTaskDelay(pdMS_TO_TICKS(1000));
-receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
-
-vTaskDelay(pdMS_TO_TICKS(3000 + random() % 1000));
-receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
-
-vTaskDelay(pdMS_TO_TICKS(5000));
-receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
-vTaskDelay(pdMS_TO_TICKS(16273));
-receiveCallback(NULL, (const uint8_t *)"trigger-stop", strlen("trigger-stop"));
-
-vTaskDelay(pdMS_TO_TICKS(5000));
-receiveCallback(NULL, (const uint8_t *)"reset", strlen("reset"));
-
-vTaskDelay(pdMS_TO_TICKS(5000));
-receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
-
-vTaskDelay(pdMS_TO_TICKS(5000));
-receiveCallback(NULL, (const uint8_t *)"reset", strlen("reset"));
-
-vTaskDelay(pdMS_TO_TICKS(5000));
-receiveCallback(NULL, (const uint8_t *)"countdown-7", strlen("countdown-7"));
-
-vTaskDelay(pdMS_TO_TICKS(1000 * 60 * 7 + 15));
-receiveCallback(NULL, (const uint8_t *)"trigger-start", strlen("trigger-start"));
-*/
 }

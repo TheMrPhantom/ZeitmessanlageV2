@@ -12,9 +12,9 @@
 #include "freertos/queue.h"
 #include "ButtonInput.h"
 #include "Keyboard.h"
-#include "Network.h"
 #include "Button.h"
 #include "GPIOPins.h"
+#include "SevenSegment.h"
 
 #if CONFIG_START
 #define STATION_TYPE 0
