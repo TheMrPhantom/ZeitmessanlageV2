@@ -249,13 +249,9 @@ void confirm_station_alive(DogDogPacket *packet)
     StationConnectivityStatus status;
     status.station = is_start;
     status.signal = 0;
-    if (packet->rssi < -100)
+    if (packet->rssi < -100 || packet->snr < -10)
     {
-        status.signal = 1;
-    }
-    if (packet->snr < -10)
-    {
-        status.signal = -9;
+        status.signal = 1; // Bad signal (warning)
     }
     xQueueSend(networkFaultQueue, &status, portMAX_DELAY);
 }
