@@ -270,13 +270,14 @@ void Sensor_Status_Task(void *params)
             last_state[i] = level;
         }
 
-        if (!newDataReceived || TIME_US(current_time) - TIME_US(last_time_sent) > 1000000)
+        if (!newDataReceived || TIME_US(current_time) - TIME_US(last_time_sent) > 100000)
         {
             // invert the result
             sensors_state.sensor_states = ~sensors_state.sensor_states;
             DogDogPacket *packet = create_dogdog_packet_from_sensor_state_information(&sensors_state);
             if (packet)
             {
+                gettimeofday(&last_time_sent, NULL);
                 // Send the packet
                 xQueueSend(loraSendQueue, &packet, 0);
             }

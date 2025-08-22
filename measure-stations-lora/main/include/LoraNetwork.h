@@ -31,8 +31,9 @@ typedef struct DogDogPacket
     int64_t local_time_received;
     int8_t rssi;
     int8_t snr;
-    uint16_t payload_length;  // Length of the payload
-    uint8_t *payload; // Variable length payload
+    uint8_t retries;
+    uint16_t payload_length; // Length of the payload
+    uint8_t *payload;        // Variable length payload
 } DogDogPacket;
 
 typedef struct PacketTypeTimeSync
@@ -93,5 +94,5 @@ void LoraReceiveTask(void *pvParameters);
 void LoraSendTask(void *pvParameters);
 void LoraSyncTask(void *pvParameters);
 void HandleReceivedPacket(DogDogPacket *packet);
-
+void ResendTask(void *pvParameters);
 #endif // __LORA_NETWORK_H

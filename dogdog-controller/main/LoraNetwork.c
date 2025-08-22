@@ -11,6 +11,7 @@
 #include "Timer.h"
 #include "NetworkFault.h"
 #include "SevenSegment.h"
+#include "esp_timer.h"
 
 static const char *TAG_LORA = "LoraNetwork";
 
@@ -334,12 +335,13 @@ static void IRAM_ATTR lora_module_rx_isr(void *arg)
 {
     // You can add your interrupt handling code here
     uint32_t gpio_num = (uint32_t)arg;
-    // For example, just log the interrupt (avoid heavy processing in ISR)
-    // ets_printf("GPIO Interrupt on GPIO %d\n", gpio_num);
-    timeval_t timestamp;
-    gettimeofday(&timestamp, NULL);
-    int64_t local_time_received = TIME_US(timestamp);
-    xQueueSendFromISR(localReceiveTimestampQueue, &local_time_received, NULL);
+    // Use ISR-safe timer function
+    int64_t local_time_received = esp_timer_get_time();
+    BaseType_t sent = xQueueSendFromISR(localReceiveTimestampQueue, &local_time_received, NULL);
+    if (sent != pdTRUE)
+    {
+        ESP_LOGW(pcTaskGetName(NULL), "Warning: localReceiveTimestampQueue full, timestamp lost");
+    }
 }
 
 void LoraReceiveTask(void *pvParameters)
@@ -349,7 +351,7 @@ void LoraReceiveTask(void *pvParameters)
     gpio_set_intr_type(LORA_GPIO_DIO1, GPIO_INTR_POSEDGE);
     gpio_isr_handler_add(LORA_GPIO_DIO1, lora_module_rx_isr, (void *)LORA_GPIO_DIO1);
 
-    localReceiveTimestampQueue = xQueueCreate(10, sizeof(int64_t));
+    localReceiveTimestampQueue = xQueueCreate(40, sizeof(int64_t));
 
     ESP_LOGI(pcTaskGetName(NULL), "Starting");
     uint8_t buf[255]; // Maximum Payload size of SX1261/62/68 is 255
@@ -451,6 +453,9 @@ void LoraSyncTask(void *pvParameters)
     }
 }
 
+uint8_t last_start_trigger = 255;
+uint8_t last_stop_trigger = 255;
+
 void HandleReceivedPacket(DogDogPacket *packet)
 {
     // Handle the received packet based on its type
@@ -468,7 +473,40 @@ void HandleReceivedPacket(DogDogPacket *packet)
         timerTriggerCause.is_start = packet->station_id == START_ID;
         timerTriggerCause.timestamp = trigger->timestamp;
 
-        xQueueSend(triggerQueue, &timerTriggerCause, portMAX_DELAY);
+        if (packet->station_id == START_ID)
+        {
+            if (last_start_trigger != packet->packet_id)
+            {
+                last_start_trigger = packet->packet_id;
+                xQueueSend(triggerQueue, &timerTriggerCause, portMAX_DELAY);
+            }
+            else
+            {
+                ESP_LOGW(pcTaskGetName(NULL), "Duplicate start trigger ignored for packet %d", packet->packet_id);
+            }
+        }
+        else
+        {
+            if (last_stop_trigger != packet->packet_id)
+            {
+                last_stop_trigger = packet->packet_id;
+                xQueueSend(triggerQueue, &timerTriggerCause, portMAX_DELAY);
+            }
+            else
+            {
+                ESP_LOGW(pcTaskGetName(NULL), "Duplicate stop trigger ignored for packet %d", packet->packet_id);
+            }
+        }
+
+        // Send ack
+        PacketTypeAck ack;
+        ack.station_id = packet->station_id;
+        ack.packet_id = packet->packet_id;
+
+        DogDogPacket *ack_packet = create_dogdog_packet_from_ack_information(&ack);
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        xQueueSend(loraSendQueue, &ack_packet, portMAX_DELAY);
+
         // Process trigger information
         free(trigger);
         break;

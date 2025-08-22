@@ -13,6 +13,7 @@ static const char *TAG_LORA = "LoraNetwork";
 
 extern QueueHandle_t loraSendQueue;
 QueueHandle_t localReceiveTimestampQueue;
+QueueHandle_t ackQueue;
 extern QueueHandle_t triggerQueue;
 extern QueueHandle_t networkFaultQueue;
 extern QueueHandle_t sevenSegmentQueue;
@@ -283,7 +284,11 @@ void log_dogdog_packet(DogDogPacket *packet)
 
 BaseType_t send_dogdog_packet(DogDogPacket *packet)
 {
-    return xQueueSend(loraSendQueue, &packet, 0);
+    if (packet != NULL)
+    {
+        return xQueueSend(loraSendQueue, &packet, 0);
+    }
+    return pdFAIL;
 }
 
 void init_lora(void)
@@ -314,6 +319,7 @@ void init_lora(void)
     bool invertIrq = false;
 
     LoRaConfig(spreadingFactor, bandwidth, codingRate, preambleLength, payloadLen, crcOn, invertIrq);
+    ackQueue = xQueueCreate(3, sizeof(uint8_t));
 }
 
 int create_bytes_from_dogdog_packet(DogDogPacket *packet, uint8_t *buf, size_t buf_len)
@@ -400,7 +406,10 @@ void LoraSendTask(void *pvParameters)
         DogDogPacket *packet = NULL;
         if (xQueueReceive(loraSendQueue, &packet, portMAX_DELAY) == pdTRUE)
         {
-            packet->packet_id = packet_id++;
+            if (packet->retries == 0)
+            {
+                packet->packet_id = packet_id++;
+            }
 
             // Prepare the buffer for transmission
             if (packet->type == LORA_TIME_SYNC)
@@ -415,8 +424,23 @@ void LoraSendTask(void *pvParameters)
 
             int txLen = create_bytes_from_dogdog_packet(packet, buf, sizeof(buf));
             // clean up packet
-            free(packet->payload);
-            free(packet);
+            if (packet->type != LORA_TRIGGER)
+            {
+                free(packet->payload);
+                free(packet);
+            }
+            else
+            {
+                if (packet->retries >= 3)
+                {
+                    ESP_LOGW(pcTaskGetName(NULL), "Packet of type LORA_TRIGGER has been retried too many times, deleting packet");
+                    free(packet->payload);
+                    free(packet);
+                    continue;
+                }
+                packet->retries++;
+                xTaskCreate(ResendTask, "ResendTask", 4048, packet, 5, NULL);
+            }
 
             if (txLen < 0)
             {
@@ -500,10 +524,41 @@ void HandleReceivedPacket(DogDogPacket *packet)
     }
     case LORA_ACK:
     {
-        // TODO
+        PacketTypeAck *ack = create_ack_information(packet);
+        ESP_LOGI(pcTaskGetName(NULL), "ACK received for packet: %d", ack->packet_id);
+        xQueueSend(ackQueue, &ack->packet_id, 0);
+        free(ack);
         break;
     }
     default:
         ESP_LOGW(TAG_LORA, "Unknown packet type: %d", packet->type);
     }
+}
+
+// Create task for resending
+void ResendTask(void *pvParameters)
+{
+    DogDogPacket *waiting_for_ack = (DogDogPacket *)pvParameters;
+
+    uint8_t packetid;
+    vTaskDelay(pdMS_TO_TICKS(500));
+    for (int i = 0; i < 3; i++)
+    {
+        if (xQueueReceive(ackQueue, &packetid, pdMS_TO_TICKS(500)))
+        {
+            ESP_LOGI(pcTaskGetName(NULL), "ACK received for packet: %d, waiting for %d", packetid, waiting_for_ack->packet_id);
+            if (waiting_for_ack->packet_id == packetid)
+            {
+                ESP_LOGI(pcTaskGetName(NULL), "ACK received for packet: %d, deleting task", waiting_for_ack->packet_id);
+                free(waiting_for_ack->payload);
+                free(waiting_for_ack);
+                vTaskDelete(NULL);
+            }
+            vTaskDelay(pdMS_TO_TICKS(500));
+        }
+    }
+
+    xQueueSend(loraSendQueue, &waiting_for_ack, portMAX_DELAY);
+
+    vTaskDelete(NULL);
 }
