@@ -373,6 +373,14 @@ void LoraReceiveTask(void *pvParameters)
                 packet->local_time_received = local_time_received;
                 GetPacketStatus(&packet->rssi, &packet->snr);
 
+                if (packet->station_id != CONTROLLER_ID && packet->station_id != START_ID && packet->station_id != STOP_ID)
+                {
+                    ESP_LOGW(pcTaskGetName(NULL), "Received packet is not from a valid station");
+                    free(packet->payload);
+                    free(packet);
+                    continue;
+                }
+
                 log_dogdog_packet(packet);
 
                 HandleReceivedPacket(packet);
