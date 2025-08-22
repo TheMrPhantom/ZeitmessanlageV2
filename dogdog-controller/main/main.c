@@ -105,7 +105,7 @@ void app_main(void)
     sensorInterputQueue = xQueueCreate(1, sizeof(int));
     resetQueue = xQueueCreate(1, sizeof(int));
     triggerQueue = xQueueCreate(1, sizeof(TimerTrigger));
-    networkFaultQueue = xQueueCreate(2, sizeof(int));
+    networkFaultQueue = xQueueCreate(2, sizeof(StationConnectivityStatus));
     sevenSegmentQueue = xQueueCreate(10, sizeof(SevenSegmentDisplay));
     timeQueue = xQueueCreate(1, sizeof(int));
     sendQueue = xQueueCreate(50, sizeof(char *));

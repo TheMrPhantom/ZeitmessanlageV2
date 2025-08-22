@@ -3,6 +3,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include <sys/time.h>
+#include "SevenSegment.h"
 
 #define CONTROLLER_ID 0x01
 #define START_ID 0x02
@@ -11,7 +12,7 @@
 // Packet Header
 #define LORA_MAGIC 0xDD09
 #define LORA_PROTOCOL_VERSION 0x01
-#define LORA_STATION_ID 0x01
+#define LORA_STATION_ID 0x02
 
 // Packet Types
 #define LORA_TIME_SYNC 0x01
@@ -31,6 +32,7 @@ typedef struct DogDogPacket
     int64_t local_time_received;
     int8_t rssi;
     int8_t snr;
+    uint8_t retries;
     uint16_t payload_length; // Length of the payload
     uint8_t *payload;        // Variable length payload
 } DogDogPacket;
@@ -40,21 +42,22 @@ typedef struct PacketTypeTimeSync
     int64_t timestamp;
 } PacketTypeTimeSync;
 
+typedef struct PacketTypeSensorState
+{
+    uint8_t num_sensors;
+    uint64_t sensor_states; // Bitfield of sensor states, 0 for inactive, 1 for active
+} PacketTypeSensorState;
+
 typedef struct PacketTypeTrigger
 {
     int64_t timestamp;
+    PacketTypeSensorState sensor_state;
 } PacketTypeTrigger;
 
 typedef struct PacketTypeFinalTime
 {
     int64_t timestamp;
 } PacketTypeFinalTime;
-
-typedef struct PacketTypeSensorState
-{
-    uint8_t num_sensors;
-    uint64_t sensor_states; // Bitfield of sensor states, 0 for inactive, 1 for active
-} PacketTypeSensorState;
 
 typedef struct PacketTypeAck
 {
@@ -84,7 +87,7 @@ DogDogPacket *create_dogdog_packet_from_sensor_state_information(PacketTypeSenso
 DogDogPacket *create_dogdog_packet_from_ack_information(PacketTypeAck *ack);
 
 void confirm_station_alive(DogDogPacket *packet);
-
+void populate_sensor_status(SensorStatus *sensorStatus, PacketTypeSensorState *sensor_state, uint8_t station_id, bool is_trigger);
 void log_dogdog_packet(DogDogPacket *packet);
 
 static void IRAM_ATTR lora_module_rx_isr(void *arg);

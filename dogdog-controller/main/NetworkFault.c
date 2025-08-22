@@ -15,7 +15,7 @@ extern QueueHandle_t sevenSegmentQueue;
 
 const char *NETWORK_FAUT_TAG = "NETWORK_FAULT";
 
-void sendFaultInformation(bool start, bool stop)
+void sendFaultInformation(int start, int stop)
 {
     SevenSegmentDisplay faultInformation;
     faultInformation.type = SEVEN_SEGMENT_NETWORK_FAULT;
@@ -23,6 +23,9 @@ void sendFaultInformation(bool start, bool stop)
     faultInformation.stopFault = stop;
     xQueueSend(sevenSegmentQueue, &faultInformation, 0);
 }
+
+int last_start_state = 2;
+int last_stop_state = 2;
 
 void Network_Fault_Task(void *params)
 {
@@ -34,18 +37,18 @@ void Network_Fault_Task(void *params)
 
     while (1)
     {
-        int received = NOTHING_ALIVE;
+        StationConnectivityStatus received;
+        received.station = NOTHING_ALIVE;
         if (xQueueReceive(networkFaultQueue, &received, pdMS_TO_TICKS(500)))
         {
-            ESP_LOGI(NETWORK_FAUT_TAG, "Received network fault message: %d", received);
             timeval_t now;
             gettimeofday(&now, NULL);
-            if (received == START_ALIVE)
+            if (received.station == START_ALIVE)
             {
 
                 lastSeenStart = TIME_US(now) / 1000;
             }
-            else if (received == STOP_ALIVE)
+            else if (received.station == STOP_ALIVE)
             {
                 lastSeenStop = TIME_US(now) / 1000;
             }
@@ -59,6 +62,25 @@ void Network_Fault_Task(void *params)
         bool startFault = currentTime - lastSeenStart > timeoutTime;
         bool stopFault = currentTime - lastSeenStop > timeoutTime;
 
-        sendFaultInformation(startFault, stopFault);
+        int to_send_for_start = startFault ? 2 : 0;
+        int to_send_for_stop = stopFault ? 2 : 0;
+
+        if (received.station != NOTHING_ALIVE)
+        {
+            if (received.station == START_ALIVE)
+            {
+                to_send_for_start = received.signal;
+                to_send_for_stop = last_stop_state;
+                last_start_state = received.signal;
+            }
+            else if (received.station == STOP_ALIVE)
+            {
+                to_send_for_stop = received.signal;
+                to_send_for_start = last_start_state;
+                last_stop_state = received.signal;
+            }
+        }
+
+        sendFaultInformation(to_send_for_start, to_send_for_stop);
     }
 }

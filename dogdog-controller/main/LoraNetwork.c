@@ -68,6 +68,7 @@ PacketTypeTrigger *create_trigger_information(DogDogPacket *packet)
     PacketTypeTrigger *packet_type = calloc(1, sizeof(PacketTypeTrigger));
     // four bytes of the packet payload are int64 time stamp
     packet_type->timestamp = *((int64_t *)packet->payload);
+    memcpy(&packet_type->sensor_state, packet->payload + sizeof(int64_t), sizeof(PacketTypeSensorState));
     return packet_type;
 }
 
@@ -142,7 +143,7 @@ DogDogPacket *create_dogdog_packet_from_trigger_information(PacketTypeTrigger *t
     packet->station_id = LORA_STATION_ID;
     packet->packet_id = 0; // Set to 0 for now
     packet->type = LORA_TRIGGER;
-    packet->payload_length = sizeof(int64_t);
+    packet->payload_length = sizeof(int64_t) + sizeof(PacketTypeSensorState);
     packet->payload = calloc(1, packet->payload_length);
     if (!packet->payload)
     {
@@ -151,6 +152,7 @@ DogDogPacket *create_dogdog_packet_from_trigger_information(PacketTypeTrigger *t
         return NULL;
     }
     memcpy(packet->payload, &trigger->timestamp, sizeof(int64_t));
+    memcpy(packet->payload + sizeof(int64_t), &trigger->sensor_state, sizeof(PacketTypeSensorState));
 
     return packet;
 }
@@ -244,7 +246,18 @@ void confirm_station_alive(DogDogPacket *packet)
 {
     int is_start = packet->station_id == START_ID ? START_ALIVE : STOP_ALIVE;
 
-    xQueueSend(networkFaultQueue, &is_start, portMAX_DELAY);
+    StationConnectivityStatus status;
+    status.station = is_start;
+    status.signal = 0;
+    if (packet->rssi < -100)
+    {
+        status.signal = 1;
+    }
+    if (packet->snr < 0)
+    {
+        status.signal = -9;
+    }
+    xQueueSend(networkFaultQueue, &status, portMAX_DELAY);
 }
 
 void log_dogdog_packet(DogDogPacket *packet)
@@ -307,7 +320,7 @@ void init_lora(void)
         }
     }
 
-    uint8_t spreadingFactor = 10;
+    uint8_t spreadingFactor = 9;
     uint8_t bandwidth = 5;
     uint8_t codingRate = 1;
     uint16_t preambleLength = 8;
@@ -513,7 +526,15 @@ void HandleReceivedPacket(DogDogPacket *packet)
             }
         }
 
-        // confirm_station_alive(packet);
+        confirm_station_alive(packet);
+
+        SensorStatus sensorStatus;
+        populate_sensor_status(&sensorStatus, &trigger->sensor_state, packet->station_id, true);
+
+        SevenSegmentDisplay toSend;
+        toSend.type = SEVEN_SEGMENT_SENSOR_STATUS;
+        toSend.sensorStatus = sensorStatus;
+        xQueueSend(sevenSegmentQueue, &toSend, 0);
 
         // Send ack
         PacketTypeAck ack;
@@ -540,15 +561,7 @@ void HandleReceivedPacket(DogDogPacket *packet)
         confirm_station_alive(packet);
 
         SensorStatus sensorStatus;
-        sensorStatus.sensor = packet->station_id == START_ID ? SENSOR_START : SENSOR_STOP;
-        sensorStatus.num_sensors = sensor_state->num_sensors;
-        sensorStatus.status = calloc(sensorStatus.num_sensors, sizeof(bool));
-
-        ESP_LOGI(pcTaskGetName(NULL), "Connected sensors amount: %d", sensorStatus.num_sensors);
-        for (int i = 0; i < sensorStatus.num_sensors; i++)
-        {
-            sensorStatus.status[i] = (sensor_state->sensor_states & (1ULL << i)) != 0;
-        }
+        populate_sensor_status(&sensorStatus, sensor_state, packet->station_id, false);
 
         SevenSegmentDisplay toSend;
         toSend.type = SEVEN_SEGMENT_SENSOR_STATUS;
@@ -565,5 +578,19 @@ void HandleReceivedPacket(DogDogPacket *packet)
     }
     default:
         ESP_LOGW(TAG_LORA, "Unknown packet type: %d", packet->type);
+    }
+}
+
+void populate_sensor_status(SensorStatus *sensorStatus, PacketTypeSensorState *sensor_state, uint8_t station_id, bool is_trigger)
+{
+    sensorStatus->sensor = station_id == START_ID ? SENSOR_START : SENSOR_STOP;
+    sensorStatus->num_sensors = sensor_state->num_sensors;
+    sensorStatus->status = calloc(sensorStatus->num_sensors, sizeof(bool));
+    sensorStatus->is_trigger = is_trigger;
+
+    ESP_LOGI(pcTaskGetName(NULL), "Connected sensors amount: %d, is_trigger: %d", sensorStatus->num_sensors, sensorStatus->is_trigger);
+    for (int i = 0; i < sensorStatus->num_sensors; i++)
+    {
+        sensorStatus->status[i] = (sensor_state->sensor_states & (1ULL << i)) != 0;
     }
 }

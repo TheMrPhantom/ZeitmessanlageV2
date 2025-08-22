@@ -74,6 +74,7 @@ PacketTypeTrigger *create_trigger_information(DogDogPacket *packet)
     PacketTypeTrigger *packet_type = calloc(1, sizeof(PacketTypeTrigger));
     // four bytes of the packet payload are int64 time stamp
     packet_type->timestamp = *((int64_t *)packet->payload);
+    memcpy(&packet_type->sensor_state, packet->payload + sizeof(int64_t), sizeof(PacketTypeSensorState));
     return packet_type;
 }
 
@@ -148,7 +149,7 @@ DogDogPacket *create_dogdog_packet_from_trigger_information(PacketTypeTrigger *t
     packet->station_id = LORA_STATION_ID;
     packet->packet_id = 0; // Set to 0 for now
     packet->type = LORA_TRIGGER;
-    packet->payload_length = sizeof(int64_t);
+    packet->payload_length = sizeof(int64_t) + sizeof(PacketTypeSensorState);
     packet->payload = calloc(1, packet->payload_length);
     if (!packet->payload)
     {
@@ -157,6 +158,7 @@ DogDogPacket *create_dogdog_packet_from_trigger_information(PacketTypeTrigger *t
         return NULL;
     }
     memcpy(packet->payload, &trigger->timestamp, sizeof(int64_t));
+    memcpy(packet->payload + sizeof(int64_t), &trigger->sensor_state, sizeof(PacketTypeSensorState));
 
     return packet;
 }
@@ -310,7 +312,7 @@ void init_lora(void)
         }
     }
 
-    uint8_t spreadingFactor = 10;
+    uint8_t spreadingFactor = 9;
     uint8_t bandwidth = 5;
     uint8_t codingRate = 1;
     uint16_t preambleLength = 8;
@@ -431,7 +433,7 @@ void LoraSendTask(void *pvParameters)
             }
             else
             {
-                if (packet->retries >= 3)
+                if (packet->retries >= 6)
                 {
                     ESP_LOGW(pcTaskGetName(NULL), "Packet of type LORA_TRIGGER has been retried too many times, deleting packet");
                     free(packet->payload);

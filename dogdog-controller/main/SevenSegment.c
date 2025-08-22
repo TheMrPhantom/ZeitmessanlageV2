@@ -86,7 +86,7 @@ void Seven_Segment_Task(void *params)
                 break;
             case SEVEN_SEGMENT_SENSOR_STATUS:
                 lvgl_port_lock(-1);
-                draw_sensor_status_single(toDisplay.sensorStatus.sensor, toDisplay.sensorStatus.status, toDisplay.sensorStatus.num_sensors);
+                draw_sensor_status_single(toDisplay.sensorStatus.sensor, toDisplay.sensorStatus.status, toDisplay.sensorStatus.num_sensors, toDisplay.sensorStatus.is_trigger);
                 free(toDisplay.sensorStatus.status);
                 lvgl_port_unlock();
                 break;
@@ -387,7 +387,7 @@ void setup_timing_screen()
     bool sensor_connected_right[10] = {0};
 
     draw_sensor_status(sensor_connected_left, sensor_connected_right, NUM_SENSORS_LEFT, NUM_SENSORS_RIGHT);
-    draw_connection_status(true, false);
+    draw_connection_status(2, 2);
 }
 
 void setMilliseconds(long timeToSet)
@@ -603,7 +603,7 @@ void handleCountdown(SevenSegmentDisplay toDisplay)
             else if (toDisplay.type == SEVEN_SEGMENT_SENSOR_STATUS)
             {
                 lvgl_port_lock(-1);
-                draw_sensor_status_single(toDisplay.sensorStatus.sensor, toDisplay.sensorStatus.status, toDisplay.sensorStatus.num_sensors);
+                draw_sensor_status_single(toDisplay.sensorStatus.sensor, toDisplay.sensorStatus.status, toDisplay.sensorStatus.num_sensors, toDisplay.sensorStatus.is_trigger);
                 free(toDisplay.sensorStatus.status);
                 lvgl_port_unlock();
             }
@@ -645,7 +645,7 @@ void cleanup_lcd_resources()
     spi_bus_free(LCD_SPI_NUM);
 }
 
-void draw_connection_status(bool start_alive, bool end_alive)
+void draw_connection_status(int start_alive, int end_alive)
 {
     if (start_label == NULL)
     {
@@ -659,29 +659,58 @@ void draw_connection_status(bool start_alive, bool end_alive)
         lv_obj_align(end_label, LV_ALIGN_TOP_LEFT, 70, 33);
     }
 
-    if (!start_alive)
+    if (start_alive == 2)
     {
-        draw_sensor_status_single(SENSOR_START, NULL, -1);
+        draw_sensor_status_single(SENSOR_START, NULL, -1, false);
     }
-    if (!end_alive)
+    if (end_alive == 2)
     {
-        draw_sensor_status_single(SENSOR_STOP, NULL, -1);
+        draw_sensor_status_single(SENSOR_STOP, NULL, -1, false);
+    }
+
+    lv_color_t start_color;
+    lv_color_t end_color;
+
+    if (start_alive == 0)
+    {
+        start_color = lv_color_hex(0x00FF00); // green
+    }
+    else if (start_alive == 1)
+    {
+        start_color = lv_color_hex(0xFFFF00); // orange
+    }
+    else if (start_alive == 2)
+    {
+        start_color = lv_color_hex(0xFF0000); // red
+    }
+
+    if (end_alive == 0)
+    {
+        end_color = lv_color_hex(0x00FF00); // green
+    }
+    else if (end_alive == 1)
+    {
+        end_color = lv_color_hex(0xFFFF00); // orange
+    }
+    else if (end_alive == 2)
+    {
+        end_color = lv_color_hex(0xFF0000); // red
     }
 
     lv_label_set_text(start_label, LV_SYMBOL_WIFI);
-    lv_obj_set_style_text_color(start_label, start_alive ? lv_color_hex(0x00FF00) : lv_color_hex(0xFF0000), 0);
+    lv_obj_set_style_text_color(start_label, start_color, 0);
 
     lv_label_set_text(end_label, LV_SYMBOL_WIFI);
-    lv_obj_set_style_text_color(end_label, end_alive ? lv_color_hex(0x00FF00) : lv_color_hex(0xFF0000), 0);
+    lv_obj_set_style_text_color(end_label, end_color, 0);
 }
 
 void draw_sensor_status(bool *sensor_connected_left, bool *sensor_connected_right, int num_sensors_left, int num_sensors_right)
 {
-    draw_sensor_status_single(SENSOR_START, sensor_connected_left, num_sensors_left);
-    draw_sensor_status_single(SENSOR_STOP, sensor_connected_right, num_sensors_right);
+    draw_sensor_status_single(SENSOR_START, sensor_connected_left, num_sensors_left, false);
+    draw_sensor_status_single(SENSOR_STOP, sensor_connected_right, num_sensors_right, false);
 }
 
-void draw_sensor_status_single(int sensor, bool *status, int num)
+void draw_sensor_status_single(int sensor, bool *status, int num, bool is_trigger)
 {
     lv_obj_t *sensor_box = NULL;
     if (sensor == SENSOR_START)
@@ -720,8 +749,17 @@ void draw_sensor_status_single(int sensor, bool *status, int num)
         }
         else
         {
-            lv_label_set_text(text, LV_SYMBOL_CLOSE);
-            lv_obj_set_style_text_color(text, lv_color_hex(0xFF0000), 0); // red
+
+            if (is_trigger)
+            {
+                lv_label_set_text(text, LV_SYMBOL_SHUFFLE);
+                lv_obj_set_style_text_color(text, lv_color_hex(0x00aaFF), 0); // light blue
+            }
+            else
+            {
+                lv_label_set_text(text, LV_SYMBOL_CLOSE);
+                lv_obj_set_style_text_color(text, lv_color_hex(0xFF0000), 0); // red
+            }
         }
         lv_obj_set_style_text_font(text, &lv_font_montserrat_20, 0);
         lv_obj_align(text, LV_ALIGN_TOP_MID, 0, i * 25);
@@ -789,6 +827,6 @@ void resetCountdown()
 void displayFault(int start, int stop)
 {
     lvgl_port_lock(-1);
-    draw_connection_status(!start, !stop);
+    draw_connection_status(start, stop);
     lvgl_port_unlock();
 }

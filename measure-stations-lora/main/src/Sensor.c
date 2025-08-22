@@ -121,6 +121,18 @@ void Sensor_Interrupt_Task(void *params)
                         PacketTypeTrigger trigger;
                         trigger.timestamp = timestamp;
 
+                        PacketTypeSensorState sensors_state;
+                        sensors_state.num_sensors = sizeof(sensorPins) / sizeof(int);
+                        sensors_state.sensor_states = 0;
+
+                        for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
+                        {
+                            int level = gpio_get_level(sensorPins[i]);
+                            sensors_state.sensor_states |= ((uint64_t)level << i);
+                        }
+                        sensors_state.sensor_states = ~sensors_state.sensor_states;
+                        trigger.sensor_state = sensors_state;
+
                         DogDogPacket *packet = create_dogdog_packet_from_trigger_information(&trigger);
                         send_dogdog_packet(packet);
 
@@ -270,7 +282,7 @@ void Sensor_Status_Task(void *params)
             last_state[i] = level;
         }
 
-        if (!newDataReceived || TIME_US(current_time) - TIME_US(last_time_sent) > 1000000)
+        if (!newDataReceived || TIME_US(current_time) - TIME_US(last_time_sent) > 2500000)
         {
             // invert the result
             sensors_state.sensor_states = ~sensors_state.sensor_states;

@@ -20,14 +20,15 @@ typedef struct SensorStatus
     int sensor;
     bool *status;
     int num_sensors;
+    bool is_trigger;
 } SensorStatus;
 
 typedef struct SevenSegmentDisplay
 {
     int time;
     int type;
-    int startFault;            // 1 = Fault
-    int stopFault;             // 1 = Fault
+    int startFault;            // 1 = Bad Signal; 2 = Fault
+    int stopFault;             // 1 = Bad Signal; 2 = Fault
     SensorStatus sensorStatus; // Used for SEVEN_SEGMENT_SENSOR_STATUS
 } SevenSegmentDisplay;
 
@@ -57,9 +58,9 @@ void cleanup_lcd_resources();
 void handleCountdown(SevenSegmentDisplay toDisplay);
 void draw_vertical_line(int x_pos);
 void draw_sensor_status(bool *sensor_connected_left, bool *sensor_connected_right, int num_sensors_left, int num_sensors_right);
-void draw_sensor_status_single(int sensor, bool *status, int num);
+void draw_sensor_status_single(int sensor, bool *status, int num, bool is_trigger);
 void draw_line(int x1, int y1, int x2, int y2);
-void draw_connection_status(bool start_alive, bool end_alive);
+void draw_connection_status(int start_alive, int end_alive);
 void add_to_history();
 void draw_history_element(HistoryEntry *entry, int index);
 /* Adapt to LCD */

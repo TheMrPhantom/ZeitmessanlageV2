@@ -41,21 +41,22 @@ typedef struct PacketTypeTimeSync
     int64_t timestamp;
 } PacketTypeTimeSync;
 
+typedef struct PacketTypeSensorState
+{
+    uint8_t num_sensors;
+    uint64_t sensor_states; // Bitfield of sensor states, 0 for inactive, 1 for active
+} PacketTypeSensorState;
+
 typedef struct PacketTypeTrigger
 {
     int64_t timestamp;
+    PacketTypeSensorState sensor_state;
 } PacketTypeTrigger;
 
 typedef struct PacketTypeFinalTime
 {
     int64_t timestamp;
 } PacketTypeFinalTime;
-
-typedef struct PacketTypeSensorState
-{
-    uint8_t num_sensors;
-    uint64_t sensor_states; // Bitfield of sensor states, 0 for inactive, 1 for active
-} PacketTypeSensorState;
 
 typedef struct PacketTypeAck
 {
