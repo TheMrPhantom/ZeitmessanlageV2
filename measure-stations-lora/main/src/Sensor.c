@@ -100,7 +100,7 @@ void Sensor_Interrupt_Task(void *params)
         {
             ESP_LOGI(TAG, "Checking interrupt of Pin: %i", pinNumber);
 
-            vTaskDelay(pdMS_TO_TICKS(3));
+            // vTaskDelay(pdMS_TO_TICKS(3));
 
             if (gpio_get_level(pinNumber) == 1)
             {
@@ -110,9 +110,27 @@ void Sensor_Interrupt_Task(void *params)
                     if (!fault)
                     {
                         int cause = 0;
-                        lastTriggerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
+
                         ESP_LOGI(TAG, "Interrupt of Pin: %i", pinNumber);
 
+                        int num_triggered_sensors = 0;
+                        // Check if at least 2 sensors are triggered
+                        for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
+                        {
+                            if (gpio_get_level(sensorPins[i]) == 1)
+                            {
+                                num_triggered_sensors++;
+                            }
+                        }
+
+                        if (num_triggered_sensors < 2)
+                        {
+                            ESP_LOGW(TAG, "Not enough sensors triggered");
+                            continue;
+                        }
+
+                        lastTriggerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
+                        
                         timeval_t current_time;
                         gettimeofday(&current_time, NULL);
 
