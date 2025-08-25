@@ -41,6 +41,7 @@ const int sensorPins[] = {GPIO_NUM_2, GPIO_NUM_15, GPIO_NUM_16, GPIO_NUM_17, GPI
 const int sensorCooldown = 3500;
 const int faultCooldown = 3000;
 extern int64_t time_offset_to_controller;
+timeval_t last_time_sent;
 
 int faultTime = 0;
 bool faultWarning = false;
@@ -130,7 +131,7 @@ void Sensor_Interrupt_Task(void *params)
                         }
 
                         lastTriggerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
-                        
+
                         timeval_t current_time;
                         gettimeofday(&current_time, NULL);
 
@@ -150,6 +151,8 @@ void Sensor_Interrupt_Task(void *params)
                         }
                         sensors_state.sensor_states = ~sensors_state.sensor_states;
                         trigger.sensor_state = sensors_state;
+
+                        gettimeofday(&last_time_sent, NULL);
 
                         DogDogPacket *packet = create_dogdog_packet_from_trigger_information(&trigger);
                         send_dogdog_packet(packet);
@@ -228,7 +231,6 @@ void Sensor_Status_Task(void *params)
 
     timeval_t last_time_clean[sizeof(sensorPins) / sizeof(int)];
     timeval_t current_time;
-    timeval_t last_time_sent;
     gettimeofday(&last_time_sent, NULL);
     bool last_state[sizeof(sensorPins) / sizeof(int)];
     for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
@@ -300,7 +302,7 @@ void Sensor_Status_Task(void *params)
             last_state[i] = level;
         }
 
-        if (!newDataReceived || TIME_US(current_time) - TIME_US(last_time_sent) > 2500000)
+        if (!newDataReceived || TIME_US(current_time) - TIME_US(last_time_sent) > 4500000)
         {
             // invert the result
             sensors_state.sensor_states = ~sensors_state.sensor_states;

@@ -30,7 +30,7 @@ int last_stop_state = 2;
 void Network_Fault_Task(void *params)
 {
 
-    const int timeoutTime = pdMS_TO_TICKS(7000);
+    const int timeoutTime = pdMS_TO_TICKS(8000);
 
     int64_t lastSeenStart = -timeoutTime;
     int64_t lastSeenStop = -timeoutTime;

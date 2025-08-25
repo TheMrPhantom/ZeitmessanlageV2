@@ -93,7 +93,7 @@ void app_main(void)
     init_lora();
 
     xTaskCreate(Timer_Task, "Timer_Task", 4048, NULL, 12, NULL);
-    xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 4048, NULL, 7, NULL);
+    xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 4048, NULL, 9, NULL);
     xTaskCreatePinnedToCore(Seven_Segment_Task, "Seven_Segment_Task", 16096, NULL, 8, NULL, 1);
     xTaskCreate(Buzzer_Task, "Buzzer_Task", 4048, NULL, 7, NULL);
 
