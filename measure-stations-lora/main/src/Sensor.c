@@ -37,7 +37,7 @@ QueueHandle_t sensorStatusQueue;
 TaskHandle_t sensorTask;
 
 char *TAG = "SENSOR";
-const int sensorPins[] = {GPIO_NUM_20};
+const int sensorPins[] = {GPIO_NUM_2, GPIO_NUM_15, GPIO_NUM_16, GPIO_NUM_17, GPIO_NUM_18, GPIO_NUM_19, GPIO_NUM_21, GPIO_NUM_14, GPIO_NUM_15, GPIO_NUM_26};
 const int sensorCooldown = 3500;
 const int faultCooldown = 3000;
 extern int64_t time_offset_to_controller;

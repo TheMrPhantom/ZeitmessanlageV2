@@ -106,10 +106,7 @@ PacketTypeSensorState *create_sensor_state_information(DogDogPacket *packet)
     // first byte of the packet payload is the number of sensors
     packet_type->num_sensors = packet->payload[0];
     // remaining bytes are the sensor states
-    for (int i = 0; i < packet_type->num_sensors; i++)
-    {
-        packet_type->sensor_states |= ((uint64_t)packet->payload[i + 1] << i);
-    }
+    packet_type->sensor_states = *((uint64_t *)(packet->payload + 1));
     return packet_type;
 }
 
