@@ -12,6 +12,7 @@
 #include "freertos/semphr.h"
 #include "Keyboard.h"
 #include "GPIOPins.h"
+#include "LoraNetwork.h"
 
 const char *SEVEN_SEGMENT_TAG = "SevenSegment";
 

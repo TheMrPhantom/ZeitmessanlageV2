@@ -48,6 +48,7 @@
 #include "esp-idf-ds3231.h"
 #include "GPIOPins.h"
 #include "Clock.h"
+#include "Lora.h"
 
 QueueHandle_t sensorInterputQueue;
 QueueHandle_t resetQueue;
@@ -59,7 +60,6 @@ QueueHandle_t sendQueue;
 QueueHandle_t buzzerQueue;
 QueueSetHandle_t triggerAndResetQueue;
 TaskHandle_t buttonTask;
-QueueHandle_t loraSendQueue;
 
 static const char *TAG = "Main";
 
@@ -69,6 +69,7 @@ void app_main(void)
     // Initialize LoRa
     nvs_flash_init();
     gpio_install_isr_service(0);
+    InitLoraHandlers(HandleReceivedPacket);
 
     ESP_LOGI(TAG, "Starting...");
 
@@ -80,7 +81,6 @@ void app_main(void)
     timeQueue = xQueueCreate(1, sizeof(int));
     sendQueue = xQueueCreate(50, sizeof(char *));
     buzzerQueue = xQueueCreate(10, sizeof(int));
-    loraSendQueue = xQueueCreate(20, sizeof(DogDogPacket *));
     triggerAndResetQueue = xQueueCreateSet(2);
     xQueueAddToSet(triggerQueue, triggerAndResetQueue);
     xQueueAddToSet(resetQueue, triggerAndResetQueue);

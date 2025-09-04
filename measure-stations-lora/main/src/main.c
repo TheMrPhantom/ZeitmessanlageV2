@@ -16,7 +16,7 @@
 #include "driver/gpio.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
-
+#include "Lora.h"
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -35,7 +35,6 @@ QueueHandle_t buzzerQueue;
 QueueHandle_t faultQueue;
 QueueSetHandle_t networkAndResetQueue;
 QueueHandle_t sendQueue;
-QueueHandle_t loraSendQueue;
 
 TaskHandle_t networkTask;
 
@@ -43,13 +42,13 @@ void app_main(void)
 {
     const char *TAG = "MAIN";
     ESP_LOGI(TAG, "Starting...");
+    InitLoraHandlers(HandleReceivedPacket);
 
     sensorInterputQueue = xQueueCreate(1, sizeof(int));
     triggerQueue = xQueueCreate(1, sizeof(int));
     buzzerQueue = xQueueCreate(5, sizeof(int));
     faultQueue = xQueueCreate(5, sizeof(int));
     sendQueue = xQueueCreate(50, sizeof(char *));
-    loraSendQueue = xQueueCreate(40, sizeof(DogDogPacket *));
 
     gpio_install_isr_service(0);
     init_lora();

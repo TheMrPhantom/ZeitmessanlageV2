@@ -1,0 +1,29 @@
+menu "LORA Pin Configuration"
+	config LORA_GPIO_MISO
+		int "LORA MISO Pin"
+		default 13
+	config LORA_GPIO_MOSI
+		int "LORA MOSI Pin"
+		default 11
+	config LORA_GPIO_SCLK
+		int "LORA SCLK Pin"
+		default 12
+	config LORA_GPIO_NSS
+		int "LORA NSS Pin"
+		default 40
+	config LORA_GPIO_RST
+		int "LORA RESET Pin"
+		default 7
+	config LORA_GPIO_BUSY
+		int "LORA BUSY Pin"
+		default 9
+	config LORA_GPIO_TXEN
+		int "LORA TXEN Pin"
+		default 5
+	config LORA_GPIO_RXEN
+		int "LORA RXEN Pin"
+		default 4
+	config LORA_GPIO_DIO1
+		int "LORA DIO1 Pin"
+		default 6
+endmenu

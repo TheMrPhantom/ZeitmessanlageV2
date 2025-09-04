@@ -3,7 +3,6 @@
 
 #include "freertos/FreeRTOS.h"
 #include <sys/time.h>
-#include "SevenSegment.h"
 
 #define CONTROLLER_ID 0x01
 #define START_ID 0x02
@@ -21,6 +20,17 @@
 #define LORA_FINAL_TIME 0x04
 #define LORA_SENSOR_STATE 0x05
 #define LORA_ACK 0x06
+
+typedef struct SensorStatus
+{
+    int sensor;
+    bool *status;
+    int num_sensors;
+    bool is_trigger;
+} SensorStatus;
+
+#define SENSOR_START 0
+#define SENSOR_STOP 1
 
 typedef struct DogDogPacket
 {
@@ -98,5 +108,6 @@ void LoraReceiveTask(void *pvParameters);
 void LoraSendTask(void *pvParameters);
 void LoraSyncTask(void *pvParameters);
 void HandleReceivedPacket(DogDogPacket *packet);
-
+void ResendTask(void *pvParameters);
+void InitLoraHandlers(void (*function)(DogDogPacket *packet));
 #endif // __LORA_NETWORK_H

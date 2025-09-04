@@ -14,14 +14,7 @@
 #include "esp_lcd_touch_cst816s.h"
 #include <esp_system.h>
 #include "soc/soc.h"
-
-typedef struct SensorStatus
-{
-    int sensor;
-    bool *status;
-    int num_sensors;
-    bool is_trigger;
-} SensorStatus;
+#include "LoraNetwork.h"
 
 typedef struct SevenSegmentDisplay
 {
@@ -85,9 +78,6 @@ void reset_btn_event_cb(lv_event_t *e);
 #define SEVEN_SEGMENT_INCREASE_REFUSAL 7
 #define SEVEN_SEGMENT_RESET_FAULT_REFUSAL 8
 #define SEVEN_SEGMENT_DIS 9
-
-#define SENSOR_START 0
-#define SENSOR_STOP 1
 
 /* LCD size */
 #define LCD_H_RES (480)
