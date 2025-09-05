@@ -6,3 +6,4 @@ typedef struct timeval timeval_t;
 void Sensor_Interrupt_Task(void *params);
 void Sensor_Status_Task(void *params);
 void init_Pins();
+int get_num_sensors();

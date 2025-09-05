@@ -7,18 +7,8 @@ QueueHandle_t timePrintQueue;
 static void IRAM_ATTR rtc_sqw_isr_handler(void *arg)
 {
     rtc_time += 1000000;
-    // print difference between what will be set and the real time
-    timeval_t current;
-    gettimeofday(&current, NULL);
-    int64_t time_since_initial = TIME_US(current) - rtc_time;
-
-    // set clock to rtc
-    timeval_t now;
-    now.tv_sec = rtc_time / 1000000;
-    now.tv_usec = rtc_time % 1000000;
-    settimeofday(&now, NULL);
-
-    xQueueSendFromISR(timePrintQueue, &time_since_initial, 0);
+    // Notify task to perform time sync and logging
+    xQueueSendFromISR(timePrintQueue, &rtc_time, 0);
 }
 
 void init_external_clock()
@@ -71,10 +61,23 @@ void ClockTask(void *arg)
 {
     while (true)
     {
-        int64_t difference = 0;
-        if (xQueueReceive(timePrintQueue, &difference, pdMS_TO_TICKS(2000)))
+        int64_t new_rtc_time = 0;
+        if (xQueueReceive(timePrintQueue, &new_rtc_time, pdMS_TO_TICKS(2000)))
         {
-            ESP_LOGI(pcTaskGetName(NULL), "Time difference: %lld", difference);
+            // Synchronize time and log difference
+
+            timeval_t current;
+            gettimeofday(&current, NULL);
+
+            int64_t time_since_initial = TIME_US(current) - new_rtc_time;
+
+            timeval_t now;
+            now.tv_sec = new_rtc_time / 1000000;
+            now.tv_usec = new_rtc_time % 1000000;
+
+            settimeofday(&now, NULL);
+
+            ESP_LOGI(pcTaskGetName(NULL), "Time difference: %lld", time_since_initial);
         }
     }
 }

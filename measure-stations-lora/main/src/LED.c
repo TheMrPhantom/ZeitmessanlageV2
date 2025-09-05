@@ -15,10 +15,12 @@ static const char *TAG = "LED";
 led_strip_handle_t led_handle;
 bool led_on_off = false;
 
-extern TaskHandle_t sensorTask;
+int number_of_leds = 0;
 
 void init_led(int num_leds)
 {
+    ESP_LOGI(TAG, "Initializing LED strip");
+    number_of_leds = num_leds;
     // LED strip general initialization, according to your led board design
     led_strip_config_t strip_config = {
         .strip_gpio_num = LED_STRIP_GPIO_PIN,                        // The GPIO that connected to the LED strip's data line
@@ -58,10 +60,12 @@ void set_led(uint8_t led, uint8_t r, uint8_t g, uint8_t b)
     ESP_ERROR_CHECK(led_strip_refresh(led_handle));
 }
 
-void LED_Task(void *params)
+void set_all_leds(uint8_t r, uint8_t g, uint8_t b)
 {
-    int num_leds = *((int *)params);
-    init_led(num_leds);
-    xTaskNotifyGive(sensorTask);
-    vTaskDelete(NULL);
+    for (int i = 0; i < number_of_leds; i++)
+    {
+        ESP_ERROR_CHECK(led_strip_set_pixel(led_handle, i, r, g, b));
+    }
+    /* Refresh the strip to send data */
+    ESP_ERROR_CHECK(led_strip_refresh(led_handle));
 }

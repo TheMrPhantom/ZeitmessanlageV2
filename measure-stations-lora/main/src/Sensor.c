@@ -34,8 +34,6 @@ extern QueueHandle_t faultQueue;
 extern QueueHandle_t loraSendQueue;
 QueueHandle_t sensorStatusQueue;
 
-TaskHandle_t sensorTask;
-
 char *TAG = "SENSOR";
 const int sensorPins[] = {GPIO_NUM_2, GPIO_NUM_15, GPIO_NUM_16, GPIO_NUM_17, GPIO_NUM_18, GPIO_NUM_19, GPIO_NUM_21, GPIO_NUM_14, GPIO_NUM_15, GPIO_NUM_26};
 const int sensorCooldown = 3500;
@@ -46,6 +44,11 @@ timeval_t last_time_sent;
 int faultTime = 0;
 bool faultWarning = false;
 bool fault = false;
+
+int get_num_sensors()
+{
+    return sizeof(sensorPins) / sizeof(int);
+}
 
 static void IRAM_ATTR gpio_interrupt_handler(void *args)
 {
@@ -86,10 +89,14 @@ void Sensor_Interrupt_Task(void *params)
 {
     ESP_LOGI(TAG, "Setting up Sensors");
     init_Pins();
+
     sensorStatusQueue = xQueueCreate(1, sizeof(char *));
-    xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 2048 * 2, NULL, 1, &sensorTask);
-    int numPins = sizeof(sensorPins) / sizeof(int);
-    xTaskCreate(LED_Task, "LED_Task", 4048, &numPins, 1, NULL);
+
+    ESP_LOGI(TAG, "Waiting for time sync...");
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    ESP_LOGI(TAG, "Time synced!");
+
+    xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 2048 * 2, NULL, 1, NULL);
     // Wait for led
 
     int pinNumber = 0;
@@ -238,13 +245,7 @@ void Sensor_Status_Task(void *params)
         gettimeofday(&last_time_clean[i], NULL);
         last_state[i] = gpio_get_level(sensorPins[i]);
     }
-
-    ESP_LOGI(TAG, "Waiting for LED Task");
-
-    // Wait for led task notification
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-
-    ESP_LOGI(TAG, "LED Task is ready");
+    xQueueSend(sensorStatusQueue, &(int){0}, 0); // Send initial message to trigger status update
 
     while (true)
     {

@@ -104,5 +104,5 @@ void app_main(void)
     xTaskCreate(Button_Input_Task, "Button_Input_Task", 8192, NULL, 8, NULL);
     xTaskCreate(Button_Task, "Button_Task", 8192, NULL, 3, &buttonTask);
 
-    // xTaskCreate(ClockTask, "ClockTask", 4048, NULL, 1, NULL);
+    xTaskCreate(ClockTask, "ClockTask", 4048, NULL, 24, NULL);
 }

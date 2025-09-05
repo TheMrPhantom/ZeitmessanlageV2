@@ -24,6 +24,7 @@ void (*handle_dogdog_packet)(DogDogPacket *packet) = NULL;
 QueueHandle_t loraSendQueue;
 QueueHandle_t localReceiveTimestampQueue;
 QueueHandle_t ackQueue;
+QueueHandle_t loraInterruptQueue;
 
 DogDogPacket *create_dogdog_packet_from_bytes(uint8_t *data, uint16_t length)
 {
@@ -313,10 +314,31 @@ BaseType_t send_dogdog_packet(DogDogPacket *packet)
     return pdFAIL;
 }
 
+void LoraInterruptTask(void *pvParameters)
+{
+    while (true)
+    {
+        int i = 0;
+        if (xQueueReceive(loraInterruptQueue, &i, portMAX_DELAY))
+        {
+            timeval_t timestamp;
+            gettimeofday(&timestamp, NULL);
+            int64_t local_time_received = TIME_US(timestamp);
+            BaseType_t sent = xQueueSendFromISR(localReceiveTimestampQueue, &local_time_received, NULL);
+            if (sent != pdTRUE)
+            {
+                ESP_LOGW(pcTaskGetName(NULL), "Warning: localReceiveTimestampQueue full, timestamp lost");
+            }
+        }
+    }
+}
+
 void init_lora(void)
 {
-
+    ESP_LOGI("LORA", "Initializing LoRa");
     loraSendQueue = xQueueCreate(40, sizeof(DogDogPacket *));
+    loraInterruptQueue = xQueueCreate(10, sizeof(int));
+    xTaskCreate(LoraInterruptTask, "LoraInterruptTask", 8192, NULL, 24, NULL);
     LoRaInit();
     int8_t txPowerInDbm = 22;
     uint32_t frequencyInHz = 868000000;
@@ -368,18 +390,8 @@ int create_bytes_from_dogdog_packet(DogDogPacket *packet, uint8_t *buf, size_t b
 
 static void IRAM_ATTR lora_module_rx_isr(void *arg)
 {
-    // You can add your interrupt handling code here
-    uint32_t gpio_num = (uint32_t)arg;
-    // For example, just log the interrupt (avoid heavy processing in ISR)
-    // ets_printf("GPIO Interrupt on GPIO %d\n", gpio_num);
-    timeval_t timestamp;
-    gettimeofday(&timestamp, NULL);
-    int64_t local_time_received = TIME_US(timestamp);
-    BaseType_t sent = xQueueSendFromISR(localReceiveTimestampQueue, &local_time_received, NULL);
-    if (sent != pdTRUE)
-    {
-        ESP_LOGW(pcTaskGetName(NULL), "Warning: localReceiveTimestampQueue full, timestamp lost");
-    }
+    int i = 0;
+    xQueueSendFromISR(loraInterruptQueue, &i, NULL);
 }
 
 void LoraReceiveTask(void *pvParameters)

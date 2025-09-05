@@ -1,5 +1,6 @@
 #include "LoraNetwork.h"
 #include "esp_log.h"
+#include "LED.h"
 
 extern QueueHandle_t loraSendQueue;
 extern QueueHandle_t localReceiveTimestampQueue;
@@ -13,6 +14,9 @@ extern int64_t timesync_received_time;
 extern int64_t timesync_processing_time;
 extern int64_t time_of_controller;
 extern portMUX_TYPE timesync_spinlock;
+
+extern TaskHandle_t sensorInterruptTaskHandle;
+bool is_time_synced = false;
 
 void HandleReceivedPacket(DogDogPacket *packet)
 {
@@ -35,6 +39,20 @@ void HandleReceivedPacket(DogDogPacket *packet)
 
         // Normal operation again
         taskEXIT_CRITICAL(&timesync_spinlock);
+
+        if (!is_time_synced)
+        {
+            while (sensorInterruptTaskHandle == NULL)
+            {
+                ESP_LOGW(pcTaskGetName(NULL), "Sensor interrupt task handle not set yet, waiting...");
+                vTaskDelay(pdMS_TO_TICKS(100));
+            }
+            ESP_LOGI(pcTaskGetName(NULL), "Time sync completed");
+
+            xTaskNotifyGive(sensorInterruptTaskHandle);
+            is_time_synced = true;
+            set_all_leds(0, 0, 0); // Turn off all leds after time sync
+        }
 
         // ESP_LOGI(pcTaskGetName(NULL), "Current offset: %" PRId64, time_offset_to_controller);
 
