@@ -37,7 +37,7 @@ TaskHandle_t sensorTask;
 
 char *TAG = "SENSOR";
 const int sensorPins[] = {22};
-const int sensorCooldown = 3500;
+const int sensorCooldown = 100;
 const int faultCooldown = 3000;
 
 int faultTime = 0;

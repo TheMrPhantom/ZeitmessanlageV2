@@ -112,7 +112,7 @@ void receiveCallback(const esp_now_recv_info_t *esp_now_info, const uint8_t *dat
         xQueueSend(networkFaultQueue, &toSend, 0);
 
         // Protect against triggering 2 times when receiving forwarded message
-        if (pdTICKS_TO_MS(xTaskGetTickCount()) - lastStopTriggerReceived > 2000)
+        if (pdTICKS_TO_MS(xTaskGetTickCount()) - lastStopTriggerReceived > 300)
         {
             int cause = TRIGGER_STOP;
             xQueueSend(triggerQueue, &cause, 0);

@@ -35,8 +35,8 @@ extern QueueHandle_t loraSendQueue;
 QueueHandle_t sensorStatusQueue;
 
 char *TAG = "SENSOR";
-const int sensorPins[] = {GPIO_NUM_2, GPIO_NUM_15, GPIO_NUM_16, GPIO_NUM_17, GPIO_NUM_18, GPIO_NUM_19, GPIO_NUM_21, GPIO_NUM_14, GPIO_NUM_15, GPIO_NUM_26};
-const int sensorCooldown = 3500;
+const int sensorPins[] = {GPIO_NUM_15, GPIO_NUM_16, GPIO_NUM_17, GPIO_NUM_18, GPIO_NUM_8, GPIO_NUM_19, GPIO_NUM_20, GPIO_NUM_39, GPIO_NUM_38, GPIO_NUM_37}; // GPIO pins for the sensors
+const int sensorCooldown = 1500;
 const int faultCooldown = 3000;
 extern int64_t time_offset_to_controller;
 timeval_t last_time_sent;
@@ -55,7 +55,7 @@ static void IRAM_ATTR gpio_interrupt_handler(void *args)
     int pinNumber = (int)args;
     // read pin state
     int pinState = gpio_get_level(pinNumber);
-    if (pinState == 1)
+    if (pinState == 0)
     {
         xQueueSendFromISR(sensorInterputQueue, &pinNumber, NULL);
     }
@@ -110,7 +110,7 @@ void Sensor_Interrupt_Task(void *params)
 
             // vTaskDelay(pdMS_TO_TICKS(3));
 
-            if (gpio_get_level(pinNumber) == 1)
+            if (gpio_get_level(pinNumber) == 0)
             {
                 ESP_LOGI(TAG, "Confirmed interrupt of Pin: %i", pinNumber);
                 if (lastTriggerTime < (int)pdTICKS_TO_MS(xTaskGetTickCount()) - sensorCooldown)
@@ -125,7 +125,7 @@ void Sensor_Interrupt_Task(void *params)
                         // Check if at least 2 sensors are triggered
                         for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
                         {
-                            if (gpio_get_level(sensorPins[i]) == 1)
+                            if (gpio_get_level(sensorPins[i]) == 0)
                             {
                                 num_triggered_sensors++;
                             }
@@ -154,6 +154,7 @@ void Sensor_Interrupt_Task(void *params)
                         for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
                         {
                             int level = gpio_get_level(sensorPins[i]);
+                            level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
                             sensors_state.sensor_states |= ((uint64_t)level << i);
                         }
                         sensors_state.sensor_states = ~sensors_state.sensor_states;
@@ -183,6 +184,7 @@ void Sensor_Interrupt_Task(void *params)
             for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
             {
                 int level = gpio_get_level(sensorPins[i]);
+                level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
                 currentFaults += level;
             }
 
@@ -243,7 +245,9 @@ void Sensor_Status_Task(void *params)
     for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
     {
         gettimeofday(&last_time_clean[i], NULL);
-        last_state[i] = gpio_get_level(sensorPins[i]);
+        int level = gpio_get_level(sensorPins[i]);
+        level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
+        last_state[i] = level;
     }
     xQueueSend(sensorStatusQueue, &(int){0}, 0); // Send initial message to trigger status update
 
@@ -256,7 +260,9 @@ void Sensor_Status_Task(void *params)
         bool any_tiggered = 0;
         for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
         {
-            any_tiggered |= gpio_get_level(sensorPins[i]);
+            int level = gpio_get_level(sensorPins[i]);
+            level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
+            any_tiggered |= level;
         }
 
         PacketTypeSensorState sensors_state;
@@ -265,32 +271,21 @@ void Sensor_Status_Task(void *params)
 
         for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
         {
+
             int level = gpio_get_level(sensorPins[i]);
+            level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
             sensors_state.sensor_states |= ((uint64_t)level << i);
 
-            if (any_tiggered)
+            if (level == 1)
             {
-                // Set led to green if 0 and red if 1
-
-                if (level == 0)
-                {
-                    set_led(i, 0, 150, 0); // Set LED to green
-                    gettimeofday(&last_time_clean[i], NULL);
-                }
-                else
-                {
-                    set_led(i, 150, 0, 0); // Set LED to red
-                }
+                gettimeofday(&last_time_clean[i], NULL);
             }
-            else
-            {
-                if (level == 0 && last_state[i] == 1)
-                {
-                    gettimeofday(&last_time_clean[i], NULL);
-                }
 
-                gettimeofday(&current_time, NULL);
-                // If no sensor is triggered, turn off the LED if it was previously on for 8 seconds
+            gettimeofday(&current_time, NULL);
+            // If no sensor is triggered, turn off the LED if it was previously on for 8 seconds
+
+            if (level == 0)
+            {
                 if (TIME_US(current_time) - TIME_US(last_time_clean[i]) > 8000000)
                 {
                     set_led(i, 0, 0, 0); // Turn off LED
@@ -300,6 +295,11 @@ void Sensor_Status_Task(void *params)
                     set_led(i, 0, 150, 0); // Set LED to green
                 }
             }
+            else
+            {
+                set_led(i, 150, 0, 0); // Set LED to red
+            }
+
             last_state[i] = level;
         }
 

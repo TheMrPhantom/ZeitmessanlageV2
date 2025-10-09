@@ -59,14 +59,7 @@ void app_main(void)
     xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 24, NULL);
     xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 12, NULL);
 
-    // Waiting for time sync before starting other tasks
-
-    // Set all leds to purple while waiting for time sync
-    // set_all_leds(255, 0, 255);
-
-    // set_all_leds(0, 0, 0);
-
-    // xTaskCreate(Buzzer_Task, "Buzzer_Task", 8192, NULL, 12, NULL);
+    xTaskCreate(Buzzer_Task, "Buzzer_Task", 8192, NULL, 12, NULL);
     xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 8192 * 2, NULL, 3, &sensorInterruptTaskHandle);
 
     int buzzerType = BUZZER_STARTUP;

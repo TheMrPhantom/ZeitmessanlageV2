@@ -16,6 +16,7 @@ led_strip_handle_t led_handle;
 bool led_on_off = false;
 
 int number_of_leds = 0;
+float brightness = 0.5;
 
 void init_led(int num_leds)
 {
@@ -54,7 +55,7 @@ void set_led(uint8_t led, uint8_t r, uint8_t g, uint8_t b)
 
     /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
 
-    ESP_ERROR_CHECK(led_strip_set_pixel(led_handle, led, r, g, b));
+    ESP_ERROR_CHECK(led_strip_set_pixel(led_handle, led, r * brightness, g * brightness, b * brightness));
 
     /* Refresh the strip to send data */
     ESP_ERROR_CHECK(led_strip_refresh(led_handle));

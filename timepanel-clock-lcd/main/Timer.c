@@ -22,7 +22,7 @@ int timerTriggerCause;
 int timerTime = 0;
 bool timerIsRunning = false;
 int lastTrigger = -1; // -1 means no trigger
-
+int lastTriggerManager = -1;
 void startTimer()
 {
     timerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
@@ -48,30 +48,38 @@ void Timer_Task(void *params)
             if (selectedQueue == triggerQueue)
             {
                 xQueueReceive(triggerQueue, &timerTriggerCause, 0);
-                ESP_LOGI(TIMER_TAG, "Received %i", timerTriggerCause);
+                ESP_LOGI(TIMER_TAG, "Received %i %i", timerTriggerCause, lastTriggerManager);
 
                 // The trigger was the sensor
-                if (!timerIsRunning)
+                if (!timerIsRunning && (timerTriggerCause == lastTriggerManager || lastTriggerManager == -1))
                 {
                     startTimer();
                     lastTrigger = timerTriggerCause;
+                    lastTriggerManager = timerTriggerCause;
                     int x = -1;
                     xQueueSend(timeQueue, &x, 0);
                     ESP_LOGI(TIMER_TAG, "Started timer");
                 }
                 else
                 {
-                    int timeElapsedLocal = (int)pdTICKS_TO_MS(xTaskGetTickCount()) - timerTime;
-                    stopTimer();
+                    if (timerTriggerCause != lastTriggerManager)
+                    {
+                        int timeElapsedLocal = (int)pdTICKS_TO_MS(xTaskGetTickCount()) - timerTime;
+                        stopTimer();
 
-                    xQueueSend(timeQueue, &timeElapsedLocal, 0);
+                        xQueueSend(timeQueue, &timeElapsedLocal, 0);
 
-                    SevenSegmentDisplay toSend;
-                    toSend.type = SEVEN_SEGMENT_SET_TIME;
-                    toSend.time = timeElapsedLocal;
-                    toSend.triggerStation = timerTriggerCause;
-                    xQueueSend(sevenSegmentQueue, &toSend, pdMS_TO_TICKS(500));
-                    ESP_LOGI(TIMER_TAG, "Stopped timer. Run was %ims", timeElapsedLocal);
+                        SevenSegmentDisplay toSend;
+                        toSend.type = SEVEN_SEGMENT_SET_TIME;
+                        toSend.time = timeElapsedLocal;
+                        toSend.triggerStation = timerTriggerCause;
+                        xQueueSend(sevenSegmentQueue, &toSend, pdMS_TO_TICKS(500));
+                        ESP_LOGI(TIMER_TAG, "Stopped timer. Run was %ims", timeElapsedLocal);
+                    }
+                    else
+                    {
+                        ESP_LOGW(TIMER_TAG, "Ignoring trigger from same station %i", timerTriggerCause);
+                    }
                 }
             }
             else if (selectedQueue == resetQueue)

@@ -559,6 +559,8 @@ void ResendTask(void *pvParameters)
         }
     }
 
+    ESP_LOGW(pcTaskGetName(NULL), "No ACK received for packet: %d, resending", waiting_for_ack->packet_id);
+
     xQueueSend(loraSendQueue, &waiting_for_ack, portMAX_DELAY);
 
     vTaskDelete(NULL);
