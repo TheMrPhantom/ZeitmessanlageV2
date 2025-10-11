@@ -128,6 +128,7 @@ BaseType_t sendKey(uint8_t keycode)
     }
     else
     {
+        ESP_LOGE(TAG, "USB not mounted, cannot send key");
         return pdFALSE;
     }
 }

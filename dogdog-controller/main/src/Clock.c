@@ -62,7 +62,7 @@ void ClockTask(void *arg)
     while (true)
     {
         int64_t new_rtc_time = 0;
-        if (xQueueReceive(timePrintQueue, &new_rtc_time, pdMS_TO_TICKS(2000)))
+        if (xQueueReceive(timePrintQueue, &new_rtc_time, portMAX_DELAY))
         {
             // Synchronize time and log difference
 

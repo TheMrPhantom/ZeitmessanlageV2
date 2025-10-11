@@ -34,6 +34,6 @@
 
 #define RTC_SCL (GPIO_NUM_1)
 #define RTC_SDA (GPIO_NUM_2)
-#define RTC_SQW (GPIO_NUM_20)
+#define RTC_SQW (GPIO_NUM_3)
 
 #define BUZZER_GPIO (GPIO_NUM_42)
