@@ -54,6 +54,7 @@ LV_IMG_DECLARE(hand);
 HistoryEntry history[4];
 int history_index = 0;
 bool isDis = false;
+extern bool sensors_active;
 
 void Seven_Segment_Task(void *params)
 {
@@ -469,18 +470,21 @@ void add_to_history()
 
     ESP_LOGI(SEVEN_SEGMENT_TAG, "History Entry - Time: %s, Fault: %s, Refusal: %s", time_text, fault_text, refusal_text);
 
-    // send time text to keyboard
-    if (!isDis)
+    if (sensors_active)
     {
-        sendKey(HID_KEY_TAB);
-        sendText(time_text);
-        sendKey(HID_KEY_ENTER);
-    }
-    else
-    {
-        sendKey(HID_KEY_TAB);
-        sendText("15.00");
-        sendKey(HID_KEY_ENTER);
+        // send time text to keyboard
+        if (!isDis)
+        {
+            sendKey(HID_KEY_TAB);
+            sendText(time_text);
+            sendKey(HID_KEY_ENTER);
+        }
+        else
+        {
+            sendKey(HID_KEY_TAB);
+            sendText("15.00");
+            sendKey(HID_KEY_ENTER);
+        }
     }
 
     // Add entry to history
