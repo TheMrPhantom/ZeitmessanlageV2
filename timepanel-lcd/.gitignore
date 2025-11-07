@@ -1,8 +1,0 @@
-build/**
-managed_components/**
-sdkconfig
-sdkconfig.ci
-.vscode
-sdkconfig.old
-dependencies.lock
-.devcontainer
