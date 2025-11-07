@@ -16,7 +16,7 @@ led_strip_handle_t led_handle;
 bool led_on_off = false;
 
 int number_of_leds = 0;
-float brightness = 0.5;
+float brightness = 1;
 
 void init_led(int num_leds)
 {

@@ -37,11 +37,12 @@ QueueHandle_t sensorStatusQueue;
 char *TAG = "SENSOR";
 const int sensorPins[] = {GPIO_NUM_15, GPIO_NUM_16, GPIO_NUM_17, GPIO_NUM_18, GPIO_NUM_8, GPIO_NUM_19, GPIO_NUM_20, GPIO_NUM_39, GPIO_NUM_38, GPIO_NUM_37}; // GPIO pins for the sensors
 const int sensorCooldown = 1500;
+
 const int faultCooldown = 3000;
 extern int64_t time_offset_to_controller;
 timeval_t last_time_sent;
 
-int faultTime = 0;
+uint64_t faultTime = 0;
 bool faultWarning = false;
 bool fault = false;
 
@@ -100,7 +101,7 @@ void Sensor_Interrupt_Task(void *params)
     // Wait for led
 
     int pinNumber = 0;
-    int lastTriggerTime = 0;
+    uint64_t lastTriggerTime = 0;
 
     while (true)
     {
@@ -113,7 +114,8 @@ void Sensor_Interrupt_Task(void *params)
             if (gpio_get_level(pinNumber) == 0)
             {
                 ESP_LOGI(TAG, "Confirmed interrupt of Pin: %i", pinNumber);
-                if (lastTriggerTime < (int)pdTICKS_TO_MS(xTaskGetTickCount()) - sensorCooldown)
+                uint64_t currentTickMs = pdTICKS_TO_MS(xTaskGetTickCount());
+                if (lastTriggerTime < currentTickMs - sensorCooldown)
                 {
                     if (!fault)
                     {
@@ -137,7 +139,7 @@ void Sensor_Interrupt_Task(void *params)
                             continue;
                         }
 
-                        lastTriggerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
+                        lastTriggerTime = pdTICKS_TO_MS(xTaskGetTickCount());
 
                         timeval_t current_time;
                         gettimeofday(&current_time, NULL);
@@ -196,13 +198,13 @@ void Sensor_Interrupt_Task(void *params)
             if (!faultWarning && !isCurrentlyGood)
             {
                 // Currently disconnected but not in warning state -> aktivate warning state
-                faultTime = xTaskGetTickCount();
+                faultTime = pdTICKS_TO_MS(xTaskGetTickCount());
                 faultWarning = true;
             }
 
             if (faultWarning)
             {
-                if (pdTICKS_TO_MS(xTaskGetTickCount()) - pdTICKS_TO_MS(faultTime) > faultCooldown && !fault)
+                if (pdTICKS_TO_MS(xTaskGetTickCount()) - faultTime > faultCooldown && !fault)
                 {
                     // Currently in warning state, timout reached but no fault activated yet -> go into fault state
                     fault = true;
@@ -292,12 +294,12 @@ void Sensor_Status_Task(void *params)
                 }
                 else
                 {
-                    set_led(i, 0, 150, 0); // Set LED to green
+                    set_led(i, 0, 255, 0); // Set LED to green
                 }
             }
             else
             {
-                set_led(i, 150, 0, 0); // Set LED to red
+                set_led(i, 255, 0, 0); // Set LED to red
             }
 
             last_state[i] = level;

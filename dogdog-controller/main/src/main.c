@@ -78,7 +78,7 @@ void app_main(void)
     triggerQueue = xQueueCreate(1, sizeof(TimerTrigger));
     networkFaultQueue = xQueueCreate(2, sizeof(StationConnectivityStatus));
     sevenSegmentQueue = xQueueCreate(10, sizeof(SevenSegmentDisplay));
-    timeQueue = xQueueCreate(1, sizeof(int));
+    timeQueue = xQueueCreate(1, sizeof(int64_t));
     sendQueue = xQueueCreate(50, sizeof(char *));
     buzzerQueue = xQueueCreate(10, sizeof(int));
     triggerAndResetQueue = xQueueCreateSet(2);

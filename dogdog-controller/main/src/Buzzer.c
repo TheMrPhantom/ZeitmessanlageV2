@@ -144,6 +144,10 @@ void Buzzer_Task(void *params)
             {
                 sound(sound_cH, 600);
             }
+            else if (input == BUZZER_BUTTON_PRESS)
+            {
+                sound(sound_g, 100);
+            }
         }
     }
 }

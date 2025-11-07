@@ -3,6 +3,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include <sys/time.h>
+#include "sdkconfig.h"
 
 #define CONTROLLER_ID 0x01
 #define START_ID 0x02
@@ -11,7 +12,6 @@
 // Packet Header
 #define LORA_MAGIC 0xDD09
 #define LORA_PROTOCOL_VERSION 0x01
-#define LORA_STATION_ID 0x02
 
 // Packet Types
 #define LORA_TIME_SYNC 0x01

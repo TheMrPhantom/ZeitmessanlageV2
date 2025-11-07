@@ -1,12 +1,10 @@
 menu "EDIT HERE: Zeitmessanlage configuration"
-    choice STATION_TYPE
-        prompt "What is the station type?"
-        default START
+    config LORA_STATION_ID
+        int "lora_station_id"
+        range 0 255
+        default 2
         help
-            Choose if the compiled code is for the start or the stop station
-        config START
-            bool "START"
-        config STOP
-            bool "STOP"
-    endchoice
+            Numeric station id used by LoRa communications. Must be an integer
+            between 0 and 255. This value will be available in code as
+            CONFIG_LORA_STATION_ID.
 endmenu

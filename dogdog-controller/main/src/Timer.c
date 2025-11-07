@@ -89,7 +89,7 @@ void Timer_Task(void *params)
                 }
                 else if (timerIsRunning /*&& timerTriggerCause.is_start != start_hurdle*/)
                 {
-                    int timeElapsedLocal = (timerTriggerCause.timestamp - timerTime) / 1000;
+                    int64_t timeElapsedLocal = (timerTriggerCause.timestamp - timerTime) / 1000;
                     stopTimer();
 
                     xQueueSend(timeQueue, &timeElapsedLocal, 0);
@@ -98,7 +98,7 @@ void Timer_Task(void *params)
                     toSend.type = SEVEN_SEGMENT_STORE_TO_HISTORY;
                     toSend.time = timeElapsedLocal;
                     xQueueSend(sevenSegmentQueue, &toSend, pdMS_TO_TICKS(500));
-                    ESP_LOGI(TIMER_TAG, "Stopped timer. Run was %ims", timeElapsedLocal);
+                    ESP_LOGI(TIMER_TAG, "Stopped timer. Run was %" PRId64 "ms", timeElapsedLocal);
                 }
                 else if (timerIsRunning && timerTriggerCause.is_start == start_hurdle)
                 {

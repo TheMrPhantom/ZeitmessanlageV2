@@ -15,6 +15,7 @@
 #include "Button.h"
 #include "GPIOPins.h"
 #include "SevenSegment.h"
+#include "Buzzer.h"
 
 #if CONFIG_START
 #define STATION_TYPE 0
@@ -26,6 +27,7 @@ extern QueueHandle_t sensorInterputQueue;
 extern QueueHandle_t buttonQueue;
 extern QueueHandle_t resetQueue;
 extern QueueHandle_t sevenSegmentQueue;
+extern QueueHandle_t buzzerQueue;
 static const char *TAG = "SENSOR";
 const int sensorButtonPins[] = {BUTTON_INPUT_GPIO_TYPE_ACTIVATE,
                                 BUTTON_INPUT_GPIO_TYPE_DIS,
@@ -156,6 +158,7 @@ void Button_Input_Task(void *params)
                             SevenSegmentDisplay toSendSevenSegment;
                             toSendSevenSegment.type = SEVEN_SEGMENT_INCREASE_FAULT;
                             xQueueSend(sevenSegmentQueue, &toSendSevenSegment, 0);
+                            xQueueSend(buzzerQueue, &(int){BUZZER_BUTTON_PRESS}, 0);
                             ESP_LOGI(TAG, "Result of sending key: %i", result);
                         }
                         else if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_REFUSAL)
@@ -164,6 +167,7 @@ void Button_Input_Task(void *params)
                             SevenSegmentDisplay toSendSevenSegment;
                             toSendSevenSegment.type = SEVEN_SEGMENT_INCREASE_REFUSAL;
                             xQueueSend(sevenSegmentQueue, &toSendSevenSegment, 0);
+                            xQueueSend(buzzerQueue, &(int){BUZZER_BUTTON_PRESS}, 0);
                             ESP_LOGI(TAG, "Result of sending key: %i", result);
                         }
                         else if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_DIS)
@@ -173,6 +177,7 @@ void Button_Input_Task(void *params)
                             SevenSegmentDisplay toSendSevenSegment;
                             toSendSevenSegment.type = SEVEN_SEGMENT_DIS;
                             xQueueSend(sevenSegmentQueue, &toSendSevenSegment, pdMS_TO_TICKS(500));
+                            xQueueSend(buzzerQueue, &(int){BUZZER_BUTTON_PRESS}, 0);
                         }
                     }
                     else

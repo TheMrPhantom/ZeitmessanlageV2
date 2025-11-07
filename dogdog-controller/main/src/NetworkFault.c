@@ -30,10 +30,14 @@ int last_stop_state = 2;
 void Network_Fault_Task(void *params)
 {
 
-    const int timeoutTime = pdMS_TO_TICKS(8000);
+    /* Use milliseconds for timeout to match TIME_US(now) / 1000 (which yields ms).
+        pdMS_TO_TICKS converts ms to RTOS ticks — mixing those with raw ms values
+        caused intermittent false faults. Keep timeoutMs in milliseconds and
+        compare ms against ms. */
+    const int64_t timeoutMs = 8000;
 
-    int64_t lastSeenStart = -timeoutTime;
-    int64_t lastSeenStop = -timeoutTime;
+    int64_t lastSeenStart = -timeoutMs;
+    int64_t lastSeenStop = -timeoutMs;
 
     while (1)
     {
@@ -57,10 +61,11 @@ void Network_Fault_Task(void *params)
         timeval_t now;
         gettimeofday(&now, NULL);
 
-        int currentTime = TIME_US(now) / 1000;
+        /* currentTime in milliseconds */
+        int64_t currentTime = TIME_US(now) / 1000;
 
-        bool startFault = currentTime - lastSeenStart > timeoutTime;
-        bool stopFault = currentTime - lastSeenStop > timeoutTime;
+        bool startFault = (currentTime - lastSeenStart) > timeoutMs;
+        bool stopFault = (currentTime - lastSeenStop) > timeoutMs;
 
         int to_send_for_start = startFault ? 2 : last_start_state;
         int to_send_for_stop = stopFault ? 2 : last_stop_state;

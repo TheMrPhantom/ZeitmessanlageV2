@@ -1,0 +1,39 @@
+#ifndef MAIN_H
+#define MAIN_H
+
+#include "esp_err.h"
+#include "esp_log.h"
+#include "esp_check.h"
+#include "driver/i2c.h"
+#include "driver/gpio.h"
+#include "driver/spi_master.h"
+#include "esp_lcd_panel_io.h"
+#include "esp_lcd_panel_vendor.h"
+#include "esp_lcd_panel_ops.h"
+#include "esp_lvgl_port.h"
+#include "lv_conf.h"
+#include "esp_lcd_touch_cst816s.h"
+#include <esp_system.h>
+#include "soc/soc.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "esp_chip_info.h"
+#include "esp_flash.h"
+#include "nvs_flash.h"
+#include "Timer.h"
+#include "SevenSegment.h"
+#include "NetworkFault.h"
+#include "KeyValue.h"
+#include "Buzzer.h"
+#include "Keyboard.h"
+#include "ButtonInput.h"
+#include "Button.h"
+#include "ra01s.h"
+#include "LoraNetwork.h"
+#include <stdio.h>
+#include "esp-idf-ds3231.h"
+#include "GPIOPins.h"
+#include "Clock.h"
+
+#endif // MAIN_H

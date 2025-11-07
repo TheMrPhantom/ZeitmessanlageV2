@@ -4,3 +4,4 @@ sdkconfig*
 build/
 managed_components/
 !sdkconfig.defaults
+*.debug

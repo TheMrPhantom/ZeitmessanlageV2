@@ -1,0 +1,11 @@
+## IDF Component Manager Manifest File
+dependencies:
+  espressif/esp_lcd_touch_cst816s: 1.0.3
+  lvgl/lvgl: ^8.4.0
+  espressif/esp_lvgl_port: ^2.3.3
+  espressif/esp_tinyusb: ^1.1
+  ## Required IDF version
+  idf:
+    version: '>=5.3.1'
+  esp-idf-lib/ds3231: ^1.1.7
+  jschwefel/esp-idf-ds3231: ^1.0.3

@@ -6,7 +6,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-
+#include "freertos/semphr.h"
 #include <driver/spi_master.h>
 #include <driver/gpio.h>
 #include "esp_log.h"
@@ -15,6 +15,7 @@
 #define TAG "RA01S"
 
 static spi_device_handle_t SpiHandle;
+static SemaphoreHandle_t spi_mutex = NULL;
 
 // Global Stuff
 static uint8_t PacketParams[6];
@@ -110,6 +111,17 @@ void LoRaInit(void)
 	ret = spi_bus_add_device(SPI2_HOST, &devcfg, &SpiHandle);
 	ESP_LOGI(TAG, "spi_bus_add_device=%d", ret);
 	assert(ret == ESP_OK);
+
+	// Create a mutex to protect spi_device_transmit from concurrent access
+	if (spi_mutex == NULL)
+	{
+		spi_mutex = xSemaphoreCreateMutex();
+		if (spi_mutex == NULL)
+		{
+			ESP_LOGE(TAG, "Failed to create SPI mutex");
+			assert(false);
+		}
+	}
 }
 
 void spi_write_byte(uint8_t *Dataout, size_t DataLength)
@@ -122,7 +134,22 @@ void spi_write_byte(uint8_t *Dataout, size_t DataLength)
 		SPITransaction.length = DataLength * 8;
 		SPITransaction.tx_buffer = Dataout;
 		SPITransaction.rx_buffer = NULL;
-		spi_device_transmit(SpiHandle, &SPITransaction);
+		if (spi_mutex)
+		{
+			if (xSemaphoreTake(spi_mutex, pdMS_TO_TICKS(2000)) == pdTRUE)
+			{
+				spi_device_transmit(SpiHandle, &SPITransaction);
+				xSemaphoreGive(spi_mutex);
+			}
+			else
+			{
+				ESP_LOGE(TAG, "Timeout taking SPI mutex in spi_write_byte");
+			}
+		}
+		else
+		{
+			spi_device_transmit(SpiHandle, &SPITransaction);
+		}
 	}
 
 	return;
@@ -138,7 +165,22 @@ void spi_read_byte(uint8_t *Datain, uint8_t *Dataout, size_t DataLength)
 		SPITransaction.length = DataLength * 8;
 		SPITransaction.tx_buffer = Dataout;
 		SPITransaction.rx_buffer = Datain;
-		spi_device_transmit(SpiHandle, &SPITransaction);
+		if (spi_mutex)
+		{
+			if (xSemaphoreTake(spi_mutex, pdMS_TO_TICKS(2000)) == pdTRUE)
+			{
+				spi_device_transmit(SpiHandle, &SPITransaction);
+				xSemaphoreGive(spi_mutex);
+			}
+			else
+			{
+				ESP_LOGE(TAG, "Timeout taking SPI mutex in spi_read_byte");
+			}
+		}
+		else
+		{
+			spi_device_transmit(SpiHandle, &SPITransaction);
+		}
 	}
 
 	return;

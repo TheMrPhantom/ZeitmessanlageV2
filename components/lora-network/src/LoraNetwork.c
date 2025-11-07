@@ -140,7 +140,7 @@ DogDogPacket *create_dogdog_packet_from_time_sync_information(PacketTypeTimeSync
 
     packet->magic = LORA_MAGIC;
     packet->protocol_version = LORA_PROTOCOL_VERSION;
-    packet->station_id = LORA_STATION_ID;
+    packet->station_id = CONFIG_LORA_STATION_ID;
     packet->packet_id = 0; // Set to 0 for now
     packet->type = LORA_TIME_SYNC;
     packet->payload_length = sizeof(int64_t);
@@ -167,7 +167,7 @@ DogDogPacket *create_dogdog_packet_from_trigger_information(PacketTypeTrigger *t
 
     packet->magic = LORA_MAGIC;
     packet->protocol_version = LORA_PROTOCOL_VERSION;
-    packet->station_id = LORA_STATION_ID;
+    packet->station_id = CONFIG_LORA_STATION_ID;
     packet->packet_id = 0; // Set to 0 for now
     packet->type = LORA_TRIGGER;
     packet->payload_length = sizeof(int64_t) + sizeof(PacketTypeSensorState);
@@ -195,7 +195,7 @@ DogDogPacket *create_dogdog_packet_from_final_time_information(PacketTypeFinalTi
 
     packet->magic = LORA_MAGIC;
     packet->protocol_version = LORA_PROTOCOL_VERSION;
-    packet->station_id = LORA_STATION_ID;
+    packet->station_id = CONFIG_LORA_STATION_ID;
     packet->packet_id = 0; // Set to 0 for now
     packet->type = LORA_FINAL_TIME;
     packet->payload_length = sizeof(int64_t);
@@ -222,7 +222,7 @@ DogDogPacket *create_dogdog_packet_from_sensor_state_information(PacketTypeSenso
 
     packet->magic = LORA_MAGIC;
     packet->protocol_version = LORA_PROTOCOL_VERSION;
-    packet->station_id = LORA_STATION_ID;
+    packet->station_id = CONFIG_LORA_STATION_ID;
     packet->packet_id = 0; // Set to 0 for now
     packet->type = LORA_SENSOR_STATE;
     packet->payload_length = sizeof(uint8_t) + sizeof(uint64_t);
@@ -251,7 +251,7 @@ DogDogPacket *create_dogdog_packet_from_ack_information(PacketTypeAck *ack)
 
     packet->magic = LORA_MAGIC;
     packet->protocol_version = LORA_PROTOCOL_VERSION;
-    packet->station_id = LORA_STATION_ID;
+    packet->station_id = CONFIG_LORA_STATION_ID;
     packet->packet_id = 0; // Set to 0 for now
     packet->type = LORA_ACK;
     packet->payload_length = sizeof(uint8_t) + sizeof(uint8_t);
