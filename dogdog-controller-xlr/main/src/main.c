@@ -48,6 +48,7 @@
 #include "esp-idf-ds3231.h"
 #include "GPIOPins.h"
 #include "Clock.h"
+#include "Sensor.h"
 
 QueueHandle_t sensorInterputQueue;
 QueueHandle_t resetQueue;
@@ -58,6 +59,8 @@ QueueHandle_t timeQueue;
 QueueHandle_t sendQueue;
 QueueHandle_t buzzerQueue;
 QueueSetHandle_t triggerAndResetQueue;
+QueueHandle_t sensorInterruptQueue;
+
 TaskHandle_t buttonTask;
 
 static const char *TAG = "Main";
@@ -80,6 +83,7 @@ void app_main(void)
     sendQueue = xQueueCreate(50, sizeof(char *));
     buzzerQueue = xQueueCreate(10, sizeof(int));
     triggerAndResetQueue = xQueueCreateSet(2);
+    sensorInterruptQueue = xQueueCreate(5, sizeof(int));
     xQueueAddToSet(triggerQueue, triggerAndResetQueue);
     xQueueAddToSet(resetQueue, triggerAndResetQueue);
 
@@ -88,10 +92,10 @@ void app_main(void)
     init_external_clock();
     init_keyboard();
     init_glow_pins();
-    init_lora();
 
+    xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 4048, NULL, 15, NULL);
     xTaskCreate(Timer_Task, "Timer_Task", 4048, NULL, 12, NULL);
-    xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 4048, NULL, 9, NULL);
+    // xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 4048, NULL, 9, NULL);
     xTaskCreatePinnedToCore(Seven_Segment_Task, "Seven_Segment_Task", 16096, NULL, 8, NULL, 1);
     xTaskCreate(Buzzer_Task, "Buzzer_Task", 4048, NULL, 7, NULL);
 

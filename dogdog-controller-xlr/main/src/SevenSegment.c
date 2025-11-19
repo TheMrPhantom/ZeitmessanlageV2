@@ -669,61 +669,8 @@ void cleanup_lcd_resources()
 
 void draw_connection_status(int start_alive, int end_alive)
 {
-    if (start_label == NULL)
-    {
-        start_label = lv_label_create(timing_screen);
-        lv_obj_align(start_label, LV_ALIGN_TOP_LEFT, 25, 33);
-    }
-
-    if (end_label == NULL)
-    {
-        end_label = lv_label_create(timing_screen);
-        lv_obj_align(end_label, LV_ALIGN_TOP_LEFT, 70, 33);
-    }
-
-    if (start_alive == 2)
-    {
-        draw_sensor_status_single(SENSOR_START, NULL, -1, false);
-    }
-    if (end_alive == 2)
-    {
-        draw_sensor_status_single(SENSOR_STOP, NULL, -1, false);
-    }
-
-    lv_color_t start_color;
-    lv_color_t end_color;
-
-    if (start_alive == 0)
-    {
-        start_color = lv_color_hex(0x00FF00); // green
-    }
-    else if (start_alive == 1)
-    {
-        start_color = lv_color_hex(0xFFFF00); // orange
-    }
-    else if (start_alive == 2)
-    {
-        start_color = lv_color_hex(0xFF0000); // red
-    }
-
-    if (end_alive == 0)
-    {
-        end_color = lv_color_hex(0x00FF00); // green
-    }
-    else if (end_alive == 1)
-    {
-        end_color = lv_color_hex(0xFFFF00); // orange
-    }
-    else if (end_alive == 2)
-    {
-        end_color = lv_color_hex(0xFF0000); // red
-    }
-
-    lv_label_set_text(start_label, LV_SYMBOL_WIFI);
-    lv_obj_set_style_text_color(start_label, start_color, 0);
-
-    lv_label_set_text(end_label, LV_SYMBOL_WIFI);
-    lv_obj_set_style_text_color(end_label, end_color, 0);
+    draw_sensor_status_single(SENSOR_START, NULL, -1, false);
+    draw_sensor_status_single(SENSOR_STOP, NULL, -1, false);
 }
 
 void draw_sensor_status(bool *sensor_connected_left, bool *sensor_connected_right, int num_sensors_left, int num_sensors_right)
