@@ -197,23 +197,8 @@ void Sensor_Status_Task(void *params)
         timeval_t now;
         gettimeofday(&now, NULL);
 
-        if (TIME_US(last_start_trigger) + 3000000L > TIME_US(now))
-        {
-            sendSensorStatus(TRIGGER_PIN_1, TRIGGER_PIN_1);
-        }
-        else
-        {
-            sendSensorStatus(pinNumber, TRIGGER_PIN_1);
-        }
-
-        if (TIME_US(last_stop_trigger) + 3000000L > TIME_US(now))
-        {
-            sendSensorStatus(TRIGGER_PIN_2, TRIGGER_PIN_2);
-        }
-        else
-        {
-            sendSensorStatus(pinNumber, TRIGGER_PIN_2);
-        }
+        sendSensorStatus(pinNumber, TRIGGER_PIN_1);
+        sendSensorStatus(pinNumber, TRIGGER_PIN_2);
 
         pinNumber = -1;
         xQueueReceive(sensorStatusQueue, &pinNumber, pdMS_TO_TICKS(1000));
