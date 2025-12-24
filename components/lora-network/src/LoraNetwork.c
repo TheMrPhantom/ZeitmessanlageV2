@@ -96,7 +96,7 @@ PacketTypeFinalTime *create_final_time_information(DogDogPacket *packet)
         return NULL;
     }
     // four bytes of the packet payload are int64 time stamp
-    packet_type->timestamp = ((int64_t *)packet->payload);
+    packet_type->timestamp = *((int64_t *)packet->payload);
     return packet_type;
 }
 

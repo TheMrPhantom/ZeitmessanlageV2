@@ -40,6 +40,7 @@ const int sensorCooldown = 1500;
 
 const int faultCooldown = 3000;
 extern int64_t time_offset_to_controller;
+extern portMUX_TYPE timesync_spinlock;
 timeval_t last_time_sent;
 
 uint64_t faultTime = 0;
@@ -144,7 +145,11 @@ void Sensor_Interrupt_Task(void *params)
                         timeval_t current_time;
                         gettimeofday(&current_time, NULL);
 
-                        int64_t timestamp = TIME_US(current_time) + time_offset_to_controller;
+                        int64_t offset;
+                        taskENTER_CRITICAL(&timesync_spinlock);
+                        offset = time_offset_to_controller;
+                        taskEXIT_CRITICAL(&timesync_spinlock);
+                        int64_t timestamp = TIME_US(current_time) + offset;
 
                         PacketTypeTrigger trigger;
                         trigger.timestamp = timestamp;
