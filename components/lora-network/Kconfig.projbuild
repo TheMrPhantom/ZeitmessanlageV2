@@ -10,7 +10,7 @@ menu "LORA Pin Configuration"
 		default 12
 	config LORA_GPIO_NSS
 		int "LORA NSS Pin"
-		default 40
+		default 10
 	config LORA_GPIO_RST
 		int "LORA RESET Pin"
 		default 7

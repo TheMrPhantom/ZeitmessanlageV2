@@ -35,7 +35,7 @@ extern QueueHandle_t loraSendQueue;
 QueueHandle_t sensorStatusQueue;
 
 char *TAG = "SENSOR";
-const int sensorPins[] = {GPIO_NUM_15, GPIO_NUM_16, GPIO_NUM_17, GPIO_NUM_18, GPIO_NUM_8, GPIO_NUM_19, GPIO_NUM_20, GPIO_NUM_39, GPIO_NUM_38, GPIO_NUM_37}; // GPIO pins for the sensors
+const int sensorPins[] = {GPIO_NUM_15}; // GPIO pins for the sensors
 const int sensorCooldown = 1500;
 
 const int faultCooldown = 3000;
@@ -57,7 +57,7 @@ static void IRAM_ATTR gpio_interrupt_handler(void *args)
     int pinNumber = (int)args;
     // read pin state
     int pinState = gpio_get_level(pinNumber);
-    if (pinState == 0)
+    if (pinState == 1)
     {
         xQueueSendFromISR(sensorInterputQueue, &pinNumber, NULL);
     }
@@ -112,7 +112,7 @@ void Sensor_Interrupt_Task(void *params)
 
             // vTaskDelay(pdMS_TO_TICKS(3));
 
-            if (gpio_get_level(pinNumber) == 0)
+            if (gpio_get_level(pinNumber) == 1)
             {
                 ESP_LOGI(TAG, "Confirmed interrupt of Pin: %i", pinNumber);
                 uint64_t currentTickMs = pdTICKS_TO_MS(xTaskGetTickCount());
@@ -128,17 +128,17 @@ void Sensor_Interrupt_Task(void *params)
                         // Check if at least 2 sensors are triggered
                         for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
                         {
-                            if (gpio_get_level(sensorPins[i]) == 0)
+                            if (gpio_get_level(sensorPins[i]) == 1)
                             {
                                 num_triggered_sensors++;
                             }
                         }
 
-                        if (num_triggered_sensors < 2)
-                        {
-                            ESP_LOGW(TAG, "Not enough sensors triggered");
-                            continue;
-                        }
+                        // if (num_triggered_sensors < 2)
+                        // {
+                        //     ESP_LOGW(TAG, "Not enough sensors triggered");
+                        //     continue;
+                        // }
 
                         lastTriggerTime = pdTICKS_TO_MS(xTaskGetTickCount());
 
@@ -155,14 +155,17 @@ void Sensor_Interrupt_Task(void *params)
                         trigger.timestamp = timestamp;
 
                         PacketTypeSensorState sensors_state;
-                        sensors_state.num_sensors = sizeof(sensorPins) / sizeof(int);
+                        sensors_state.num_sensors = 4; // sizeof(sensorPins) / sizeof(int);
                         sensors_state.sensor_states = 0;
 
                         for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
                         {
                             int level = gpio_get_level(sensorPins[i]);
-                            level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
+                            // level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
                             sensors_state.sensor_states |= ((uint64_t)level << i);
+                            sensors_state.sensor_states |= ((uint64_t)level << (i + 1));
+                            sensors_state.sensor_states |= ((uint64_t)level << (i + 2));
+                            sensors_state.sensor_states |= ((uint64_t)level << (i + 3));
                         }
                         sensors_state.sensor_states = ~sensors_state.sensor_states;
                         trigger.sensor_state = sensors_state;
@@ -191,7 +194,7 @@ void Sensor_Interrupt_Task(void *params)
             for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
             {
                 int level = gpio_get_level(sensorPins[i]);
-                level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
+                // level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
                 currentFaults += level;
             }
 
@@ -248,13 +251,11 @@ void Sensor_Status_Task(void *params)
     timeval_t last_time_clean[sizeof(sensorPins) / sizeof(int)];
     timeval_t current_time;
     gettimeofday(&last_time_sent, NULL);
-    bool last_state[sizeof(sensorPins) / sizeof(int)];
     for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
     {
         gettimeofday(&last_time_clean[i], NULL);
         int level = gpio_get_level(sensorPins[i]);
-        level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
-        last_state[i] = level;
+        // level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
     }
     xQueueSend(sensorStatusQueue, &(int){0}, 0); // Send initial message to trigger status update
 
@@ -268,20 +269,23 @@ void Sensor_Status_Task(void *params)
         for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
         {
             int level = gpio_get_level(sensorPins[i]);
-            level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
+            // level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
             any_tiggered |= level;
         }
 
         PacketTypeSensorState sensors_state;
-        sensors_state.num_sensors = sizeof(sensorPins) / sizeof(int);
+        sensors_state.num_sensors = 4; // sizeof(sensorPins) / sizeof(int);
         sensors_state.sensor_states = 0;
 
         for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
         {
 
-            int level = gpio_get_level(sensorPins[i]);
-            level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
+            int level = gpio_get_level(sensorPins[0]);
+            // level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
             sensors_state.sensor_states |= ((uint64_t)level << i);
+            sensors_state.sensor_states |= ((uint64_t)level << (i + 1));
+            sensors_state.sensor_states |= ((uint64_t)level << (i + 2));
+            sensors_state.sensor_states |= ((uint64_t)level << (i + 3));
 
             if (level == 1)
             {
@@ -293,7 +297,7 @@ void Sensor_Status_Task(void *params)
 
             if (level == 0)
             {
-                if (TIME_US(current_time) - TIME_US(last_time_clean[i]) > 8000000)
+                if (TIME_US(current_time) - TIME_US(last_time_clean[i]) > 800000000)
                 {
                     set_led(i, 0, 0, 0); // Turn off LED
                 }
@@ -306,8 +310,6 @@ void Sensor_Status_Task(void *params)
             {
                 set_led(i, 255, 0, 0); // Set LED to red
             }
-
-            last_state[i] = level;
         }
 
         if (!newDataReceived || TIME_US(current_time) - TIME_US(last_time_sent) > 4500000)
