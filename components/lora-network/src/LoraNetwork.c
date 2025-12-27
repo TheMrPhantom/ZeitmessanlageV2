@@ -430,7 +430,7 @@ void LoraReceiveTask(void *pvParameters)
 
                 if (packet->station_id != CONTROLLER_ID && packet->station_id != START_ID && packet->station_id != STOP_ID)
                 {
-                    ESP_LOGW(pcTaskGetName(NULL), "Received packet is not from a valid station");
+                    ESP_LOGW(pcTaskGetName(NULL), "Received packet is not from a valid station:%d", packet->station_id);
                     free(packet->payload);
                     free(packet);
                     continue;

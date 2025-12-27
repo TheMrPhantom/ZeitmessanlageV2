@@ -49,7 +49,6 @@ void Network_Fault_Task(void *params)
             gettimeofday(&now, NULL);
             if (received.station == START_ALIVE)
             {
-
                 lastSeenStart = TIME_US(now) / 1000;
             }
             else if (received.station == STOP_ALIVE)
@@ -85,7 +84,9 @@ void Network_Fault_Task(void *params)
                 last_stop_state = received.signal;
             }
         }
-
+        ESP_LOGI(NETWORK_FAUT_TAG, "Start fault: %d, Stop fault: %d", to_send_for_start, to_send_for_stop);
+        last_start_state = to_send_for_start;
+        last_stop_state = to_send_for_stop;
         sendFaultInformation(to_send_for_start, to_send_for_stop);
     }
 }

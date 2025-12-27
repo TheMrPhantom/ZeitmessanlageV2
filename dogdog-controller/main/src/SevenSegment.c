@@ -693,6 +693,7 @@ void draw_connection_status(int start_alive, int end_alive)
     lv_color_t start_color;
     lv_color_t end_color;
 
+    ESP_LOGI(SEVEN_SEGMENT_TAG, "Start alive: %d, End alive: %d", start_alive, end_alive);
     if (start_alive == 0)
     {
         start_color = lv_color_hex(0x00FF00); // green
