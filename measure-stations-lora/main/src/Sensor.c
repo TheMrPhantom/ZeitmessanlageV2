@@ -262,7 +262,7 @@ void Sensor_Status_Task(void *params)
     while (true)
     {
         int pinNumber;
-        BaseType_t newDataReceived = xQueueReceive(sensorStatusQueue, &pinNumber, pdMS_TO_TICKS(5000));
+        BaseType_t newDataReceived = xQueueReceive(sensorStatusQueue, &pinNumber, pdMS_TO_TICKS(5000 + (random() % 1000)));
         gettimeofday(&current_time, NULL);
         // check if any of the gpio pins are high with bit mask call
         bool any_tiggered = 0;
