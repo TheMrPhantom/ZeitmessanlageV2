@@ -44,8 +44,8 @@ void inrease_fault();
 void setupSevenSegment();
 
 void setup_timing_screen();
-
 void setup_splashscreen();
+void setup_pc_programm_screen();
 void finalizeCountdown();
 void cleanup_lcd_resources();
 void handleCountdown(SevenSegmentDisplay toDisplay);

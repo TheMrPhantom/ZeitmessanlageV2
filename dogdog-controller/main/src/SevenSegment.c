@@ -13,6 +13,8 @@
 #include "Keyboard.h"
 #include "GPIOPins.h"
 #include "LoraNetwork.h"
+#include <stdio.h>
+#include <string.h>
 
 const char *SEVEN_SEGMENT_TAG = "SevenSegment";
 
@@ -34,6 +36,7 @@ static lv_display_t *lvgl_disp = NULL;
 /* UI elements */
 static lv_obj_t *splash_screen = NULL;
 static lv_obj_t *timing_screen = NULL;
+static lv_obj_t *pc_programm_screen = NULL;
 static lv_obj_t *top_label = NULL;
 static lv_obj_t *bottom_label = NULL;
 static lv_obj_t *reset_button = NULL;
@@ -55,6 +58,8 @@ HistoryEntry history[4];
 int history_index = 0;
 bool isDis = false;
 extern bool sensors_active;
+
+extern char *pc_programm;
 
 void Seven_Segment_Task(void *params)
 {
@@ -115,7 +120,14 @@ void Seven_Segment_Task(void *params)
                 break;
             case SEVEN_SEGMENT_DIS:
                 lvgl_port_lock(-1);
-                isDis = true;
+                if (strcmp(pc_programm, "simple-agility") == 0)
+                {
+                    isDis = !isDis;
+                }
+                else
+                {
+                    isDis = true;
+                }
                 lv_label_set_text(top_label, "DIS");
                 lv_obj_set_style_text_color(top_label, lv_color_hex(0xFF0000), 0);
                 lvgl_port_unlock();
@@ -317,10 +329,17 @@ void setupSevenSegment()
 
     lvgl_port_lock(-1);
     setup_splashscreen();
-
     setup_timing_screen();
+    setup_pc_programm_screen();
+
     xTaskNotifyGive(buttonTask);
 
+    lv_scr_load_anim(pc_programm_screen, LV_SCR_LOAD_ANIM_MOVE_TOP, 500, 0, false);
+    lvgl_port_unlock();
+
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+    xTaskNotifyGive(buttonTask);
+    lvgl_port_lock(-1);
     // Buzz for startup
     xQueueSend(buzzerQueue, &(int){BUZZER_STARTUP}, 0);
 
@@ -404,6 +423,33 @@ void setup_timing_screen()
     draw_connection_status(2, 2);
 }
 
+void setup_pc_programm_screen()
+{
+    pc_programm_screen = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(pc_programm_screen, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(pc_programm_screen, LV_OPA_COVER, 0);
+    draw_vertical_line(115);
+    draw_vertical_line(480 - 115);
+
+    // Create two boxes a green and blue one with text Webmelden and Simple Agility
+    lv_obj_t *webmelden_box = lv_obj_create(pc_programm_screen);
+    lv_obj_set_style_bg_color(webmelden_box, lv_color_hex(0x0000FF), 0);
+    lv_obj_set_size(webmelden_box, 200, 100);
+    lv_obj_align(webmelden_box, LV_ALIGN_CENTER, -100, 0);
+    lv_obj_t *webmelden_label = lv_label_create(webmelden_box);
+    lv_label_set_text(webmelden_label, "Webmelden");
+    lv_obj_align(webmelden_label, LV_ALIGN_CENTER, 0, 0);
+
+    lv_obj_t *simple_agility_box = lv_obj_create(pc_programm_screen);
+    lv_obj_set_style_bg_color(simple_agility_box, lv_color_hex(0x00FF00), 0);
+    lv_obj_set_size(simple_agility_box, 200, 100);
+    lv_obj_align(simple_agility_box, LV_ALIGN_CENTER, 100, 0);
+    lv_obj_t *simple_agility_label = lv_label_create(simple_agility_box);
+    lv_label_set_text(simple_agility_label, "Simple\nAgility");
+    lv_obj_align(simple_agility_label, LV_ALIGN_CENTER, 0, 0);
+    
+}
+
 void setMilliseconds(long timeToSet)
 {
     timeToSet = timeToSet - timeToSet % 10; // Round down to nearest 10 ms
@@ -472,18 +518,37 @@ void add_to_history()
 
     if (sensors_active)
     {
-        // send time text to keyboard
-        if (!isDis)
+        if (strcmp(pc_programm, "simple-agility") == 0)
         {
-            sendKey(HID_KEY_TAB);
-            sendText(time_text);
-            sendKey(HID_KEY_ENTER);
+            // the programm is simple-agility
+            // output the message: 'e00024,65\n' (the time 24,65s padded to 5 digits with leading zeros)
+            // time text is the time in seconds with 2 decimals and comma as decimal separator
+            char padded_time[9]; // 8 digits + null terminator
+            // fill padded time with zeros
+            memset(padded_time, '0', 8);
+            int length = strlen(time_text);
+            // copy time text to padded time from the end
+            memcpy(padded_time + 8 - length, time_text, length);
+            padded_time[8] = 0x00; // null terminator
+
+            printf("e%s\n", padded_time);
         }
-        else
+        else if (strcmp(pc_programm, "webmelden") == 0)
         {
-            sendKey(HID_KEY_TAB);
-            sendText("15.00");
-            sendKey(HID_KEY_ENTER);
+            // the programm is webmelden
+            // send time text to keyboard
+            if (!isDis)
+            {
+                sendKey(HID_KEY_TAB);
+                sendText(time_text);
+                sendKey(HID_KEY_ENTER);
+            }
+            else
+            {
+                sendKey(HID_KEY_TAB);
+                sendText("15.00");
+                sendKey(HID_KEY_ENTER);
+            }
         }
     }
 

@@ -28,6 +28,7 @@ extern QueueHandle_t buttonQueue;
 extern QueueHandle_t resetQueue;
 extern QueueHandle_t sevenSegmentQueue;
 extern QueueHandle_t buzzerQueue;
+extern TaskHandle_t sevenSegmentTask;
 static const char *TAG = "SENSOR";
 const int sensorButtonPins[] = {BUTTON_INPUT_GPIO_TYPE_ACTIVATE,
                                 BUTTON_INPUT_GPIO_TYPE_DIS,
@@ -36,6 +37,7 @@ const int sensorButtonPins[] = {BUTTON_INPUT_GPIO_TYPE_ACTIVATE,
                                 BUTTON_INPUT_GPIO_TYPE_RESET};
 
 bool sensors_active = false;
+extern char *pc_programm;
 
 static void IRAM_ATTR gpio_interrupt_handler(void *args)
 {
@@ -86,6 +88,19 @@ void Button_Input_Task(void *params)
     gettimeofday(&reset_pressed, NULL);
     int countdown_sent = 1;
 
+    xQueueReceive(sensorInterputQueue, &sensor_interrupt, portMAX_DELAY);
+
+    if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_ACTIVATE)
+    {
+        pc_programm = "webmelden";
+    }
+    else if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_FAULT)
+    {
+        pc_programm = "simple-agility";
+    }
+
+    xTaskNotifyGive(sevenSegmentTask);
+
     while (true)
     {
         if (xQueueReceive(sensorInterputQueue, &sensor_interrupt, pdMS_TO_TICKS(500)))
@@ -117,6 +132,12 @@ void Button_Input_Task(void *params)
                     {
                         glow_state.state = 0;
                     }
+
+                    if (strcmp(pc_programm, "simple-agility") == 0)
+                    {
+                        sendKey(HID_KEY_S);
+                    }
+
                     ESP_LOGI(TAG, "Sensors are now %s", sensors_active ? "active" : "inactive");
 
                     glow_state.pinNumber = BUTTON_GLOW_GPIO_TYPE_FAULT;
@@ -147,6 +168,11 @@ void Button_Input_Task(void *params)
 
                     toSendSevenSegment.type = SEVEN_SEGMENT_RESET_FAULT_REFUSAL;
                     xQueueSend(sevenSegmentQueue, &toSendSevenSegment, pdMS_TO_TICKS(500));
+
+                    if (strcmp(pc_programm, "simple-agility") == 0 && !sensors_active)
+                    {
+                        sendKey(HID_KEY_N);
+                    }
                 }
                 else
                 {
@@ -163,7 +189,16 @@ void Button_Input_Task(void *params)
                         }
                         else if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_REFUSAL)
                         {
-                            BaseType_t result = sendKey(HID_KEY_R);
+                            BaseType_t result = pdFALSE;
+                            if (strcmp(pc_programm, "simple-agility") == 0)
+                            {
+                                result = sendKey(HID_KEY_V);
+                            }
+                            else if (strcmp(pc_programm, "webmelden") == 0)
+                            {
+                                result = sendKey(HID_KEY_R);
+                            }
+
                             SevenSegmentDisplay toSendSevenSegment;
                             toSendSevenSegment.type = SEVEN_SEGMENT_INCREASE_REFUSAL;
                             xQueueSend(sevenSegmentQueue, &toSendSevenSegment, 0);
@@ -182,6 +217,13 @@ void Button_Input_Task(void *params)
                     }
                     else
                     {
+                        if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_DIS)
+                        {
+                            if (strcmp(pc_programm, "simple-agility") == 0)
+                            {
+                                sendKey(HID_KEY_N);
+                            }
+                        }
                         ESP_LOGI(TAG, "Sensors are not active");
                     }
                 }

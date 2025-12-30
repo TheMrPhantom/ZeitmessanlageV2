@@ -60,8 +60,11 @@ QueueHandle_t sendQueue;
 QueueHandle_t buzzerQueue;
 QueueSetHandle_t triggerAndResetQueue;
 TaskHandle_t buttonTask;
+TaskHandle_t sevenSegmentTask;
 
 static const char *TAG = "Main";
+
+char *pc_programm = "simple-agility";
 
 void app_main(void)
 {
@@ -94,7 +97,7 @@ void app_main(void)
 
     xTaskCreate(Timer_Task, "Timer_Task", 4048, NULL, 12, NULL);
     xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 4048, NULL, 9, NULL);
-    xTaskCreatePinnedToCore(Seven_Segment_Task, "Seven_Segment_Task", 16096, NULL, 8, NULL, 1);
+    xTaskCreatePinnedToCore(Seven_Segment_Task, "Seven_Segment_Task", 16096, NULL, 8, &sevenSegmentTask, 1);
     xTaskCreate(Buzzer_Task, "Buzzer_Task", 4048, NULL, 7, NULL);
 
     xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 23, NULL);

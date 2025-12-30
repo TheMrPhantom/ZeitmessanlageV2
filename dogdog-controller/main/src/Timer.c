@@ -19,6 +19,7 @@ extern QueueHandle_t buzzerQueue;
 extern QueueHandle_t buttonQueue;
 
 extern QueueSetHandle_t triggerAndResetQueue;
+extern char *pc_programm;
 
 char *TIMER_TAG = "TIMER";
 TimerTrigger timerTriggerCause;
@@ -34,6 +35,32 @@ void startTimer(int64_t timestamp)
 
     if (sensors_active)
     {
+        if (strcmp(pc_programm, "simple-agility") == 0)
+        {
+            // the programm is simple-agility
+            // output the message: 's00024,65\n' (the time 24,65s padded to 5 digits with leading zeros)
+            // time text is the time in seconds with 2 decimals and comma as decimal separator
+
+            timeval_t current_time;
+            gettimeofday(&current_time, NULL);
+            int64_t elapsed_time = (TIME_US(current_time) - timerTime) / 1000;
+
+            if (elapsed_time < 0)
+            {
+                ESP_LOGW(TIMER_TAG, "Negative elapsed time detected: %lld", elapsed_time);
+                elapsed_time = 0; // Reset to zero if negative
+            }
+
+            float time_float = elapsed_time / 1000.0f;
+
+            char padded_time[10]; // 8 digits + null terminator
+            // fill padded time with zeros
+            snprintf(padded_time, sizeof(padded_time), "s%08.2f", time_float);
+            padded_time[6] = ','; // replace decimal point with comma
+
+            printf("%s\n", padded_time);
+        }
+
         xQueueSend(buzzerQueue, &(int){BUZZER_TRIGGER}, 0);
     }
 
