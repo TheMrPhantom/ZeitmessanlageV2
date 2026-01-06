@@ -47,6 +47,9 @@ uint64_t faultTime = 0;
 bool faultWarning = false;
 bool fault = false;
 
+uint32_t cpu_hz = 1;
+esp_cpu_cycle_count_t last_trigger_cpu_cycles;
+
 int get_num_sensors()
 {
     return sizeof(sensorPins) / sizeof(int);
@@ -54,18 +57,23 @@ int get_num_sensors()
 
 static void IRAM_ATTR gpio_interrupt_handler(void *args)
 {
+    esp_cpu_cycle_count_t triggered_at = esp_cpu_get_cycle_count();
     int pinNumber = (int)args;
     // read pin state
     int pinState = gpio_get_level(pinNumber);
     if (pinState == 0)
     {
         xQueueSendFromISR(sensorInterputQueue, &pinNumber, NULL);
+
+        last_trigger_cpu_cycles = triggered_at;
     }
     xQueueSendFromISR(sensorStatusQueue, &pinNumber, NULL);
 }
 
 void init_Pins()
 {
+    cpu_hz = (uint32_t)esp_clk_cpu_freq();
+
     for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
     {
         ESP_LOGI(TAG, "Configuring IO Pin %i", sensorPins[i]);
@@ -77,6 +85,8 @@ void init_Pins()
     }
 
     ESP_LOGI(TAG, "Done configuring IO");
+
+    gpio_install_isr_service(0);
 
     for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
     {
@@ -149,7 +159,13 @@ void Sensor_Interrupt_Task(void *params)
                         taskENTER_CRITICAL(&timesync_spinlock);
                         offset = time_offset_to_controller;
                         taskEXIT_CRITICAL(&timesync_spinlock);
-                        int64_t timestamp = TIME_US(current_time) + offset;
+
+                        esp_cpu_cycle_count_t current_cpu_cycle = esp_cpu_get_cycle_count();
+                        esp_cpu_cycle_count_t diff_cycles = current_cpu_cycle - last_trigger_cpu_cycles;
+
+                        uint32_t latency_us = (uint32_t)((uint64_t)diff_cycles * 1000000ULL / cpu_hz);
+
+                        int64_t timestamp = TIME_US(current_time) + offset - (int64_t)latency_us;
 
                         PacketTypeTrigger trigger;
                         trigger.timestamp = timestamp;

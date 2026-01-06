@@ -52,7 +52,7 @@ void app_main(void)
     faultQueue = xQueueCreate(5, sizeof(int));
     sendQueue = xQueueCreate(50, sizeof(char *));
 
-    gpio_install_isr_service(0);
+    //gpio_install_isr_service(0);
     init_lora();
     init_led(get_num_sensors()); // Pass the number of sensors as argument
     set_all_leds(255, 0, 255);   // Set all leds to purple while waiting for time sync
@@ -60,7 +60,7 @@ void app_main(void)
     xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 12, NULL);
 
     xTaskCreate(Buzzer_Task, "Buzzer_Task", 8192, NULL, 12, NULL);
-    xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 8192 * 2, NULL, 3, &sensorInterruptTaskHandle);
+    xTaskCreatePinnedToCore(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 8192 * 2, NULL, 3, &sensorInterruptTaskHandle, 0);
 
     int buzzerType = BUZZER_STARTUP;
     xQueueSend(buzzerQueue, &buzzerType, 0);
