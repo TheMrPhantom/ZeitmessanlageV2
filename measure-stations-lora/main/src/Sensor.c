@@ -86,8 +86,6 @@ void init_Pins()
 
     ESP_LOGI(TAG, "Done configuring IO");
 
-    gpio_install_isr_service(0);
-
     for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
     {
         ESP_LOGI(TAG, "Configuring ISR for Pin %i", sensorPins[i]);

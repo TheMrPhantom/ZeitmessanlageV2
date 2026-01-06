@@ -39,10 +39,21 @@ QueueHandle_t sendQueue;
 TaskHandle_t networkTask;
 TaskHandle_t sensorInterruptTaskHandle;
 
+void start_isr_service_tast(void *params)
+{
+    TaskHandle_t mainTask = (TaskHandle_t)params;
+    gpio_install_isr_service(0);
+    // Notify main task that isr service is installed
+    xTaskNotifyGive(mainTask);
+    vTaskDelete(NULL);
+}
+
 void app_main(void)
 {
     const char *TAG = "MAIN";
     ESP_LOGI(TAG, "Starting...");
+    xTaskCreate(start_isr_service_tast, "StartISRServiceTask", 4048, xTaskGetCurrentTaskHandle(),5, NULL);
+    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     // mainTask = xTaskGetCurrentTaskHandle();
     InitLoraHandlers(HandleReceivedPacket);
 

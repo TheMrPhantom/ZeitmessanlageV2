@@ -17,6 +17,7 @@ bool led_on_off = false;
 
 int number_of_leds = 0;
 float brightness = 1;
+bool is_initialized = false;
 
 void init_led(int num_leds)
 {
@@ -46,23 +47,34 @@ void init_led(int num_leds)
     ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip_config, &rmt_config, &led_strip));
     ESP_LOGI(TAG, "Created LED strip object with RMT backend");
     led_handle = led_strip;
+    is_initialized = true;
 }
 
 void set_led(uint8_t led, uint8_t r, uint8_t g, uint8_t b)
 {
 
     // ESP_LOGI(TAG, "Start blinking LED strip");
-
+    if (!is_initialized)
+    {
+        ESP_LOGW(TAG, "LED strip not initialized");
+        return;
+    }
     /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
-
+    ESP_LOGW(TAG, "Set LED %d to color R:%d G:%d B:%d", led, r, g, b);
+    vTaskDelay(pdMS_TO_TICKS(1));
     ESP_ERROR_CHECK(led_strip_set_pixel(led_handle, led, r * brightness, g * brightness, b * brightness));
-
+    vTaskDelay(pdMS_TO_TICKS(1));
     /* Refresh the strip to send data */
     ESP_ERROR_CHECK(led_strip_refresh(led_handle));
 }
 
 void set_all_leds(uint8_t r, uint8_t g, uint8_t b)
 {
+    if (!is_initialized)
+    {
+        ESP_LOGW(TAG, "LED strip not initialized");
+        return;
+    }
     for (int i = 0; i < number_of_leds; i++)
     {
         ESP_ERROR_CHECK(led_strip_set_pixel(led_handle, i, r, g, b));
