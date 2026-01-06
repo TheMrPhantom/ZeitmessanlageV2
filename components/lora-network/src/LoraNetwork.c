@@ -324,7 +324,7 @@ void LoraInterruptTask(void *pvParameters)
             timeval_t timestamp;
             gettimeofday(&timestamp, NULL);
             int64_t local_time_received = TIME_US(timestamp);
-            BaseType_t sent = xQueueSendFromISR(localReceiveTimestampQueue, &local_time_received, NULL);
+            BaseType_t sent = xQueueSend(localReceiveTimestampQueue, &local_time_received, NULL);
             if (sent != pdTRUE)
             {
                 ESP_LOGW(pcTaskGetName(NULL), "Warning: localReceiveTimestampQueue full, timestamp lost");
