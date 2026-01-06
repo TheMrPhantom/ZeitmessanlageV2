@@ -431,21 +431,32 @@ void setup_pc_programm_screen()
     draw_vertical_line(115);
     draw_vertical_line(480 - 115);
 
+    lv_obj_t *title_label = lv_label_create(pc_programm_screen);
+    lv_label_set_text(title_label, "Was ist dein\nAuswertungsprogramm?");
+    //make the text center aligned
+    lv_obj_set_style_text_align(title_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_font(title_label, &lv_font_montserrat_30, 0);
+    lv_obj_align(title_label, LV_ALIGN_TOP_MID, 10, 10);
+
+
     // Create two boxes a green and blue one with text Webmelden and Simple Agility
     lv_obj_t *webmelden_box = lv_obj_create(pc_programm_screen);
-    lv_obj_set_style_bg_color(webmelden_box, lv_color_hex(0x0000FF), 0);
-    lv_obj_set_size(webmelden_box, 200, 100);
-    lv_obj_align(webmelden_box, LV_ALIGN_CENTER, -100, 0);
+    lv_obj_set_style_bg_color(webmelden_box, lv_color_hex(0x00FF00), 0);
+    lv_obj_set_size(webmelden_box, 150, 100);
+    lv_obj_align(webmelden_box, LV_ALIGN_LEFT_MID, 20, 0);
     lv_obj_t *webmelden_label = lv_label_create(webmelden_box);
     lv_label_set_text(webmelden_label, "Webmelden");
+    lv_obj_set_style_text_font(webmelden_label, &lv_font_montserrat_16, 0);
     lv_obj_align(webmelden_label, LV_ALIGN_CENTER, 0, 0);
 
     lv_obj_t *simple_agility_box = lv_obj_create(pc_programm_screen);
-    lv_obj_set_style_bg_color(simple_agility_box, lv_color_hex(0x00FF00), 0);
-    lv_obj_set_size(simple_agility_box, 200, 100);
-    lv_obj_align(simple_agility_box, LV_ALIGN_CENTER, 100, 0);
+    lv_obj_set_style_bg_color(simple_agility_box, lv_color_hex(0x0000FF), 0);
+    lv_obj_set_size(simple_agility_box, 100, 100);
+    lv_obj_align(simple_agility_box, LV_ALIGN_LEFT_MID, 190, 0);
     lv_obj_t *simple_agility_label = lv_label_create(simple_agility_box);
     lv_label_set_text(simple_agility_label, "Simple\nAgility");
+    lv_obj_set_style_text_font(simple_agility_label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(simple_agility_label, lv_color_hex(0xFFFFFF), 0);
     lv_obj_align(simple_agility_label, LV_ALIGN_CENTER, 0, 0);
     
 }

@@ -11,7 +11,7 @@ static void IRAM_ATTR rtc_sqw_isr_handler(void *arg)
     xQueueSendFromISR(timePrintQueue, &rtc_time, 0);
 }
 
-void init_external_clock()
+BaseType_t init_external_clock()
 {
     timePrintQueue = xQueueCreate(10, sizeof(int64_t));
 
@@ -20,7 +20,7 @@ void init_external_clock()
     if (!bus_handle)
     {
         ESP_LOGE("CLOCK", "Failed to allocate memory for i2c_master_bus_handle_t");
-        return;
+        return pdFALSE;
     }
     i2c_master_bus_config_t i2c_mst_config = {
         .clk_source = I2C_CLK_SRC_DEFAULT,
@@ -32,6 +32,12 @@ void init_external_clock()
     };
     i2c_new_master_bus(&i2c_mst_config, bus_handle);
     rtc_handle_t *rtc_handle = ds3231_init(bus_handle);
+    if (!rtc_handle)
+    {
+        ESP_LOGE("CLOCK", "No RTC Clock found! Relying on internal clock.");
+        //free(bus_handle);
+        return pdFALSE;
+    }
 
     // Enable the square wave output on the DS3231
     // 1. Set the square wave frequency (e.g., 1000Hz)
@@ -55,6 +61,7 @@ void init_external_clock()
     gpio_config(&interrupt_pin_enable);
 
     gpio_isr_handler_add(RTC_SQW, rtc_sqw_isr_handler, (void *)rtc_handle);
+    return pdTRUE;
 }
 
 void ClockTask(void *arg)

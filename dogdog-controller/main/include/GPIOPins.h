@@ -27,3 +27,5 @@
 #define RTC_SQW (GPIO_NUM_3)
 
 #define BUZZER_GPIO (GPIO_NUM_42)
+#define TRIGGER_PIN_1 (GPIO_NUM_47)
+#define TRIGGER_PIN_2 (GPIO_NUM_21)

@@ -22,6 +22,17 @@ extern portMUX_TYPE timesync_spinlock;
 uint8_t last_start_trigger = 255;
 uint8_t last_stop_trigger = 255;
 
+void LoraStartupTask(void *pvParameters)
+{
+    init_lora();
+
+    xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 23, NULL);
+    xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 23, NULL);
+    xTaskCreate(LoraSyncTask, "LoraSyncTask", 4048, NULL, 8, NULL);
+    
+    vTaskDelete(NULL);
+}
+
 void HandleReceivedPacket(DogDogPacket *packet)
 {
     // Handle the received packet based on its type

@@ -88,15 +88,25 @@ void Button_Input_Task(void *params)
     gettimeofday(&reset_pressed, NULL);
     int countdown_sent = 1;
 
-    xQueueReceive(sensorInterputQueue, &sensor_interrupt, portMAX_DELAY);
-
-    if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_ACTIVATE)
+    bool canContinue = false;
+    while (!canContinue)
     {
-        pc_programm = "webmelden";
-    }
-    else if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_FAULT)
-    {
-        pc_programm = "simple-agility";
+        xQueueReceive(sensorInterputQueue, &sensor_interrupt, portMAX_DELAY);
+        canContinue = true;
+        if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_ACTIVATE)
+        {
+            pc_programm = "webmelden";
+            ESP_LOGI(TAG, "Program set to webmelden");
+        }
+        else if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_FAULT)
+        {
+            pc_programm = "simple-agility";
+            ESP_LOGI(TAG, "Program set to simple-agility");
+        }
+        else
+        {
+            canContinue = false;
+        }
     }
 
     xTaskNotifyGive(sevenSegmentTask);

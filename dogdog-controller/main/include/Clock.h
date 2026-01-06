@@ -13,6 +13,6 @@ typedef struct timeval timeval_t;
 
 #define TIME_US(t) ((int64_t)t.tv_sec * 1000000L + (int64_t)t.tv_usec)
 void ClockTask(void *arg);
-void init_external_clock();
+BaseType_t init_external_clock();
 
 #endif // __CLOCK_H

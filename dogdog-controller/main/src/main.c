@@ -49,6 +49,7 @@
 #include "GPIOPins.h"
 #include "Clock.h"
 #include "Lora.h"
+#include "Sensor.h"
 
 QueueHandle_t sensorInterputQueue;
 QueueHandle_t resetQueue;
@@ -58,6 +59,7 @@ QueueHandle_t networkFaultQueue;
 QueueHandle_t timeQueue;
 QueueHandle_t sendQueue;
 QueueHandle_t buzzerQueue;
+QueueHandle_t sensorInterruptQueue;
 QueueSetHandle_t triggerAndResetQueue;
 TaskHandle_t buttonTask;
 TaskHandle_t sevenSegmentTask;
@@ -84,28 +86,31 @@ void app_main(void)
     timeQueue = xQueueCreate(1, sizeof(int64_t));
     sendQueue = xQueueCreate(50, sizeof(char *));
     buzzerQueue = xQueueCreate(10, sizeof(int));
+    sensorInterruptQueue = xQueueCreate(1, sizeof(int));
     triggerAndResetQueue = xQueueCreateSet(2);
     xQueueAddToSet(triggerQueue, triggerAndResetQueue);
     xQueueAddToSet(resetQueue, triggerAndResetQueue);
 
     increaseKey("startups");
 
-    init_external_clock();
+    BaseType_t clock_initialized = init_external_clock();
+    ESP_LOGI(TAG, "Clock initialized: %d", clock_initialized);
     init_keyboard();
     init_glow_pins();
-    init_lora();
 
     xTaskCreate(Timer_Task, "Timer_Task", 4048, NULL, 12, NULL);
     xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 4048, NULL, 9, NULL);
     xTaskCreatePinnedToCore(Seven_Segment_Task, "Seven_Segment_Task", 16096, NULL, 8, &sevenSegmentTask, 1);
     xTaskCreate(Buzzer_Task, "Buzzer_Task", 4048, NULL, 7, NULL);
+    xTaskCreate(LoraStartupTask, "LoraStartupTask", 4048, NULL, 10, NULL);
 
-    xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 23, NULL);
-    xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 23, NULL);
-    xTaskCreate(LoraSyncTask, "LoraSyncTask", 4048, NULL, 8, NULL);
-
+    xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 4048, NULL, 23, NULL);
+    
     xTaskCreate(Button_Input_Task, "Button_Input_Task", 8192, NULL, 8, NULL);
     xTaskCreate(Button_Task, "Button_Task", 8192, NULL, 3, &buttonTask);
 
-    xTaskCreate(ClockTask, "ClockTask", 4048, NULL, 24, NULL);
+    if (clock_initialized == pdTRUE)
+    {
+        xTaskCreate(ClockTask, "ClockTask", 4048, NULL, 24, NULL);
+    }
 }
