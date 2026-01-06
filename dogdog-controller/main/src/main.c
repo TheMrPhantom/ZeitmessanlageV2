@@ -73,7 +73,7 @@ void app_main(void)
 
     // Initialize LoRa
     nvs_flash_init();
-    gpio_install_isr_service(0);
+    //gpio_install_isr_service(0);
     InitLoraHandlers(HandleReceivedPacket);
 
     ESP_LOGI(TAG, "Starting...");
@@ -104,7 +104,7 @@ void app_main(void)
     xTaskCreate(Buzzer_Task, "Buzzer_Task", 4048, NULL, 7, NULL);
     xTaskCreate(LoraStartupTask, "LoraStartupTask", 4048, NULL, 10, NULL);
 
-    xTaskCreate(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 4048, NULL, 23, NULL);
+    xTaskCreatePinnedToCore(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 4048, NULL, 23, NULL, 0);
     
     xTaskCreate(Button_Input_Task, "Button_Input_Task", 8192, NULL, 8, NULL);
     xTaskCreate(Button_Task, "Button_Task", 8192, NULL, 3, &buttonTask);

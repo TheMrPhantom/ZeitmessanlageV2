@@ -38,20 +38,28 @@ bool fault = false;
 timeval_t last_start_trigger_time;
 timeval_t last_sensor_stop_time;
 
+uint32_t cpu_hz = 1;
+esp_cpu_cycle_count_t last_trigger_cpu_cycles;
+
 static void IRAM_ATTR gpio_interrupt_handler(void *args)
 {
+    esp_cpu_cycle_count_t triggered_at = esp_cpu_get_cycle_count();
     int pinNumber = (int)args;
     // read pin state
     int pinState = gpio_get_level(pinNumber);
     if (pinState == 1)
     {
         xQueueSendFromISR(sensorInterruptQueue, &pinNumber, NULL);
+
+        last_trigger_cpu_cycles = triggered_at;
     }
     xQueueSendFromISR(sensorStatusQueue, &pinNumber, NULL);
 }
 
 void init_Sensor_Pins()
 {
+    cpu_hz = (uint32_t)esp_clk_cpu_freq();
+
     for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
     {
         ESP_LOGI(TAG, "Configuring IO Pin %i", sensorPins[i]);
@@ -107,9 +115,19 @@ void Sensor_Interrupt_Task(void *params)
                         lastTriggerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
                         ESP_LOGI(TAG, "Interrupt of Pin: %i", pinNumber);
                         TimerTrigger timerTriggerCause;
+
                         timeval_t current_time;
                         gettimeofday(&current_time, NULL);
-                        timerTriggerCause.timestamp = TIME_US(current_time);
+
+                        esp_cpu_cycle_count_t current_cpu_cycle = esp_cpu_get_cycle_count();
+                        esp_cpu_cycle_count_t diff_cycles = current_cpu_cycle - last_trigger_cpu_cycles;
+                        
+                        uint32_t latency_us = (uint32_t)((uint64_t)diff_cycles * 1000000ULL / cpu_hz);
+                        int64_t adjusted_time_us = TIME_US(current_time) - (int64_t)latency_us;
+                        
+                        ESP_LOGI(TAG, "Latency for Pin %i: %uus", pinNumber, latency_us);
+
+                        timerTriggerCause.timestamp = adjusted_time_us;
                         timerTriggerCause.is_start = pinNumber == TRIGGER_PIN_1 ? true : false;
                         xQueueSend(triggerQueue, &timerTriggerCause, 0);
 
