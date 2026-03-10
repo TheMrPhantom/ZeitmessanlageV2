@@ -22,6 +22,9 @@ extern portMUX_TYPE timesync_spinlock;
 uint8_t last_start_trigger = 255;
 uint8_t last_stop_trigger = 255;
 
+extern int64_t timerTime;
+extern bool timerIsRunning;
+
 void LoraStartupTask(void *pvParameters)
 {
     init_lora();
@@ -29,7 +32,7 @@ void LoraStartupTask(void *pvParameters)
     xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 23, NULL);
     xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 23, NULL);
     xTaskCreate(LoraSyncTask, "LoraSyncTask", 4048, NULL, 8, NULL);
-    
+
     vTaskDelete(NULL);
 }
 
@@ -54,6 +57,29 @@ void HandleReceivedPacket(DogDogPacket *packet)
         TimerTrigger timerTriggerCause;
         timerTriggerCause.is_start = packet->station_id == START_ID;
         timerTriggerCause.timestamp = trigger->timestamp;
+
+        // Only send ack it time makes sense (i.e. the timestamp is not too far in the past or future compared to the current time)
+        timeval_t current_time;
+        gettimeofday(&current_time, NULL);
+
+        if (!timerIsRunning)
+        {
+            if (TIME_US(current_time) - timerTriggerCause.timestamp < -20000000 || TIME_US(current_time) - timerTriggerCause.timestamp > 20000000)
+            {
+                ESP_LOGW(pcTaskGetName(NULL), "Received trigger with timestamp too far from current time. Current time: %lld, trigger time: %lld", TIME_US(current_time), timerTriggerCause.timestamp);
+                free(trigger);
+                break;
+            }
+        }
+        else
+        {
+            if (timerTriggerCause.timestamp - timerTime < 0)
+            {
+                ESP_LOGW(pcTaskGetName(NULL), "Received trigger with timestamp before timer start time. Timer start time: %lld, trigger time: %lld", timerTime, timerTriggerCause.timestamp);
+                free(trigger);
+                break;
+            }
+        }
 
         if (packet->station_id == START_ID)
         {
