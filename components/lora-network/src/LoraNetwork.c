@@ -10,6 +10,12 @@
 
 static const char *TAG_LORA = "LoraNetwork";
 
+#define LORA_HEADER_SIZE 10
+#define PAYLOAD_LEN_TIME_SYNC (sizeof(int64_t))
+#define PAYLOAD_LEN_FINAL_TIME (sizeof(int64_t))
+#define PAYLOAD_LEN_SENSOR_STATE (sizeof(uint8_t) + sizeof(uint64_t))
+#define PAYLOAD_LEN_TRIGGER (sizeof(int64_t) + sizeof(uint8_t) + sizeof(uint64_t))
+
 int64_t time_offset_to_controller = 0;
 
 int64_t timesync_timestamp_current = 0;
@@ -28,6 +34,12 @@ QueueHandle_t loraInterruptQueue;
 
 DogDogPacket *create_dogdog_packet_from_bytes(uint8_t *data, uint16_t length)
 {
+    if (!data || length < LORA_HEADER_SIZE)
+    {
+        ESP_LOGW(TAG_LORA, "Received malformed packet: too short (%u)", (unsigned int)length);
+        return NULL;
+    }
+
     DogDogPacket *packet = calloc(1, sizeof(DogDogPacket));
     if (!packet)
     {
@@ -36,12 +48,20 @@ DogDogPacket *create_dogdog_packet_from_bytes(uint8_t *data, uint16_t length)
     }
 
     // First four bytes of data is magic
-    packet->magic = *((uint32_t *)data);
+    memcpy(&packet->magic, data, sizeof(packet->magic));
     packet->protocol_version = data[4];
     packet->station_id = data[5];
     packet->packet_id = data[6];
     packet->type = data[7];
     packet->payload_length = (data[8] << 8) | data[9];
+
+    if ((uint32_t)LORA_HEADER_SIZE + (uint32_t)packet->payload_length > (uint32_t)length)
+    {
+        ESP_LOGW(TAG_LORA, "Received malformed packet: payload length %u exceeds frame length %u",
+                 (unsigned int)packet->payload_length, (unsigned int)length);
+        free(packet);
+        return NULL;
+    }
 
     packet->payload = calloc(1, packet->payload_length);
     if (!packet->payload)
@@ -57,51 +77,88 @@ DogDogPacket *create_dogdog_packet_from_bytes(uint8_t *data, uint16_t length)
 
 bool is_packet_from_dogdog(uint8_t *data)
 {
-    return *((uint32_t *)data) == LORA_MAGIC;
+    if (!data)
+    {
+        return false;
+    }
+    uint32_t magic = 0;
+    memcpy(&magic, data, sizeof(magic));
+    return magic == LORA_MAGIC;
 }
 
 PacketTypeTimeSync *create_time_sync_information(DogDogPacket *packet)
 {
+    if (!packet || !packet->payload || packet->payload_length != PAYLOAD_LEN_TIME_SYNC)
+    {
+        ESP_LOGW(TAG_LORA, "Invalid payload length for time sync: %u",
+                 packet ? (unsigned int)packet->payload_length : 0);
+        return NULL;
+    }
+
     PacketTypeTimeSync *packet_type = calloc(1, sizeof(PacketTypeTimeSync));
     if (!packet_type)
     {
         ESP_LOGE(TAG_LORA, "Failed to allocate memory for PacketTypeTimeSync");
         return NULL;
     }
-    // four bytes of the packet payload are int64 time stamp
-    packet_type->timestamp = *((int64_t *)packet->payload);
+    // First 8 bytes of the payload are int64 timestamp.
+    memcpy(&packet_type->timestamp, packet->payload, sizeof(packet_type->timestamp));
     return packet_type;
 }
 
 PacketTypeTrigger *create_trigger_information(DogDogPacket *packet)
 {
+    if (!packet || !packet->payload || packet->payload_length != PAYLOAD_LEN_TRIGGER)
+    {
+        ESP_LOGW(TAG_LORA, "Invalid payload length for trigger: %u",
+                 packet ? (unsigned int)packet->payload_length : 0);
+        return NULL;
+    }
+
     PacketTypeTrigger *packet_type = calloc(1, sizeof(PacketTypeTrigger));
     if (!packet_type)
     {
         ESP_LOGE(TAG_LORA, "Failed to allocate memory for PacketTypeTrigger");
         return NULL;
     }
-    // four bytes of the packet payload are int64 time stamp
-    packet_type->timestamp = *((int64_t *)packet->payload);
-    memcpy(&packet_type->sensor_state, packet->payload + sizeof(int64_t), sizeof(PacketTypeSensorState));
+    // First 8 bytes are int64 timestamp, then 1 byte sensor count and 8 bytes state bitfield.
+    memcpy(&packet_type->timestamp, packet->payload, sizeof(packet_type->timestamp));
+    packet_type->sensor_state.num_sensors = packet->payload[sizeof(int64_t)];
+    memcpy(&packet_type->sensor_state.sensor_states,
+           packet->payload + sizeof(int64_t) + sizeof(uint8_t),
+           sizeof(packet_type->sensor_state.sensor_states));
     return packet_type;
 }
 
 PacketTypeFinalTime *create_final_time_information(DogDogPacket *packet)
 {
+    if (!packet || !packet->payload || packet->payload_length != PAYLOAD_LEN_FINAL_TIME)
+    {
+        ESP_LOGW(TAG_LORA, "Invalid payload length for final time: %u",
+                 packet ? (unsigned int)packet->payload_length : 0);
+        return NULL;
+    }
+
     PacketTypeFinalTime *packet_type = calloc(1, sizeof(PacketTypeFinalTime));
     if (!packet_type)
     {
         ESP_LOGE(TAG_LORA, "Failed to allocate memory for PacketTypeFinalTime");
         return NULL;
     }
-    // four bytes of the packet payload are int64 time stamp
-    packet_type->timestamp = *((int64_t *)packet->payload);
+    // First 8 bytes of the payload are int64 timestamp.
+    memcpy(&packet_type->timestamp, packet->payload, sizeof(packet_type->timestamp));
     return packet_type;
 }
 
 PacketTypeSensorState *create_sensor_state_information(DogDogPacket *packet)
 {
+    if (!packet || !packet->payload || packet->payload_length != PAYLOAD_LEN_SENSOR_STATE)
+    {
+        ESP_LOGW(TAG_LORA, "Invalid payload length for sensor state: %u",
+                 packet ? (unsigned int)packet->payload_length : 0);
+        return NULL;
+    }
+
     PacketTypeSensorState *packet_type = calloc(1, sizeof(PacketTypeSensorState));
     if (!packet_type)
     {
@@ -111,7 +168,7 @@ PacketTypeSensorState *create_sensor_state_information(DogDogPacket *packet)
     // first byte of the packet payload is the number of sensors
     packet_type->num_sensors = packet->payload[0];
     // remaining bytes are the sensor states
-    packet_type->sensor_states = *((uint64_t *)(packet->payload + 1));
+    memcpy(&packet_type->sensor_states, packet->payload + 1, sizeof(packet_type->sensor_states));
     return packet_type;
 }
 
@@ -170,7 +227,7 @@ DogDogPacket *create_dogdog_packet_from_trigger_information(PacketTypeTrigger *t
     packet->station_id = CONFIG_LORA_STATION_ID;
     packet->packet_id = 0; // Set to 0 for now
     packet->type = LORA_TRIGGER;
-    packet->payload_length = sizeof(int64_t) + sizeof(PacketTypeSensorState);
+    packet->payload_length = PAYLOAD_LEN_TRIGGER;
     packet->payload = calloc(1, packet->payload_length);
     if (!packet->payload)
     {
@@ -179,7 +236,10 @@ DogDogPacket *create_dogdog_packet_from_trigger_information(PacketTypeTrigger *t
         return NULL;
     }
     memcpy(packet->payload, &trigger->timestamp, sizeof(int64_t));
-    memcpy(packet->payload + sizeof(int64_t), &trigger->sensor_state, sizeof(PacketTypeSensorState));
+    packet->payload[sizeof(int64_t)] = trigger->sensor_state.num_sensors;
+    memcpy(packet->payload + sizeof(int64_t) + sizeof(uint8_t),
+           &trigger->sensor_state.sensor_states,
+           sizeof(trigger->sensor_state.sensor_states));
 
     return packet;
 }
