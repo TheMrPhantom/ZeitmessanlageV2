@@ -183,6 +183,10 @@ void Button_Input_Task(void *params)
                     {
                         sendKey(HID_KEY_N);
                     }
+                    if (strcmp(pc_programm, "simple-agility") == 0 && sensors_active)
+                    {
+                        printf("e00000,00\n");
+                    }
                 }
                 else
                 {

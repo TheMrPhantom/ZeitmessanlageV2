@@ -117,6 +117,11 @@ void Timer_Task(void *params)
                 else if (timerIsRunning /*&& timerTriggerCause.is_start != start_hurdle*/)
                 {
                     int64_t timeElapsedLocal = (timerTriggerCause.timestamp - timerTime) / 1000;
+                    if (timeElapsedLocal < 0)
+                    {
+                        ESP_LOGW(TIMER_TAG, "Negative elapsed time detected: %lld", timeElapsedLocal);
+                        timeElapsedLocal = 0; // Reset to zero if negative
+                    }
                     stopTimer();
 
                     xQueueSend(timeQueue, &timeElapsedLocal, 0);

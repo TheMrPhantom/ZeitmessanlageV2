@@ -90,7 +90,7 @@ void Sensor_Interrupt_Task(void *params)
     gettimeofday(&last_sensor_stop_time, NULL);
     init_Sensor_Pins();
     sensorStatusQueue = xQueueCreate(1, sizeof(char *));
-    xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 4048, NULL, 1, NULL);
+    //xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 4048, NULL, 1, NULL);
     int numPins = sizeof(sensorPins) / sizeof(int);
     // xTaskCreate(LED_Task, "LED_Task", 4048, &numPins, 1, NULL);
     //  Wait for led

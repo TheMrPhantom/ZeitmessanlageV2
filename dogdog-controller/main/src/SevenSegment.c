@@ -433,11 +433,10 @@ void setup_pc_programm_screen()
 
     lv_obj_t *title_label = lv_label_create(pc_programm_screen);
     lv_label_set_text(title_label, "Was ist dein\nAuswertungsprogramm?");
-    //make the text center aligned
+    // make the text center aligned
     lv_obj_set_style_text_align(title_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(title_label, &lv_font_montserrat_30, 0);
     lv_obj_align(title_label, LV_ALIGN_TOP_MID, 10, 10);
-
 
     // Create two boxes a green and blue one with text Webmelden and Simple Agility
     lv_obj_t *webmelden_box = lv_obj_create(pc_programm_screen);
@@ -458,7 +457,6 @@ void setup_pc_programm_screen()
     lv_obj_set_style_text_font(simple_agility_label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(simple_agility_label, lv_color_hex(0xFFFFFF), 0);
     lv_obj_align(simple_agility_label, LV_ALIGN_CENTER, 0, 0);
-    
 }
 
 void setMilliseconds(long timeToSet)
@@ -531,18 +529,26 @@ void add_to_history()
     {
         if (strcmp(pc_programm, "simple-agility") == 0)
         {
-            // the programm is simple-agility
-            // output the message: 'e00024,65\n' (the time 24,65s padded to 5 digits with leading zeros)
-            // time text is the time in seconds with 2 decimals and comma as decimal separator
-            char padded_time[9]; // 8 digits + null terminator
-            // fill padded time with zeros
-            memset(padded_time, '0', 8);
-            int length = strlen(time_text);
-            // copy time text to padded time from the end
-            memcpy(padded_time + 8 - length, time_text, length);
-            padded_time[8] = 0x00; // null terminator
+            if (!isDis)
+            {
+                // not dis
+                // the programm is simple-agility
+                // output the message: 'e00024,65\n' (the time 24,65s padded to 5 digits with leading zeros)
+                // time text is the time in seconds with 2 decimals and comma as decimal separator
+                char padded_time[9]; // 8 digits + null terminator
+                // fill padded time with zeros
+                memset(padded_time, '0', 8);
+                int length = strlen(time_text);
+                // copy time text to padded time from the end
+                memcpy(padded_time + 8 - length, time_text, length);
+                padded_time[8] = 0x00; // null terminator
 
-            printf("e%s\n", padded_time);
+                printf("e%s\n", padded_time);
+            }else{
+                // dis
+                // send e00000,00
+                printf("e00000,00\n");
+            }
         }
         else if (strcmp(pc_programm, "webmelden") == 0)
         {
@@ -557,7 +563,7 @@ void add_to_history()
             else
             {
                 sendKey(HID_KEY_TAB);
-                sendText("15.00");
+                // sendText("15.00");
                 sendKey(HID_KEY_ENTER);
             }
         }
