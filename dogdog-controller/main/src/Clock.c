@@ -35,7 +35,7 @@ BaseType_t init_external_clock()
     if (!rtc_handle)
     {
         ESP_LOGE("CLOCK", "No RTC Clock found! Relying on internal clock.");
-        //free(bus_handle);
+        // free(bus_handle);
         return pdFALSE;
     }
 
@@ -66,6 +66,7 @@ BaseType_t init_external_clock()
 
 void ClockTask(void *arg)
 {
+    ESP_LOGI(pcTaskGetName(NULL), "Clock Task started");
     while (true)
     {
         int64_t new_rtc_time = 0;
