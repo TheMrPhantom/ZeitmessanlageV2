@@ -7,4 +7,19 @@ menu "EDIT HERE: Zeitmessanlage configuration"
             Numeric station id used by LoRa communications. Must be an integer
             between 0 and 255. This value will be available in code as
             CONFIG_LORA_STATION_ID.
+    config IS_LORA_CONTROLLER
+        bool "is_lora_controller"
+        default y
+        help
+            Set to true if this device is a LoRa controller. This value will be
+            available in code as CONFIG_IS_LORA_CONTROLLER.
+    config SENSOR_AMOUNT
+        int "sensor_amount"
+        range 0 255
+        default 4
+        depends on !IS_LORA_CONTROLLER
+        help
+            Number of sensors connected to the controller. Must be an integer
+            between 0 and 255. This value will be available in code as
+            CONFIG_SENSOR_AMOUNT.
 endmenu

@@ -19,10 +19,13 @@
 #include "Sensor.h"
 #include "Buzzer.h"
 #include "GPIOPins.h"
+#include "KeyValue.h"
+#include "NetworkFault.h"
 
 extern QueueHandle_t sensorInterruptQueue;
 extern QueueHandle_t buzzerQueue;
 extern QueueHandle_t triggerQueue;
+extern QueueHandle_t networkFaultQueue;
 QueueHandle_t sensorStatusQueue;
 extern QueueHandle_t sevenSegmentQueue;
 
@@ -66,13 +69,11 @@ void init_Sensor_Pins()
         esp_rom_gpio_pad_select_gpio(sensorPins[i]);
         gpio_set_direction(sensorPins[i], GPIO_MODE_INPUT);
         gpio_pulldown_dis(sensorPins[i]);
-        gpio_pullup_en(sensorPins[i]);
+        gpio_pullup_dis(sensorPins[i]);
         gpio_set_intr_type(sensorPins[i], GPIO_INTR_ANYEDGE);
     }
 
     ESP_LOGI(TAG, "Done configuring IO");
-
-    gpio_install_isr_service(0);
 
     for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
     {
@@ -90,7 +91,14 @@ void Sensor_Interrupt_Task(void *params)
     gettimeofday(&last_sensor_stop_time, NULL);
     init_Sensor_Pins();
     sensorStatusQueue = xQueueCreate(1, sizeof(char *));
-    //xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 4048, NULL, 1, NULL);
+
+    int is_lora_controller = getValue("is_lora_controller");
+    if (is_lora_controller == 0)
+    {
+        ESP_LOGI(TAG, "Controller is cable based: Starting Sensor Interrupt Task");
+        xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 4048, NULL, 1, NULL);
+    }
+
     int numPins = sizeof(sensorPins) / sizeof(int);
     // xTaskCreate(LED_Task, "LED_Task", 4048, &numPins, 1, NULL);
     //  Wait for led
@@ -121,10 +129,10 @@ void Sensor_Interrupt_Task(void *params)
 
                         esp_cpu_cycle_count_t current_cpu_cycle = esp_cpu_get_cycle_count();
                         esp_cpu_cycle_count_t diff_cycles = current_cpu_cycle - last_trigger_cpu_cycles;
-                        
+
                         uint32_t latency_us = (uint32_t)((uint64_t)diff_cycles * 1000000ULL / cpu_hz);
                         int64_t adjusted_time_us = TIME_US(current_time) - (int64_t)latency_us;
-                        
+
                         ESP_LOGI(TAG, "Latency for Pin %i: %uus", pinNumber, latency_us);
 
                         timerTriggerCause.timestamp = adjusted_time_us;
@@ -225,11 +233,15 @@ void Sensor_Status_Task(void *params)
 
 void sendSensorStatus(int triggeredPin, int pinToCheck)
 {
+    int sensor_amount = 4;
+#ifdef CONFIG_SENSOR_AMOUNT
+    sensor_amount = CONFIG_SENSOR_AMOUNT;
+#endif
     int pinState = gpio_get_level(pinToCheck);
     SevenSegmentDisplay toDisplay;
     toDisplay.type = SEVEN_SEGMENT_SENSOR_STATUS;
     toDisplay.sensorStatus.sensor = pinToCheck == TRIGGER_PIN_1 ? SENSOR_START : SENSOR_STOP;
-    toDisplay.sensorStatus.num_sensors = 5;
+    toDisplay.sensorStatus.num_sensors = sensor_amount;
     toDisplay.sensorStatus.is_trigger = triggeredPin == pinToCheck ? true : false;
     toDisplay.sensorStatus.status = malloc(sizeof(bool) * toDisplay.sensorStatus.num_sensors);
     // check malloc result
@@ -244,4 +256,17 @@ void sendSensorStatus(int triggeredPin, int pinToCheck)
         toDisplay.sensorStatus.status[i] = pinState == 1 || toDisplay.sensorStatus.is_trigger ? false : true;
     }
     xQueueSend(sevenSegmentQueue, &toDisplay, 0);
+
+    int is_start = pinToCheck == TRIGGER_PIN_1 ? SENSOR_START : SENSOR_STOP;
+    is_start = is_start == 0 ? START_ALIVE : STOP_ALIVE;
+
+    StationConnectivityStatus status;
+    
+    status.station = START_ALIVE;
+    status.signal = 0;
+    xQueueSend(networkFaultQueue, &status, portMAX_DELAY);
+    
+    status.station = STOP_ALIVE;
+    status.signal = 0;
+    xQueueSend(networkFaultQueue, &status, portMAX_DELAY);
 }

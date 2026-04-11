@@ -50,8 +50,10 @@
 #include "Clock.h"
 #include "Lora.h"
 #include "Sensor.h"
+#include "sdkconfig.h"
 
-QueueHandle_t sensorInterputQueue;
+QueueHandle_t sensorInterruptQueue;
+QueueHandle_t buttonInterruptQueue;
 QueueHandle_t resetQueue;
 QueueHandle_t triggerQueue;
 QueueHandle_t sevenSegmentQueue;
@@ -59,7 +61,6 @@ QueueHandle_t networkFaultQueue;
 QueueHandle_t timeQueue;
 QueueHandle_t sendQueue;
 QueueHandle_t buzzerQueue;
-QueueHandle_t sensorInterruptQueue;
 QueueSetHandle_t triggerAndResetQueue;
 TaskHandle_t buttonTask;
 TaskHandle_t sevenSegmentTask;
@@ -73,12 +74,13 @@ void app_main(void)
 
     // Initialize LoRa
     nvs_flash_init();
-    //gpio_install_isr_service(0);
+    gpio_install_isr_service(0);
     InitLoraHandlers(HandleReceivedPacket);
 
     ESP_LOGI(TAG, "Starting...");
 
-    sensorInterputQueue = xQueueCreate(1, sizeof(int));
+    sensorInterruptQueue = xQueueCreate(1, sizeof(int));
+    buttonInterruptQueue = xQueueCreate(1, sizeof(int));
     resetQueue = xQueueCreate(1, sizeof(int));
     triggerQueue = xQueueCreate(1, sizeof(TimerTrigger));
     networkFaultQueue = xQueueCreate(2, sizeof(StationConnectivityStatus));
@@ -86,12 +88,25 @@ void app_main(void)
     timeQueue = xQueueCreate(1, sizeof(int64_t));
     sendQueue = xQueueCreate(50, sizeof(char *));
     buzzerQueue = xQueueCreate(10, sizeof(int));
-    sensorInterruptQueue = xQueueCreate(1, sizeof(int));
     triggerAndResetQueue = xQueueCreateSet(2);
     xQueueAddToSet(triggerQueue, triggerAndResetQueue);
     xQueueAddToSet(resetQueue, triggerAndResetQueue);
 
     increaseKey("startups");
+
+    // Configure device as cable or radio controller permamently -------
+    int is_lora_controller = getValue("is_lora_controller");
+    bool config_is_lora_controller = false;
+
+#ifdef CONFIG_IS_LORA_CONTROLLER
+    config_is_lora_controller = true;
+#endif
+
+    if (config_is_lora_controller && is_lora_controller != 1)
+    {
+        storeValue("is_lora_controller", 1);
+    }
+    // ---------------------------------------------------------------------
 
     BaseType_t clock_initialized = init_external_clock();
     ESP_LOGI(TAG, "Clock initialized: %d", clock_initialized);
@@ -102,9 +117,15 @@ void app_main(void)
     xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 4048, NULL, 9, NULL);
     xTaskCreatePinnedToCore(Seven_Segment_Task, "Seven_Segment_Task", 16096, NULL, 8, &sevenSegmentTask, 1);
     xTaskCreate(Buzzer_Task, "Buzzer_Task", 4048, NULL, 7, NULL);
-    xTaskCreate(LoraStartupTask, "LoraStartupTask", 4048, NULL, 10, NULL);
 
-    xTaskCreatePinnedToCore(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 4048, NULL, 23, NULL, 0);
+    if (!config_is_lora_controller)
+    {
+        xTaskCreatePinnedToCore(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 4048, NULL, 23, NULL, 0);
+    }
+    else
+    {
+        xTaskCreate(LoraStartupTask, "LoraStartupTask", 4048, NULL, 10, NULL);
+    }
     
     xTaskCreate(Button_Input_Task, "Button_Input_Task", 8192, NULL, 8, NULL);
     xTaskCreate(Button_Task, "Button_Task", 8192, NULL, 3, &buttonTask);

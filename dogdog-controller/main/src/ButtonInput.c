@@ -23,13 +23,13 @@
 #define STATION_TYPE 1
 #endif
 
-extern QueueHandle_t sensorInterputQueue;
+extern QueueHandle_t buttonInterruptQueue;
 extern QueueHandle_t buttonQueue;
 extern QueueHandle_t resetQueue;
 extern QueueHandle_t sevenSegmentQueue;
 extern QueueHandle_t buzzerQueue;
 extern TaskHandle_t sevenSegmentTask;
-static const char *TAG = "SENSOR";
+static const char *TAG = "BUTTON_INPUT";
 const int sensorButtonPins[] = {BUTTON_INPUT_GPIO_TYPE_ACTIVATE,
                                 BUTTON_INPUT_GPIO_TYPE_DIS,
                                 BUTTON_INPUT_GPIO_TYPE_FAULT,
@@ -46,7 +46,7 @@ static void IRAM_ATTR gpio_interrupt_handler(void *args)
     sensor_interrupt_t sensor_interrupt;
     sensor_interrupt.pinNumber = pinNumber;
     sensor_interrupt.edge = edge;
-    xQueueSendFromISR(sensorInterputQueue, &sensor_interrupt, NULL);
+    xQueueSendFromISR(buttonInterruptQueue, &sensor_interrupt, NULL);
 }
 
 void init_button_pins()
@@ -91,7 +91,7 @@ void Button_Input_Task(void *params)
     bool canContinue = false;
     while (!canContinue)
     {
-        xQueueReceive(sensorInterputQueue, &sensor_interrupt, portMAX_DELAY);
+        xQueueReceive(buttonInterruptQueue, &sensor_interrupt, portMAX_DELAY);
         canContinue = true;
         if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_ACTIVATE)
         {
@@ -113,7 +113,7 @@ void Button_Input_Task(void *params)
 
     while (true)
     {
-        if (xQueueReceive(sensorInterputQueue, &sensor_interrupt, pdMS_TO_TICKS(500)))
+        if (xQueueReceive(buttonInterruptQueue, &sensor_interrupt, pdMS_TO_TICKS(500)))
         {
             ESP_LOGI(TAG, "Checking interrupt of Pin: %i with state %i", sensor_interrupt.pinNumber, sensor_interrupt.edge);
 
