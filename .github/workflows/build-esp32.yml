@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-measure-stations:
+  build-measure-stations-lora:
     if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build_and_push')"
     runs-on: ubuntu-latest
     steps:
@@ -16,20 +16,20 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: "recursive"
-      - name: esp-idf build for measure-stations
+      - name: esp-idf build for measure-stations-lora
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.4.1
-          target: esp32
-          path: "measure-stations"
+          target: esp32s3
+          path: "measure-stations-lora"
           command: idf.py build
-      - name: Upload measure-stations build output as artifact
+      - name: Upload measure-stations-lora build output as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: measure-stations-bin
-          path: measure-stations/build/measure-stations.bin
+          name: measure-stations-lora-bin
+          path: measure-stations-lora/build/measure-stations-lora.bin
 
-  build-timepanel:
+  build-dogdog-controller:
     if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build_and_push')"
     runs-on: ubuntu-latest
     steps:
@@ -37,81 +37,21 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: "recursive"
-      - name: esp-idf build for timepanel
-        uses: espressif/esp-idf-ci-action@v1
-        with:
-          esp_idf_version: v5.4.1
-          target: esp32
-          path: "timepanel"
-          command: idf.py build
-      - name: Upload timepanel build output as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: timepanel-bin
-          path: timepanel/build/timepanel.bin
-  build-remote:
-    if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build_and_push')"
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        with:
-          submodules: "recursive"
-      - name: esp-idf build for remote
-        uses: espressif/esp-idf-ci-action@v1
-        with:
-          esp_idf_version: v5.4.1
-          target: esp32
-          path: "remote"
-          command: idf.py build
-      - name: Upload remote build output as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: remote-bin
-          path: remote/build/remote.bin
-  build-remote-pc:
-    if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build_and_push')"
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        with:
-          submodules: "recursive"
-      - name: esp-idf build for remote-pc
+      - name: esp-idf build for dogdog-controller
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.4.1
           target: esp32s3
-          path: "remote-pc"
+          path: "dogdog-controller"
           command: idf.py build
-      - name: Upload remote-pc build output as artifact
+      - name: Upload dogdog-controller build output as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: remote-pc-bin
-          path: remote-pc/build/remote-pc.bin
-  build-timepanel-clock-lcd:
-    if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build_and_push')"
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        with:
-          submodules: "recursive"
-      - name: esp-idf build for timepanel-clock-lcd
-        uses: espressif/esp-idf-ci-action@v1
-        with:
-          esp_idf_version: v5.4.1
-          target: esp32s3
-          path: "timepanel-clock-lcd"
-          command: idf.py build
-      - name: Upload timepanel-clock-lcd build output as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: timepanel-clock-lcd-bin
-          path: timepanel-clock-lcd/build/timepanel-clock-lcd.bin
+          name: dogdog-controller-bin
+          path: dogdog-controller/build/dogdog-controller.bin
 
   release:
-    needs: [build-measure-stations, build-timepanel, build-remote, build-remote-pc, build-timepanel-clock-lcd]  # Ensures this job runs after both build jobs complete
+    needs: [build-measure-stations-lora, build-dogdog-controller]  # Ensures this job runs after all build jobs complete
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -119,30 +59,15 @@ jobs:
         with:
           submodules: "recursive"
 
-      - name: Download measure-stations artifact
+      - name: Download measure-stations-lora artifact
         uses: actions/download-artifact@v4
         with:
-          name: measure-stations-bin
+          name: measure-stations-lora-bin
 
-      - name: Download timepanel artifact
+      - name: Download dogdog-controller artifact
         uses: actions/download-artifact@v4
         with:
-          name: timepanel-bin
-
-      - name: Download remote artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: remote-bin
-
-      - name: Download remote-pc artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: remote-pc-bin
-      
-      - name: Download timepanel-clock-lcd artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: timepanel-clock-lcd-bin
+          name: dogdog-controller-bin
 
       - name: Delete previous 'latest' release (if exists)
         continue-on-error: true  # this prevents workflow failure if tag doesn't exist
@@ -157,10 +82,7 @@ jobs:
           tag_name: latest
           name: latest
           files: |
-            measure-stations.bin
-            timepanel.bin
-            remote.bin
-            remote-pc.bin
-            timepanel-clock-lcd.bin
+            measure-stations-lora.bin
+            dogdog-controller.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

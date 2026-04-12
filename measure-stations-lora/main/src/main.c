@@ -29,6 +29,7 @@
 #include "sdkconfig.h"
 #include "nvs_flash.h"
 #include "KeyValue.h"
+#include "OTA.h"
 
 QueueHandle_t sensorInterputQueue;
 QueueHandle_t networkQueue;
@@ -56,6 +57,41 @@ void start_isr_service_tast(void *params)
     gpio_install_isr_service(0);
     // Notify main task that isr service is installed
     xTaskNotifyGive(mainTask);
+    vTaskDelete(NULL);
+}
+
+//Task that checks for 10 seconds if boot button was pressed to trigger OTA mode
+void ota_check_task(void *params)
+{
+    const int boot_button_gpio = GPIO_NUM_0;
+    gpio_set_direction(boot_button_gpio, GPIO_MODE_INPUT);
+    gpio_pullup_en(boot_button_gpio);
+    gpio_pulldown_dis(boot_button_gpio);
+
+    int pressed_count = 0;
+    for (int i = 0; i < 100; i++)
+    {
+        if (gpio_get_level(boot_button_gpio) == 0) // Assuming active low button
+        {
+            pressed_count++;
+        }
+        else
+        {
+            pressed_count = 0; // reset count if button is released
+        }
+        vTaskDelay(pdMS_TO_TICKS(100)); // Check every 100ms
+    }
+
+    if (pressed_count >= 50) // Button was pressed for at least 5 seconds
+    {
+        ESP_LOGI("OTA_CHECK", "Boot button held for 5 seconds, entering OTA mode");
+        xTaskCreate(ota_task, "ota_task", 16384, NULL, 5, NULL);
+    }
+    else
+    {
+        ESP_LOGI("OTA_CHECK", "Boot button not held long enough, starting normally");
+    }
+
     vTaskDelete(NULL);
 }
 
