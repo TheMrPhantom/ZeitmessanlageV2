@@ -362,7 +362,7 @@ void Sensor_Status_Task(void *params)
 
             if (level == 0)
             {
-                if (TIME_US(current_time) - TIME_US(last_time_clean[i]) > 8000000)
+                if (TIME_US(current_time) - TIME_US(last_time_clean[i]) > (is_xrl ? 300000000 : 8000000))
                 {
                     set_led(i, 0, 0, 0); // Turn off LED
                 }
