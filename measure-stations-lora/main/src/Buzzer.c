@@ -133,7 +133,8 @@ void Buzzer_Task(void *params)
                     xQueueReceive(buzzerQueue, &input, portMAX_DELAY);
                 }
                 stopSound();
-            }else if(input == Buzzer_INDICATE_OTA)
+            }
+            else if (input == Buzzer_INDICATE_OTA)
             {
                 sound(sound_a, 1000);
                 vTaskDelay(pdMS_TO_TICKS(500));
@@ -144,6 +145,7 @@ void Buzzer_Task(void *params)
                 sound(sound_a, 1000);
                 vTaskDelay(pdMS_TO_TICKS(500));
                 sound(sound_a, 1000);
+            }
         }
     }
 }
