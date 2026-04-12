@@ -21,6 +21,7 @@
 #include "LED.h"
 #include "LoraNetwork.h"
 #include "sdkconfig.h"
+#include "esp_random.h"
 
 #if CONFIG_START
 #define STATION_TYPE 0
@@ -330,7 +331,7 @@ void Sensor_Status_Task(void *params)
     while (true)
     {
         int pinNumber;
-        BaseType_t newDataReceived = xQueueReceive(sensorStatusQueue, &pinNumber, pdMS_TO_TICKS(5000));
+        BaseType_t newDataReceived = xQueueReceive(sensorStatusQueue, &pinNumber, pdMS_TO_TICKS(5000-(esp_random() % 500)));
         gettimeofday(&current_time, NULL);
         // check if any of the gpio pins are high with bit mask call
         bool any_tiggered = 0;
@@ -379,7 +380,7 @@ void Sensor_Status_Task(void *params)
             last_state[i] = level;
         }
 
-        if (!newDataReceived || TIME_US(current_time) - TIME_US(last_time_sent) > 4500000)
+        if (!newDataReceived || TIME_US(current_time) - TIME_US(last_time_sent) > 4500000-(esp_random() % 500000)) // Send update at least every 4.5 seconds with some randomization to avoid collisions
         {
             // Send the packet
 
