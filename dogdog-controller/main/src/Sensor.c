@@ -86,11 +86,6 @@ void init_Sensor_Pins()
 
 void Sensor_Interrupt_Task(void *params)
 {
-    ESP_LOGI(TAG, "Setting up Sensors");
-    gettimeofday(&last_start_trigger_time, NULL);
-    gettimeofday(&last_sensor_stop_time, NULL);
-    init_Sensor_Pins();
-    sensorStatusQueue = xQueueCreate(1, sizeof(char *));
 
     int is_lora_controller = getValue("is_lora_controller");
     if (is_lora_controller == 0)
@@ -98,6 +93,16 @@ void Sensor_Interrupt_Task(void *params)
         ESP_LOGI(TAG, "Controller is cable based: Starting Sensor Interrupt Task");
         xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 4048, NULL, 1, NULL);
     }
+    else
+    {
+        vTaskDelete(NULL);
+    }
+
+    ESP_LOGI(TAG, "Setting up Sensors");
+    gettimeofday(&last_start_trigger_time, NULL);
+    gettimeofday(&last_sensor_stop_time, NULL);
+    init_Sensor_Pins();
+    sensorStatusQueue = xQueueCreate(1, sizeof(char *));
 
     int numPins = sizeof(sensorPins) / sizeof(int);
     // xTaskCreate(LED_Task, "LED_Task", 4048, &numPins, 1, NULL);
@@ -261,11 +266,11 @@ void sendSensorStatus(int triggeredPin, int pinToCheck)
     is_start = is_start == 0 ? START_ALIVE : STOP_ALIVE;
 
     StationConnectivityStatus status;
-    
+
     status.station = START_ALIVE;
     status.signal = 0;
     xQueueSend(networkFaultQueue, &status, portMAX_DELAY);
-    
+
     status.station = STOP_ALIVE;
     status.signal = 0;
     xQueueSend(networkFaultQueue, &status, portMAX_DELAY);
