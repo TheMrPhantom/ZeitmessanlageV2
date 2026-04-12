@@ -253,7 +253,7 @@ void ota_task(void *pvParameters)
     // never happened when connected to a good power supply. We suspect that the power supply
     // is not able to deliver enough power for the ESP32 to perform the OTA update.
     // Therefore, we set the minimum CPU frequency to 80 MHz to reduce the power consumption.
-    ESP_ERROR_CHECK(esp_pm_configure(&pm_config));
+    //ESP_ERROR_CHECK(esp_pm_configure(&pm_config));
 
     ESP_LOGI(TAG, "Trying to connect to WIFI");
     ESP_ERROR_CHECK(wifi_init_sta());
