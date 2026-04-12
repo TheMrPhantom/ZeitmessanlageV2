@@ -1,4 +1,4 @@
-menu "LORA Pin Configuration"
+menu "LORA Configuration"
 	config LORA_GPIO_MISO
 		int "LORA MISO Pin"
 		default 13
@@ -26,4 +26,35 @@ menu "LORA Pin Configuration"
 	config LORA_GPIO_DIO1
 		int "LORA DIO1 Pin"
 		default 6
+endmenu
+
+menu "LORA ID Configuration"
+    config LORA_STATION_ID
+        int "lora_station_id"
+        range 0 255
+        default 2
+        help
+            Numeric station id used by LoRa communications. Must be an integer
+            between 0 and 255. This value will be available in code as
+            CONFIG_LORA_STATION_ID.
+    config LORA_CONTROLLER_ID
+        int "lora_controller_id"
+        range 0 255
+        default 1
+        help
+            Numeric controller id used by LoRa communications. Must be an integer
+            between 0 and 255. This value will be available in code as
+            CONFIG_LORA_CONTROLLER_ID.
+    config START_LORA_ID
+        int "start_lora_id"
+        range 0 255
+        default 2
+        help
+            Numeric ID for the start LoRa station. Must be an integer between 0 and 255.
+    config STOP_LORA_ID
+        int "stop_lora_id"
+        range 0 255
+        default 3
+        help
+            Numeric ID for the stop LoRa station. Must be an integer between 0 and 255.
 endmenu

@@ -25,6 +25,11 @@ uint8_t last_stop_trigger = 255;
 extern int64_t timerTime;
 extern bool timerIsRunning;
 
+extern int controller_id;
+extern int start_id;
+extern int stop_id;
+extern int station_id;
+
 void LoraStartupTask(void *pvParameters)
 {
     init_lora();
@@ -55,7 +60,7 @@ void HandleReceivedPacket(DogDogPacket *packet)
             break;
         }
         TimerTrigger timerTriggerCause;
-        timerTriggerCause.is_start = packet->station_id == START_ID;
+        timerTriggerCause.is_start = packet->station_id == start_id;
         timerTriggerCause.timestamp = trigger->timestamp;
 
         // Only send ack it time makes sense (i.e. the timestamp is not too far in the past or future compared to the current time)
@@ -81,7 +86,7 @@ void HandleReceivedPacket(DogDogPacket *packet)
             }
         }
 
-        if (packet->station_id == START_ID)
+        if (packet->station_id == start_id)
         {
             if (last_start_trigger != packet->packet_id)
             {
@@ -193,7 +198,7 @@ void LoraSyncTask(void *pvParameters)
 
 void confirm_station_alive(DogDogPacket *packet)
 {
-    int is_start = packet->station_id == START_ID ? START_ALIVE : STOP_ALIVE;
+    int is_start = packet->station_id == start_id ? START_ALIVE : STOP_ALIVE;
 
     StationConnectivityStatus status;
     status.station = is_start;

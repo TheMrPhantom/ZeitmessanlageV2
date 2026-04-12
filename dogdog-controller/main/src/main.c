@@ -69,6 +69,11 @@ static const char *TAG = "Main";
 
 char *pc_programm = "simple-agility";
 
+int station_id = 0;
+int controller_id = 0;
+int start_id = 0;
+int stop_id = 0;
+
 void app_main(void)
 {
 
@@ -106,7 +111,43 @@ void app_main(void)
     {
         storeValue("is_lora_controller", 1);
     }
+    is_lora_controller = getValue("is_lora_controller");
     // ---------------------------------------------------------------------
+
+    // Configure IDs
+
+    controller_id = getValue("controller_id");
+
+    if (controller_id == 0)
+    {
+        controller_id = CONFIG_LORA_CONTROLLER_ID;
+        storeValue("controller_id", CONFIG_LORA_CONTROLLER_ID);
+    }
+
+    start_id = getValue("start_id");
+
+    if (start_id == 0)
+    {
+        start_id = CONFIG_START_LORA_ID;
+        storeValue("start_id", CONFIG_START_LORA_ID);
+    }
+
+    stop_id = getValue("stop_id");
+
+    if (stop_id == 0)
+    {
+        stop_id = CONFIG_STOP_LORA_ID;
+        storeValue("stop_id", CONFIG_STOP_LORA_ID);
+    }
+
+    station_id = getValue("station_id");
+    if (station_id == 0)
+    {
+        station_id = CONFIG_LORA_STATION_ID;
+        storeValue("station_id", CONFIG_LORA_STATION_ID);
+    }
+
+    //-------
 
     BaseType_t clock_initialized = init_external_clock();
     ESP_LOGI(TAG, "Clock initialized: %d", clock_initialized);
@@ -126,7 +167,7 @@ void app_main(void)
     {
         xTaskCreate(LoraStartupTask, "LoraStartupTask", 4048, NULL, 10, NULL);
     }
-    
+
     xTaskCreate(Button_Input_Task, "Button_Input_Task", 8192, NULL, 8, NULL);
     xTaskCreate(Button_Task, "Button_Task", 8192, NULL, 3, &buttonTask);
 

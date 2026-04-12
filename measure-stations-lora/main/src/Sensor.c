@@ -20,6 +20,7 @@
 #include "Buzzer.h"
 #include "LED.h"
 #include "LoraNetwork.h"
+#include "sdkconfig.h"
 
 #if CONFIG_START
 #define STATION_TYPE 0
@@ -35,7 +36,25 @@ extern QueueHandle_t loraSendQueue;
 QueueHandle_t sensorStatusQueue;
 
 char *TAG = "SENSOR";
-const int sensorPins[] = {GPIO_NUM_15, GPIO_NUM_16, GPIO_NUM_17, GPIO_NUM_18, GPIO_NUM_8, GPIO_NUM_19, GPIO_NUM_20, GPIO_NUM_39, GPIO_NUM_38, GPIO_NUM_37}; // GPIO pins for the sensors
+
+extern int is_xrl;
+extern int num_fake_sensors;
+extern int num_sensors_required_for_trigger;
+
+int triggerLevel;
+int *sensorPins;
+int num_sensors;
+
+// #ifndef CONFIG_IS_XLR
+// const int triggerLevel = 0;
+// const int sensorPins[] = {GPIO_NUM_15, GPIO_NUM_16, GPIO_NUM_17, GPIO_NUM_18, GPIO_NUM_8, GPIO_NUM_19, GPIO_NUM_20, GPIO_NUM_39, GPIO_NUM_38, GPIO_NUM_37}; // GPIO pins for the sensors
+// #else
+// // Do not modify: Pins are of DogDogController V1 ----
+// int triggerLevel = 1;
+// int sensorPins[] = {GPIO_NUM_47};
+// // ---------------------------------------------------
+// #endif
+
 const int sensorCooldown = 1500;
 
 const int faultCooldown = 3000;
@@ -50,18 +69,14 @@ bool fault = false;
 uint32_t cpu_hz = 1;
 esp_cpu_cycle_count_t last_trigger_cpu_cycles;
 
-int get_num_sensors()
-{
-    return sizeof(sensorPins) / sizeof(int);
-}
-
 static void IRAM_ATTR gpio_interrupt_handler(void *args)
 {
     esp_cpu_cycle_count_t triggered_at = esp_cpu_get_cycle_count();
     int pinNumber = (int)args;
     // read pin state
     int pinState = gpio_get_level(pinNumber);
-    if (pinState == 0)
+
+    if (pinState == triggerLevel)
     {
         xQueueSendFromISR(sensorInterputQueue, &pinNumber, NULL);
 
@@ -74,7 +89,7 @@ void init_Pins()
 {
     cpu_hz = (uint32_t)esp_clk_cpu_freq();
 
-    for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
+    for (int i = 0; i < num_sensors; i++)
     {
         ESP_LOGI(TAG, "Configuring IO Pin %i", sensorPins[i]);
         esp_rom_gpio_pad_select_gpio(sensorPins[i]);
@@ -86,7 +101,7 @@ void init_Pins()
 
     ESP_LOGI(TAG, "Done configuring IO");
 
-    for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
+    for (int i = 0; i < num_sensors; i++)
     {
         ESP_LOGI(TAG, "Configuring ISR for Pin %i", sensorPins[i]);
         gpio_isr_handler_add(sensorPins[i], gpio_interrupt_handler, (void *)sensorPins[i]);
@@ -98,7 +113,33 @@ void init_Pins()
 void Sensor_Interrupt_Task(void *params)
 {
     ESP_LOGI(TAG, "Setting up Sensors");
+
+    if (is_xrl)
+    {
+        triggerLevel = 1;
+        num_sensors = 1;
+        sensorPins = malloc(sizeof(int) * num_sensors);
+        sensorPins[0] = GPIO_NUM_47;
+    }
+    else
+    {
+        triggerLevel = 0;
+        num_sensors = 10;
+        sensorPins = malloc(sizeof(int) * num_sensors);
+        sensorPins[0] = GPIO_NUM_15;
+        sensorPins[1] = GPIO_NUM_16;
+        sensorPins[2] = GPIO_NUM_17;
+        sensorPins[3] = GPIO_NUM_18;
+        sensorPins[4] = GPIO_NUM_8;
+        sensorPins[5] = GPIO_NUM_19;
+        sensorPins[6] = GPIO_NUM_20;
+        sensorPins[7] = GPIO_NUM_39;
+        sensorPins[8] = GPIO_NUM_38;
+        sensorPins[9] = GPIO_NUM_37;
+    }
+
     init_Pins();
+    init_led(num_sensors); // Pass the number of sensors as argument
 
     sensorStatusQueue = xQueueCreate(1, sizeof(char *));
 
@@ -114,13 +155,14 @@ void Sensor_Interrupt_Task(void *params)
 
     while (true)
     {
+
         if (xQueueReceive(sensorInterputQueue, &pinNumber, pdMS_TO_TICKS(500)))
         {
             ESP_LOGI(TAG, "Checking interrupt of Pin: %i", pinNumber);
 
             // vTaskDelay(pdMS_TO_TICKS(3));
 
-            if (gpio_get_level(pinNumber) == 0)
+            if (gpio_get_level(pinNumber) == triggerLevel)
             {
                 ESP_LOGI(TAG, "Confirmed interrupt of Pin: %i", pinNumber);
                 uint64_t currentTickMs = pdTICKS_TO_MS(xTaskGetTickCount());
@@ -133,16 +175,16 @@ void Sensor_Interrupt_Task(void *params)
                         ESP_LOGI(TAG, "Interrupt of Pin: %i", pinNumber);
 
                         int num_triggered_sensors = 0;
-                        // Check if at least 2 sensors are triggered
-                        for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
+                        // Check how many sensors are currently triggered
+                        for (int i = 0; i < num_sensors; i++)
                         {
-                            if (gpio_get_level(sensorPins[i]) == 0)
+                            if (gpio_get_level(sensorPins[i]) == triggerLevel)
                             {
                                 num_triggered_sensors++;
                             }
                         }
 
-                        if (num_triggered_sensors < 2)
+                        if (!is_xrl && num_triggered_sensors < num_sensors_required_for_trigger)
                         {
                             ESP_LOGW(TAG, "Not enough sensors triggered");
                             continue;
@@ -169,16 +211,29 @@ void Sensor_Interrupt_Task(void *params)
                         trigger.timestamp = timestamp;
 
                         PacketTypeSensorState sensors_state;
-                        sensors_state.num_sensors = sizeof(sensorPins) / sizeof(int);
+                        sensors_state.num_sensors = num_sensors;
                         sensors_state.sensor_states = 0;
 
-                        for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
+                        for (int i = 0; i < num_sensors; i++)
                         {
                             int level = gpio_get_level(sensorPins[i]);
-                            level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
+                            level = level == triggerLevel ? 1 : 0; // Invert the level so that 1 means triggered
                             sensors_state.sensor_states |= ((uint64_t)level << i);
                         }
+
+                        if (is_xrl)
+                        {
+                            sensors_state.num_sensors = num_fake_sensors;
+
+                            // copy the first sensor info to CONFIG_NUM_FAKE_SENSORS sensors so that the controller can see them as well
+                            for (int i = 1; i < num_fake_sensors; i++)
+                            {
+                                sensors_state.sensor_states |= ((sensors_state.sensor_states & 1) << i);
+                            }
+                        }
+
                         sensors_state.sensor_states = ~sensors_state.sensor_states;
+
                         trigger.sensor_state = sensors_state;
 
                         gettimeofday(&last_time_sent, NULL);
@@ -202,10 +257,10 @@ void Sensor_Interrupt_Task(void *params)
         {
             bool isCurrentlyGood = true;
             int currentFaults = 0;
-            for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
+            for (int i = 0; i < num_sensors; i++)
             {
                 int level = gpio_get_level(sensorPins[i]);
-                level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
+                level = level == triggerLevel ? 1 : 0; // Invert the level so that 1 means triggered
                 currentFaults += level;
             }
 
@@ -259,15 +314,15 @@ void Sensor_Interrupt_Task(void *params)
 void Sensor_Status_Task(void *params)
 {
 
-    timeval_t last_time_clean[sizeof(sensorPins) / sizeof(int)];
+    timeval_t last_time_clean[num_sensors];
     timeval_t current_time;
     gettimeofday(&last_time_sent, NULL);
-    bool last_state[sizeof(sensorPins) / sizeof(int)];
-    for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
+    bool last_state[num_sensors];
+    for (int i = 0; i < num_sensors; i++)
     {
         gettimeofday(&last_time_clean[i], NULL);
         int level = gpio_get_level(sensorPins[i]);
-        level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
+        level = level == triggerLevel ? 1 : 0; // Invert the level so that 1 means triggered
         last_state[i] = level;
     }
     xQueueSend(sensorStatusQueue, &(int){0}, 0); // Send initial message to trigger status update
@@ -279,22 +334,22 @@ void Sensor_Status_Task(void *params)
         gettimeofday(&current_time, NULL);
         // check if any of the gpio pins are high with bit mask call
         bool any_tiggered = 0;
-        for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
+        for (int i = 0; i < num_sensors; i++)
         {
             int level = gpio_get_level(sensorPins[i]);
-            level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
+            level = level == triggerLevel ? 1 : 0; // Invert the level so that 1 means triggered
             any_tiggered |= level;
         }
 
         PacketTypeSensorState sensors_state;
-        sensors_state.num_sensors = sizeof(sensorPins) / sizeof(int);
+        sensors_state.num_sensors = num_sensors;
         sensors_state.sensor_states = 0;
 
-        for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
+        for (int i = 0; i < num_sensors; i++)
         {
 
             int level = gpio_get_level(sensorPins[i]);
-            level = level == 0 ? 1 : 0; // Invert the level so that 1 means triggered
+            level = level == triggerLevel ? 1 : 0; // Invert the level so that 1 means triggered
             sensors_state.sensor_states |= ((uint64_t)level << i);
 
             if (level == 1)
@@ -326,14 +381,28 @@ void Sensor_Status_Task(void *params)
 
         if (!newDataReceived || TIME_US(current_time) - TIME_US(last_time_sent) > 4500000)
         {
+            // Send the packet
+
+            if (is_xrl)
+            {
+                sensors_state.num_sensors = num_fake_sensors;
+
+                // copy the first sensor info to CONFIG_NUM_FAKE_SENSORS sensors so that the controller can see them as well
+                for (int i = 1; i < num_fake_sensors; i++)
+                {
+                    sensors_state.sensor_states |= ((sensors_state.sensor_states & 1) << i);
+                }
+            }
+
             // invert the result
             sensors_state.sensor_states = ~sensors_state.sensor_states;
+
             DogDogPacket *packet = create_dogdog_packet_from_sensor_state_information(&sensors_state);
             if (packet)
             {
                 gettimeofday(&last_time_sent, NULL);
-                // Send the packet
-                xQueueSend(loraSendQueue, &packet, 0);
+
+                send_dogdog_packet(packet);
             }
         }
     }

@@ -26,6 +26,9 @@
 #include "Buzzer.h"
 #include "LED.h"
 #include "LoraNetwork.h"
+#include "sdkconfig.h"
+#include "nvs_flash.h"
+#include "KeyValue.h"
 
 QueueHandle_t sensorInterputQueue;
 QueueHandle_t networkQueue;
@@ -38,6 +41,14 @@ QueueHandle_t sendQueue;
 
 TaskHandle_t networkTask;
 TaskHandle_t sensorInterruptTaskHandle;
+
+int station_id = 0;
+int controller_id = 0;
+int start_id = 0;
+int stop_id = 0;
+int is_xrl = 0;
+int num_fake_sensors = 0;
+int num_sensors_required_for_trigger = 0;
 
 void start_isr_service_tast(void *params)
 {
@@ -52,7 +63,64 @@ void app_main(void)
 {
     const char *TAG = "MAIN";
     ESP_LOGI(TAG, "Starting...");
-    xTaskCreate(start_isr_service_tast, "StartISRServiceTask", 4048, xTaskGetCurrentTaskHandle(),5, NULL);
+    nvs_flash_init();
+
+    // Configure IDs
+
+    controller_id = getValue("controller_id");
+
+    if (controller_id == 0)
+    {
+        controller_id = CONFIG_LORA_CONTROLLER_ID;
+        storeValue("controller_id", CONFIG_LORA_CONTROLLER_ID);
+    }
+
+    start_id = getValue("start_id");
+
+    if (start_id == 0)
+    {
+        start_id = CONFIG_START_LORA_ID;
+        storeValue("start_id", CONFIG_START_LORA_ID);
+    }
+
+    stop_id = getValue("stop_id");
+
+    if (stop_id == 0)
+    {
+        stop_id = CONFIG_STOP_LORA_ID;
+        storeValue("stop_id", CONFIG_STOP_LORA_ID);
+    }
+
+    station_id = getValue("station_id");
+    if (station_id == 0)
+    {
+        station_id = CONFIG_LORA_STATION_ID;
+        storeValue("station_id", CONFIG_LORA_STATION_ID);
+    }
+
+#ifdef CONFIG_IS_XLR
+    is_xrl = 1;
+    num_fake_sensors = CONFIG_NUM_FAKE_SENSORS;
+    storeValue("is_xrl", 1);
+    storeValue("num_fake_s", CONFIG_NUM_FAKE_SENSORS);
+    num_sensors_required_for_trigger = 1;
+#else
+    num_sensors_required_for_trigger = getValue("num_s_req");
+    if (num_sensors_required_for_trigger == 0)
+    {
+        num_sensors_required_for_trigger = 2;
+    }
+#ifdef NUM_SENSORS_REQUIRED_FOR_TRIGGER
+    num_sensors_required_for_trigger = CONFIG_NUM_SENSORS_REQUIRED_FOR_TRIGGER;
+    storeValue("num_sensors_required_for_trigger", num_sensors_required_for_trigger);
+#endif
+#endif
+
+    is_xrl = getValue("is_xrl");
+    num_fake_sensors = getValue("num_fake_s");
+    //-------
+
+    xTaskCreate(start_isr_service_tast, "StartISRServiceTask", 4048, xTaskGetCurrentTaskHandle(), 5, NULL);
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     // mainTask = xTaskGetCurrentTaskHandle();
     InitLoraHandlers(HandleReceivedPacket);
@@ -63,10 +131,10 @@ void app_main(void)
     faultQueue = xQueueCreate(5, sizeof(int));
     sendQueue = xQueueCreate(50, sizeof(char *));
 
-    //gpio_install_isr_service(0);
+    // gpio_install_isr_service(0);
     init_lora();
-    init_led(get_num_sensors()); // Pass the number of sensors as argument
-    set_all_leds(255, 0, 255);   // Set all leds to purple while waiting for time sync
+
+    set_all_leds(255, 0, 255); // Set all leds to purple while waiting for time sync
     xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 24, NULL);
     xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 12, NULL);
 

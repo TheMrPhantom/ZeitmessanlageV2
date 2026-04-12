@@ -1,10 +1,22 @@
 menu "EDIT HERE: Zeitmessanlage configuration"
-    config LORA_STATION_ID
-        int "lora_station_id"
+    config IS_XLR
+        bool "is_xlr"
+        default n
+        help
+            Set to true if this is an XLR board. This will be available in code as
+            CONFIG_IS_XLR.
+    config NUM_SENSORS_REQUIRED_FOR_TRIGGER
+        int "num_sensors_required_for_trigger"
         range 0 255
         default 2
+        depends on !IS_XLR
         help
-            Numeric station id used by LoRa communications. Must be an integer
-            between 0 and 255. This value will be available in code as
-            CONFIG_LORA_STATION_ID.
+            Number of sensors that need to be triggered for the system to trigger. This will be available in code as CONFIG_NUM_SENSORS_REQUIRED_FOR_TRIGGER.
+    config NUM_FAKE_SENSORS
+        int "num_fake_sensors"
+        range 0 255
+        default 5
+        depends on IS_XLR
+        help
+            Number of sensors that are connected to the xrl port. This is only used if IS_XLR is set to true. This value will be available in code as CONFIG_NUM_FAKE_SENSORS.
 endmenu
