@@ -100,6 +100,7 @@ void app_main(void)
     const char *TAG = "MAIN";
     ESP_LOGI(TAG, "Starting...");
     nvs_flash_init();
+    xTaskCreate(ota_check_task, "ota_check_task", 4096, NULL, 5, NULL);
 
     // Configure IDs
 
