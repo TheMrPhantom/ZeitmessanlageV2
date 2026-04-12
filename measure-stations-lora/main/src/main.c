@@ -85,6 +85,7 @@ void ota_check_task(void *params)
     if (pressed_count >= 50) // Button was pressed for at least 5 seconds
     {
         ESP_LOGI("OTA_CHECK", "Boot button held for 5 seconds, entering OTA mode");
+        xQueueSend(buzzerQueue, &(int){Buzzer_INDICATE_OTA}, 0); // Indicate OTA mode with buzzer
         xTaskCreate(ota_task, "ota_task", 16384, NULL, 5, NULL);
     }
     else
