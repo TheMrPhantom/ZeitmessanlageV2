@@ -8,7 +8,9 @@
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 #include "esp_http_client.h"
+#if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
 #include "esp_crt_bundle.h"
+#endif
 #include "esp_pm.h"
 #include "nvs_flash.h"
 #include "lwip/err.h"
@@ -262,10 +264,12 @@ void ota_task(void *pvParameters)
     esp_err_t ota_finish_err = ESP_OK;
     esp_http_client_config_t config = {
         .url = CONFIG_FIRMWARE_URL,
-        .crt_bundle_attach = esp_crt_bundle_attach,
         .timeout_ms = CONFIG_RECV_TIMEOUT,
         .keep_alive_enable = true,
     };
+#if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
+    config.crt_bundle_attach = esp_crt_bundle_attach;
+#endif
 
     esp_https_ota_config_t ota_config = {
         .http_config = &config,

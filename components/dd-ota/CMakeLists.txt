@@ -4,5 +4,5 @@
 
 idf_component_register(SRC_DIRS "src"
                        INCLUDE_DIRS "include" "."
-                       REQUIRES esp_wifi esp_event esp_netif nvs_flash
-                       PRIV_REQUIRES esp_http_client esp_https_ota app_update)
+                       REQUIRES esp_wifi esp_event esp_netif nvs_flash esp_pm
+                       PRIV_REQUIRES esp_http_client esp_https_ota app_update mbedtls)
