@@ -225,7 +225,7 @@ static esp_err_t validate_image_header(esp_app_desc_t *new_app_info)
         ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
     }
 
-    if (memcmp(new_app_info->version, running_app_info.version, sizeof(new_app_info->version)) <= 0)
+    if (memcmp(new_app_info->version, running_app_info.version, sizeof(new_app_info->version)) == 0)
     {
         ESP_LOGI(TAG, "Version available: %s", new_app_info->version);
         ESP_LOGW(TAG, "No newer version available. We will not continue the update.");
@@ -274,9 +274,9 @@ void ota_task(void *pvParameters)
     esp_https_ota_config_t ota_config = {
         .http_config = &config,
         .http_client_init_cb = _http_client_init_cb, // Register a callback to be invoked after esp_http_client is initialized
-#ifdef CONFIG_EXAMPLE_ENABLE_PARTIAL_HTTP_DOWNLOAD
+#ifdef CONFIG_ENABLE_PARTIAL_HTTP_DOWNLOAD
         .partial_http_download = true,
-        .max_http_request_size = CONFIG_EXAMPLE_HTTP_REQUEST_SIZE,
+        .max_http_request_size = CONFIG_HTTP_REQUEST_SIZE,
 #endif
     };
 
