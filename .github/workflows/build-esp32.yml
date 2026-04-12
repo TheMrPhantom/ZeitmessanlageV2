@@ -19,7 +19,7 @@ jobs:
       - name: esp-idf build for measure-stations-lora
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.4.1
+          esp_idf_version: v5.5.1
           target: esp32s3
           path: "measure-stations-lora"
           command: idf.py build
@@ -40,7 +40,7 @@ jobs:
       - name: esp-idf build for dogdog-controller
         uses: espressif/esp-idf-ci-action@v1
         with:
-          esp_idf_version: v5.4.1
+          esp_idf_version: v5.5.1
           target: esp32s3
           path: "dogdog-controller"
           command: idf.py build
