@@ -64,27 +64,23 @@ void Network_Fault_Task(void *params)
         /* currentTime in milliseconds */
         int64_t currentTime = TIME_US(now) / 1000;
 
+        if (received.station != NOTHING_ALIVE)
+        {
+            if (received.station == START_ALIVE)
+            {
+                last_start_state = received.signal;
+            }
+            else if (received.station == STOP_ALIVE)
+            {
+                last_stop_state = received.signal;
+            }
+        }
+
         bool startFault = (currentTime - lastSeenStart) > timeoutMs;
         bool stopFault = (currentTime - lastSeenStop) > timeoutMs;
 
         int to_send_for_start = startFault ? 2 : last_start_state;
         int to_send_for_stop = stopFault ? 2 : last_stop_state;
-
-        if (received.station != NOTHING_ALIVE)
-        {
-            if (received.station == START_ALIVE)
-            {
-                to_send_for_start = received.signal;
-                to_send_for_stop = last_stop_state;
-                last_start_state = received.signal;
-            }
-            else if (received.station == STOP_ALIVE)
-            {
-                to_send_for_stop = received.signal;
-                to_send_for_start = last_start_state;
-                last_stop_state = received.signal;
-            }
-        }
 
         sendFaultInformation(to_send_for_start, to_send_for_stop);
     }
