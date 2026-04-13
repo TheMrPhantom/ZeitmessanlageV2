@@ -41,10 +41,10 @@ char *TAG = "SENSOR";
 extern int is_xrl;
 extern int num_fake_sensors;
 extern int num_sensors_required_for_trigger;
+extern int num_sensors;
+extern int triggerLevel;
+extern int *sensorPins;
 
-int triggerLevel;
-int *sensorPins;
-int num_sensors;
 
 // #ifndef CONFIG_IS_XLR
 // const int triggerLevel = 0;
@@ -115,32 +115,8 @@ void Sensor_Interrupt_Task(void *params)
 {
     ESP_LOGI(TAG, "Setting up Sensors");
 
-    if (is_xrl)
-    {
-        triggerLevel = 1;
-        num_sensors = 1;
-        sensorPins = malloc(sizeof(int) * num_sensors);
-        sensorPins[0] = GPIO_NUM_47;
-    }
-    else
-    {
-        triggerLevel = 0;
-        num_sensors = 10;
-        sensorPins = malloc(sizeof(int) * num_sensors);
-        sensorPins[0] = GPIO_NUM_15;
-        sensorPins[1] = GPIO_NUM_16;
-        sensorPins[2] = GPIO_NUM_17;
-        sensorPins[3] = GPIO_NUM_18;
-        sensorPins[4] = GPIO_NUM_8;
-        sensorPins[5] = GPIO_NUM_19;
-        sensorPins[6] = GPIO_NUM_20;
-        sensorPins[7] = GPIO_NUM_39;
-        sensorPins[8] = GPIO_NUM_38;
-        sensorPins[9] = GPIO_NUM_37;
-    }
 
     init_Pins();
-    init_led(num_sensors); // Pass the number of sensors as argument
 
     sensorStatusQueue = xQueueCreate(1, sizeof(char *));
 

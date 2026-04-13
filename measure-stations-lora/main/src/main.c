@@ -50,6 +50,9 @@ int stop_id = 0;
 int is_xrl = 0;
 int num_fake_sensors = 0;
 int num_sensors_required_for_trigger = 0;
+int num_sensors;
+int triggerLevel;
+int *sensorPins;
 
 void start_isr_service_tast(void *params)
 {
@@ -60,7 +63,7 @@ void start_isr_service_tast(void *params)
     vTaskDelete(NULL);
 }
 
-//Task that checks for 10 seconds if boot button was pressed to trigger OTA mode
+// Task that checks for 10 seconds if boot button was pressed to trigger OTA mode
 void ota_check_task(void *params)
 {
     const int boot_button_gpio = GPIO_NUM_0;
@@ -101,6 +104,7 @@ void app_main(void)
     const char *TAG = "MAIN";
     ESP_LOGI(TAG, "Starting...");
     nvs_flash_init();
+
     xTaskCreate(ota_check_task, "ota_check_task", 4096, NULL, 5, NULL);
 
     // Configure IDs
@@ -170,6 +174,32 @@ void app_main(void)
     sendQueue = xQueueCreate(50, sizeof(char *));
 
     // gpio_install_isr_service(0);
+
+    if (is_xrl)
+    {
+        triggerLevel = 1;
+        num_sensors = 1;
+        sensorPins = malloc(sizeof(int) * num_sensors);
+        sensorPins[0] = GPIO_NUM_47;
+    }
+    else
+    {
+        triggerLevel = 0;
+        num_sensors = 10;
+        sensorPins = malloc(sizeof(int) * num_sensors);
+        sensorPins[0] = GPIO_NUM_15;
+        sensorPins[1] = GPIO_NUM_16;
+        sensorPins[2] = GPIO_NUM_17;
+        sensorPins[3] = GPIO_NUM_18;
+        sensorPins[4] = GPIO_NUM_8;
+        sensorPins[5] = GPIO_NUM_19;
+        sensorPins[6] = GPIO_NUM_20;
+        sensorPins[7] = GPIO_NUM_39;
+        sensorPins[8] = GPIO_NUM_38;
+        sensorPins[9] = GPIO_NUM_37;
+    }
+    
+    init_led(num_sensors); // Pass the number of sensors as argument
     init_lora();
 
     set_all_leds(255, 0, 255); // Set all leds to purple while waiting for time sync
