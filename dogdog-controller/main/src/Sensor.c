@@ -87,6 +87,12 @@ void init_Sensor_Pins()
 void Sensor_Interrupt_Task(void *params)
 {
 
+    ESP_LOGI(TAG, "Setting up Sensors");
+    gettimeofday(&last_start_trigger_time, NULL);
+    gettimeofday(&last_sensor_stop_time, NULL);
+    init_Sensor_Pins();
+    sensorStatusQueue = xQueueCreate(1, sizeof(char *));
+
     int is_lora_controller = getValue("is_lora_controller");
     if (is_lora_controller == 0)
     {
@@ -97,12 +103,6 @@ void Sensor_Interrupt_Task(void *params)
     {
         vTaskDelete(NULL);
     }
-
-    ESP_LOGI(TAG, "Setting up Sensors");
-    gettimeofday(&last_start_trigger_time, NULL);
-    gettimeofday(&last_sensor_stop_time, NULL);
-    init_Sensor_Pins();
-    sensorStatusQueue = xQueueCreate(1, sizeof(char *));
 
     int numPins = sizeof(sensorPins) / sizeof(int);
     // xTaskCreate(LED_Task, "LED_Task", 4048, &numPins, 1, NULL);

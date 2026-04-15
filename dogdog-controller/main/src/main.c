@@ -100,7 +100,7 @@ void app_main(void)
     increaseKey("startups");
 
     // Configure device as cable or radio controller permamently -------
-    int is_lora_controller = getValue("is_lora_controller");
+    int is_lora_controller = getValue("is_lora_c");
     bool config_is_lora_controller = false;
 
 #ifdef CONFIG_IS_LORA_CONTROLLER
@@ -109,9 +109,9 @@ void app_main(void)
 
     if (config_is_lora_controller && is_lora_controller != 1)
     {
-        storeValue("is_lora_controller", 1);
+        storeValue("is_lora_c", 1);
     }
-    is_lora_controller = getValue("is_lora_controller");
+    is_lora_controller = getValue("is_lora_c");
     // ---------------------------------------------------------------------
 
     // Configure IDs

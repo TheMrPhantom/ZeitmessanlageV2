@@ -60,6 +60,9 @@ bool isDis = false;
 extern bool sensors_active;
 
 extern char *pc_programm;
+extern int controller_id;
+extern int start_id;
+extern int stop_id;
 
 void Seven_Segment_Task(void *params)
 {
@@ -359,6 +362,14 @@ void setup_splashscreen()
 
     lv_obj_align(avatar, LV_ALIGN_CENTER, 0, 0);
 
+    char id_text[48];
+    snprintf(id_text, sizeof(id_text), "Station:%d Start:%d Stop:%d", controller_id, start_id, stop_id);
+    lv_obj_t *id_label = lv_label_create(splash_screen);
+    lv_label_set_text(id_label, id_text);
+    lv_obj_set_style_text_font(id_label, &lv_font_montserrat_12, 0);
+    lv_obj_set_style_text_color(id_label, lv_color_hex(0x666666), 0);
+    lv_obj_align(id_label, LV_ALIGN_BOTTOM_LEFT, 8, -6);
+
     lvgl_port_unlock();
     vTaskDelay(pdMS_TO_TICKS(5000));
     lvgl_port_lock(-1);
@@ -544,7 +555,9 @@ void add_to_history()
                 padded_time[8] = 0x00; // null terminator
 
                 printf("e%s\n", padded_time);
-            }else{
+            }
+            else
+            {
                 // dis
                 // send e00000,00
                 printf("e00000,00\n");
