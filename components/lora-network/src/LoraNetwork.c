@@ -52,6 +52,14 @@ DogDogPacket *create_dogdog_packet_from_bytes(uint8_t *data, uint16_t length)
     }
 
     packet->station_id = data[5];
+
+    if(packet->station_id != controller_id && packet->station_id != start_id && packet->station_id != stop_id)
+    {
+        ESP_LOGW(TAG_LORA, "Received packet with invalid station id: %d", packet->station_id);
+        free(packet);
+        return NULL;
+    }
+
     packet->packet_id = data[6];
     packet->type = data[7];
     packet->payload_length = (data[8] << 8) | data[9];
