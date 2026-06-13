@@ -54,7 +54,7 @@ void Button_Task(void *params)
     vTaskDelay(pdMS_TO_TICKS(400));
 
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-    //Screen is ready, turn off all glows
+    // Screen is ready, turn off all glows
 
     gpio_set_level(BUTTON_GLOW_GPIO_TYPE_REFUSAL, 0);
     vTaskDelay(pdMS_TO_TICKS(400));
@@ -67,14 +67,16 @@ void Button_Task(void *params)
     gpio_set_level(BUTTON_GLOW_GPIO_TYPE_RESET, 0);
     vTaskDelay(pdMS_TO_TICKS(400));
 
-    //Wait for pc program to be set
+    // Wait for pc program to be set
     gpio_set_level(BUTTON_GLOW_GPIO_TYPE_ACTIVATE, 1);
     gpio_set_level(BUTTON_GLOW_GPIO_TYPE_FAULT, 1);
+    gpio_set_level(BUTTON_GLOW_GPIO_TYPE_REFUSAL, 1);
 
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
     gpio_set_level(BUTTON_GLOW_GPIO_TYPE_ACTIVATE, 0);
     gpio_set_level(BUTTON_GLOW_GPIO_TYPE_FAULT, 0);
+    gpio_set_level(BUTTON_GLOW_GPIO_TYPE_REFUSAL, 0);
 
     while (1)
     {

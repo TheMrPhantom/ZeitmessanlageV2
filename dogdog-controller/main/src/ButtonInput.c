@@ -103,6 +103,11 @@ void Button_Input_Task(void *params)
             pc_programm = "simple-agility";
             ESP_LOGI(TAG, "Program set to simple-agility");
         }
+        else if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_REFUSAL)
+        {
+            pc_programm = "ths";
+            ESP_LOGI(TAG, "Program set to ths");
+        }
         else
         {
             canContinue = false;

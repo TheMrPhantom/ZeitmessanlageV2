@@ -443,7 +443,7 @@ void setup_pc_programm_screen()
     draw_vertical_line(480 - 115);
 
     lv_obj_t *title_label = lv_label_create(pc_programm_screen);
-    lv_label_set_text(title_label, "Was ist dein\nAuswertungsprogramm?");
+    lv_label_set_text(title_label, "Welcher \nAuswertungsmodus?");
     // make the text center aligned
     lv_obj_set_style_text_align(title_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_set_style_text_font(title_label, &lv_font_montserrat_30, 0);
@@ -468,6 +468,16 @@ void setup_pc_programm_screen()
     lv_obj_set_style_text_font(simple_agility_label, &lv_font_montserrat_16, 0);
     lv_obj_set_style_text_color(simple_agility_label, lv_color_hex(0xFFFFFF), 0);
     lv_obj_align(simple_agility_label, LV_ALIGN_CENTER, 0, 0);
+
+    lv_obj_t *ths_box = lv_obj_create(pc_programm_screen);
+    lv_obj_set_style_bg_color(ths_box, lv_color_hex(0xFFFF00), 0);
+    lv_obj_set_size(ths_box, 100, 100);
+    lv_obj_align(ths_box, LV_ALIGN_LEFT_MID, 310, 0);
+    lv_obj_t *ths_label = lv_label_create(ths_box);
+    lv_label_set_text(ths_label, "THS");
+    lv_obj_set_style_text_font(ths_label, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(ths_label, lv_color_hex(0x000000), 0);
+    lv_obj_align(ths_label, LV_ALIGN_CENTER, 0, 0);
 }
 
 void setMilliseconds(long timeToSet)
