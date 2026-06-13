@@ -1,4 +1,4 @@
 idf_component_register(SRC_DIRS "src"
-                    REQUIRES nvs_flash driver esp_timer lora-network spi_flash
+                    REQUIRES nvs_flash driver esp_timer lora-network dd-ota spi_flash
                     INCLUDE_DIRS "include"
                     INCLUDE_DIRS ".")

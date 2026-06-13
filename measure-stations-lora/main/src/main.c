@@ -26,6 +26,10 @@
 #include "Buzzer.h"
 #include "LED.h"
 #include "LoraNetwork.h"
+#include "sdkconfig.h"
+#include "nvs_flash.h"
+#include "KeyValue.h"
+#include "OTA.h"
 
 QueueHandle_t sensorInterputQueue;
 QueueHandle_t networkQueue;
@@ -39,6 +43,17 @@ QueueHandle_t sendQueue;
 TaskHandle_t networkTask;
 TaskHandle_t sensorInterruptTaskHandle;
 
+int station_id = 0;
+int controller_id = 0;
+int start_id = 0;
+int stop_id = 0;
+int is_xrl = 0;
+int num_fake_sensors = 0;
+int num_sensors_required_for_trigger = 0;
+int num_sensors;
+int triggerLevel;
+int *sensorPins;
+
 void start_isr_service_tast(void *params)
 {
     TaskHandle_t mainTask = (TaskHandle_t)params;
@@ -48,11 +63,106 @@ void start_isr_service_tast(void *params)
     vTaskDelete(NULL);
 }
 
+// Task that checks for 10 seconds if boot button was pressed to trigger OTA mode
+void ota_check_task(void *params)
+{
+    const int boot_button_gpio = GPIO_NUM_0;
+    gpio_set_direction(boot_button_gpio, GPIO_MODE_INPUT);
+    gpio_pullup_en(boot_button_gpio);
+    gpio_pulldown_dis(boot_button_gpio);
+
+    int pressed_count = 0;
+    for (int i = 0; i < 100; i++)
+    {
+        if (gpio_get_level(boot_button_gpio) == 0) // Assuming active low button
+        {
+            pressed_count++;
+        }
+        else
+        {
+            pressed_count = 0; // reset count if button is released
+        }
+        vTaskDelay(pdMS_TO_TICKS(100)); // Check every 100ms
+    }
+
+    if (pressed_count >= 50) // Button was pressed for at least 5 seconds
+    {
+        ESP_LOGI("OTA_CHECK", "Boot button held for 5 seconds, entering OTA mode");
+        xQueueSend(buzzerQueue, &(int){Buzzer_INDICATE_OTA}, 0); // Indicate OTA mode with buzzer
+        xTaskCreate(ota_task, "ota_task", 16384, NULL, 5, NULL);
+    }
+    else
+    {
+        ESP_LOGI("OTA_CHECK", "Boot button not held long enough, starting normally");
+    }
+
+    vTaskDelete(NULL);
+}
+
 void app_main(void)
 {
     const char *TAG = "MAIN";
     ESP_LOGI(TAG, "Starting...");
-    xTaskCreate(start_isr_service_tast, "StartISRServiceTask", 4048, xTaskGetCurrentTaskHandle(),5, NULL);
+    nvs_flash_init();
+
+    xTaskCreate(ota_check_task, "ota_check_task", 4096, NULL, 5, NULL);
+
+    // Configure IDs
+
+    controller_id = getValue("controller_id");
+
+    if (controller_id == 0)
+    {
+        controller_id = CONFIG_LORA_CONTROLLER_ID;
+        storeValue("controller_id", CONFIG_LORA_CONTROLLER_ID);
+    }
+
+    start_id = getValue("start_id");
+
+    if (start_id == 0)
+    {
+        start_id = CONFIG_START_LORA_ID;
+        storeValue("start_id", CONFIG_START_LORA_ID);
+    }
+
+    stop_id = getValue("stop_id");
+
+    if (stop_id == 0)
+    {
+        stop_id = CONFIG_STOP_LORA_ID;
+        storeValue("stop_id", CONFIG_STOP_LORA_ID);
+    }
+
+    station_id = getValue("station_id");
+    if (station_id == 0)
+    {
+        station_id = CONFIG_LORA_STATION_ID;
+        storeValue("station_id", CONFIG_LORA_STATION_ID);
+    }
+
+#ifdef CONFIG_IS_XLR
+    is_xrl = 1;
+    num_fake_sensors = CONFIG_NUM_FAKE_SENSORS;
+    storeValue("is_xrl", 1);
+    storeValue("num_fake_s", CONFIG_NUM_FAKE_SENSORS);
+    num_sensors_required_for_trigger = 1;
+#else
+    num_sensors_required_for_trigger = getValue("num_s_req");
+    if (num_sensors_required_for_trigger == 0)
+    {
+        num_sensors_required_for_trigger = 2;
+    }
+#ifdef NUM_SENSORS_REQUIRED_FOR_TRIGGER
+    num_sensors_required_for_trigger = CONFIG_NUM_SENSORS_REQUIRED_FOR_TRIGGER;
+    storeValue("num_sensors_required_for_trigger", num_sensors_required_for_trigger);
+#endif
+#endif
+
+    is_xrl = getValue("is_xrl");
+    num_fake_sensors = getValue("num_fake_s");
+    //-------
+
+    xTaskCreate(start_isr_service_tast, "StartISRServiceTask", 4048, xTaskGetCurrentTaskHandle(), 5, NULL);
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     // mainTask = xTaskGetCurrentTaskHandle();
     InitLoraHandlers(HandleReceivedPacket);
@@ -63,10 +173,36 @@ void app_main(void)
     faultQueue = xQueueCreate(5, sizeof(int));
     sendQueue = xQueueCreate(50, sizeof(char *));
 
-    //gpio_install_isr_service(0);
+    // gpio_install_isr_service(0);
+
+    if (is_xrl)
+    {
+        triggerLevel = 1;
+        num_sensors = 1;
+        sensorPins = malloc(sizeof(int) * num_sensors);
+        sensorPins[0] = GPIO_NUM_47;
+    }
+    else
+    {
+        triggerLevel = 0;
+        num_sensors = 10;
+        sensorPins = malloc(sizeof(int) * num_sensors);
+        sensorPins[0] = GPIO_NUM_15;
+        sensorPins[1] = GPIO_NUM_16;
+        sensorPins[2] = GPIO_NUM_17;
+        sensorPins[3] = GPIO_NUM_18;
+        sensorPins[4] = GPIO_NUM_8;
+        sensorPins[5] = GPIO_NUM_19;
+        sensorPins[6] = GPIO_NUM_20;
+        sensorPins[7] = GPIO_NUM_39;
+        sensorPins[8] = GPIO_NUM_38;
+        sensorPins[9] = GPIO_NUM_37;
+    }
+    
+    init_led(num_sensors); // Pass the number of sensors as argument
     init_lora();
-    init_led(get_num_sensors()); // Pass the number of sensors as argument
-    set_all_leds(255, 0, 255);   // Set all leds to purple while waiting for time sync
+
+    set_all_leds(255, 0, 255); // Set all leds to purple while waiting for time sync
     xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 24, NULL);
     xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 12, NULL);
 

@@ -50,8 +50,10 @@
 #include "Clock.h"
 #include "Lora.h"
 #include "Sensor.h"
+#include "sdkconfig.h"
 
-QueueHandle_t sensorInterputQueue;
+QueueHandle_t sensorInterruptQueue;
+QueueHandle_t buttonInterruptQueue;
 QueueHandle_t resetQueue;
 QueueHandle_t triggerQueue;
 QueueHandle_t sevenSegmentQueue;
@@ -59,7 +61,6 @@ QueueHandle_t networkFaultQueue;
 QueueHandle_t timeQueue;
 QueueHandle_t sendQueue;
 QueueHandle_t buzzerQueue;
-QueueHandle_t sensorInterruptQueue;
 QueueSetHandle_t triggerAndResetQueue;
 TaskHandle_t buttonTask;
 TaskHandle_t sevenSegmentTask;
@@ -68,17 +69,23 @@ static const char *TAG = "Main";
 
 char *pc_programm = "simple-agility";
 
+int station_id = 0;
+int controller_id = 0;
+int start_id = 0;
+int stop_id = 0;
+
 void app_main(void)
 {
 
     // Initialize LoRa
     nvs_flash_init();
-    //gpio_install_isr_service(0);
+    gpio_install_isr_service(0);
     InitLoraHandlers(HandleReceivedPacket);
 
     ESP_LOGI(TAG, "Starting...");
 
-    sensorInterputQueue = xQueueCreate(1, sizeof(int));
+    sensorInterruptQueue = xQueueCreate(1, sizeof(int));
+    buttonInterruptQueue = xQueueCreate(1, sizeof(int));
     resetQueue = xQueueCreate(1, sizeof(int));
     triggerQueue = xQueueCreate(1, sizeof(TimerTrigger));
     networkFaultQueue = xQueueCreate(2, sizeof(StationConnectivityStatus));
@@ -86,12 +93,61 @@ void app_main(void)
     timeQueue = xQueueCreate(1, sizeof(int64_t));
     sendQueue = xQueueCreate(50, sizeof(char *));
     buzzerQueue = xQueueCreate(10, sizeof(int));
-    sensorInterruptQueue = xQueueCreate(1, sizeof(int));
     triggerAndResetQueue = xQueueCreateSet(2);
     xQueueAddToSet(triggerQueue, triggerAndResetQueue);
     xQueueAddToSet(resetQueue, triggerAndResetQueue);
 
     increaseKey("startups");
+
+    // Configure device as cable or radio controller permamently -------
+    int is_lora_controller = getValue("is_lora_c");
+    bool config_is_lora_controller = false;
+
+#ifdef CONFIG_IS_LORA_CONTROLLER
+    config_is_lora_controller = true;
+#endif
+
+    if (config_is_lora_controller && is_lora_controller != 1)
+    {
+        storeValue("is_lora_c", 1);
+    }
+    is_lora_controller = getValue("is_lora_c");
+    // ---------------------------------------------------------------------
+
+    // Configure IDs
+
+    controller_id = getValue("controller_id");
+
+    if (controller_id == 0)
+    {
+        controller_id = CONFIG_LORA_CONTROLLER_ID;
+        storeValue("controller_id", CONFIG_LORA_CONTROLLER_ID);
+    }
+
+    start_id = getValue("start_id");
+
+    if (start_id == 0)
+    {
+        start_id = CONFIG_START_LORA_ID;
+        storeValue("start_id", CONFIG_START_LORA_ID);
+    }
+
+    stop_id = getValue("stop_id");
+
+    if (stop_id == 0)
+    {
+        stop_id = CONFIG_STOP_LORA_ID;
+        storeValue("stop_id", CONFIG_STOP_LORA_ID);
+    }
+
+    station_id = getValue("station_id");
+    if (station_id == 0)
+    {
+        station_id = CONFIG_LORA_STATION_ID;
+        storeValue("station_id", CONFIG_LORA_STATION_ID);
+    }
+
+    //-------
 
     BaseType_t clock_initialized = init_external_clock();
     ESP_LOGI(TAG, "Clock initialized: %d", clock_initialized);
@@ -102,10 +158,16 @@ void app_main(void)
     xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 4048, NULL, 9, NULL);
     xTaskCreatePinnedToCore(Seven_Segment_Task, "Seven_Segment_Task", 16096, NULL, 8, &sevenSegmentTask, 1);
     xTaskCreate(Buzzer_Task, "Buzzer_Task", 4048, NULL, 7, NULL);
-    xTaskCreate(LoraStartupTask, "LoraStartupTask", 4048, NULL, 10, NULL);
 
-    xTaskCreatePinnedToCore(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 4048, NULL, 23, NULL, 0);
-    
+    if (!config_is_lora_controller)
+    {
+        xTaskCreatePinnedToCore(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 4048, NULL, 23, NULL, 0);
+    }
+    else
+    {
+        xTaskCreate(LoraStartupTask, "LoraStartupTask", 4048, NULL, 10, NULL);
+    }
+
     xTaskCreate(Button_Input_Task, "Button_Input_Task", 8192, NULL, 8, NULL);
     xTaskCreate(Button_Task, "Button_Task", 8192, NULL, 3, &buttonTask);
 

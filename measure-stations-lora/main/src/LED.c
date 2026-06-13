@@ -60,7 +60,7 @@ void set_led(uint8_t led, uint8_t r, uint8_t g, uint8_t b)
         return;
     }
     /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
-    ESP_LOGW(TAG, "Set LED %d to color R:%d G:%d B:%d", led, r, g, b);
+    ESP_LOGI(TAG, "Set LED %d to color R:%d G:%d B:%d", led, r, g, b);
     vTaskDelay(pdMS_TO_TICKS(1));
     ESP_ERROR_CHECK(led_strip_set_pixel(led_handle, led, r * brightness, g * brightness, b * brightness));
     vTaskDelay(pdMS_TO_TICKS(1));

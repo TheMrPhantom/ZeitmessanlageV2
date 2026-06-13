@@ -28,4 +28,4 @@
 
 #define BUZZER_GPIO (GPIO_NUM_42)
 #define TRIGGER_PIN_1 (GPIO_NUM_47)
-#define TRIGGER_PIN_2 (GPIO_NUM_44)
+#define TRIGGER_PIN_2 (GPIO_NUM_14) //44 is RX pin of ESP

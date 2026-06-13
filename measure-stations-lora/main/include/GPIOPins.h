@@ -11,6 +11,7 @@
 #define LORA_GPIO_TXEN (GPIO_NUM_5)
 #define LORA_GPIO_RXEN (GPIO_NUM_4)
 #define LORA_GPIO_DIO1 (GPIO_NUM_6)
+#define BUZZER_GPIO (GPIO_NUM_42)
 
 // Working
 // #define LORA_GPIO_MISO (GPIO_NUM_13)

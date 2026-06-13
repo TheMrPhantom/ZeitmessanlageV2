@@ -5,9 +5,9 @@
 #include <sys/time.h>
 #include "sdkconfig.h"
 
-#define CONTROLLER_ID 0x01
-#define START_ID 0x02
-#define STOP_ID 0x03
+// #define CONTROLLER_ID 0x01
+// #define START_ID 0x02
+// #define STOP_ID 0x03
 
 // Packet Header
 #define LORA_MAGIC 0xDD09
