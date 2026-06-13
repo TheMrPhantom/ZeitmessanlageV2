@@ -48,6 +48,7 @@ static lv_obj_t *start_label = NULL;
 static lv_obj_t *end_label = NULL;
 static lv_obj_t *sensor_left = NULL;
 static lv_obj_t *sensor_right = NULL;
+static lv_obj_t *vorlaeufig = NULL;
 
 /* Font and image declarations */
 LV_FONT_DECLARE(monospace);
@@ -93,6 +94,17 @@ void Seven_Segment_Task(void *params)
                 // Implement storing to history
                 setMilliseconds(toDisplay.time);
                 add_to_history();
+                remove_vorlaeufig();
+
+                if (IS_THS_MODE)
+                {
+                    sendKey(HID_KEY_S);
+                }
+                break;
+            case SEVEN_SEGMENT_TEMP_TIME:
+                // Implement temporary time display
+                setMilliseconds(toDisplay.time);
+                add_vorlaeufig();
                 break;
             case SEVEN_SEGMENT_SENSOR_STATUS:
                 lvgl_port_lock(-1);
@@ -108,6 +120,7 @@ void Seven_Segment_Task(void *params)
                 break;
             case SEVEN_SEGMENT_RESET_FAULT_REFUSAL:
                 lvgl_port_lock(-1);
+                remove_vorlaeufig();
                 if (faults && refusals)
                 {
                     lv_label_set_text(faults, "0");
@@ -123,7 +136,7 @@ void Seven_Segment_Task(void *params)
                 break;
             case SEVEN_SEGMENT_DIS:
                 lvgl_port_lock(-1);
-                if (strcmp(pc_programm, "simple-agility") == 0)
+                if (IS_SIMPLE_AGILITY_MODE || IS_THS_MODE)
                 {
                     isDis = !isDis;
                 }
@@ -141,6 +154,33 @@ void Seven_Segment_Task(void *params)
             }
         }
     }
+}
+
+void add_vorlaeufig()
+{
+    lvgl_port_lock(-1);
+    if (!vorlaeufig)
+    {
+        vorlaeufig = lv_label_create(timing_screen);
+        lv_label_set_text(vorlaeufig, "Verifizierung\nausstehend");
+        lv_obj_set_style_text_font(vorlaeufig, &lv_font_montserrat_26, 0);
+        lv_obj_set_style_text_color(vorlaeufig, lv_color_hex(0xFF0000), 0);
+        lv_obj_align(vorlaeufig, LV_ALIGN_TOP_MID, 0, 10);
+        lv_obj_set_style_text_color(top_label, lv_color_hex(0xFF0000), 0);
+    }
+    lvgl_port_unlock();
+}
+
+void remove_vorlaeufig()
+{
+    lvgl_port_lock(-1);
+    if (vorlaeufig)
+    {
+        lv_obj_del(vorlaeufig);
+        vorlaeufig = NULL;
+        lv_obj_set_style_text_color(top_label, lv_color_hex(0x000000), 0);
+    }
+    lvgl_port_unlock();
 }
 
 void increase_refusals()
@@ -548,7 +588,7 @@ void add_to_history()
 
     if (sensors_active)
     {
-        if (strcmp(pc_programm, "simple-agility") == 0)
+        if (IS_SIMPLE_AGILITY_MODE)
         {
             if (!isDis)
             {
@@ -589,6 +629,31 @@ void add_to_history()
                 // sendText("15.00");
                 sendKey(HID_KEY_ENTER);
             }
+        }
+    }
+    else if (IS_THS_MODE)
+    {
+        if (!isDis)
+        {
+            // not dis
+            // the programm is simple-agility
+            // output the message: 'e00024,65\n' (the time 24,65s padded to 5 digits with leading zeros)
+            // time text is the time in seconds with 2 decimals and comma as decimal separator
+            char padded_time[9]; // 8 digits + null terminator
+            // fill padded time with zeros
+            memset(padded_time, '0', 8);
+            int length = strlen(time_text);
+            // copy time text to padded time from the end
+            memcpy(padded_time + 8 - length, time_text, length);
+            padded_time[8] = 0x00; // null terminator
+
+            printf("e%s\n", padded_time);
+        }
+        else
+        {
+            // dis
+            // send e00000,00
+            printf("e00000,00\n");
         }
     }
 

@@ -35,7 +35,13 @@ void startTimer(int64_t timestamp)
 
     if (sensors_active)
     {
-        if (strcmp(pc_programm, "simple-agility") == 0)
+        if (IS_SIMPLE_AGILITY_MODE || IS_THS_MODE)
+        {
+            // the programm is simple-agility
+            // output the message: 's00000,00\n' (the time 0s padded to 5 digits with leading zeros)
+            printf("s00000,00\n");
+        }
+        else if (IS_THS_MODE)
         {
             // the programm is simple-agility
             // output the message: 's00024,65\n' (the time 24,65s padded to 5 digits with leading zeros)
@@ -92,7 +98,7 @@ void stopTimer()
 void Timer_Task(void *params)
 {
 
-    bool start_hurdle = false;
+    bool is_start_hurdle = false;
 
     while (true)
     {
@@ -104,18 +110,45 @@ void Timer_Task(void *params)
             {
                 xQueueReceive(triggerQueue, &timerTriggerCause, 0);
                 ESP_LOGI(TIMER_TAG, "Received trigger! From start? -> %d", timerTriggerCause.is_start);
-
+                ESP_LOGI(TIMER_TAG, "Trigger is final time? -> %d", timerTriggerCause.is_final_time);
                 // The trigger was the sensor
+                // Time not running
                 if (!timerIsRunning)
                 {
-                    start_hurdle = timerTriggerCause.is_start;
-                    startTimer(timerTriggerCause.timestamp);
-                    int x = -1;
-                    xQueueSend(timeQueue, &x, 0);
-                    ESP_LOGI(TIMER_TAG, "Started timer");
+                    if (!IS_THS_MODE || timerTriggerCause.is_start) // Not THS mode or dedicated start trigger
+                    {
+                        is_start_hurdle = timerTriggerCause.is_start;
+
+                        startTimer(timerTriggerCause.timestamp);
+                        int x = -1;
+                        xQueueSend(timeQueue, &x, 0);
+                        ESP_LOGI(TIMER_TAG, "Started timer");
+                    }
+                    else if (IS_THS_MODE && !timerTriggerCause.is_start && timerTriggerCause.is_final_time)
+                    {
+                        int64_t timeElapsedLocal = (timerTriggerCause.timestamp - timerTime) / 1000;
+                        if (timeElapsedLocal < 0)
+                        {
+                            ESP_LOGW(TIMER_TAG, "Negative elapsed time detected: %lld", timeElapsedLocal);
+                            timeElapsedLocal = 0; // Reset to zero if negative
+                        }
+                        stopTimer();
+
+                        xQueueSend(timeQueue, &timeElapsedLocal, 0);
+                        ESP_LOGI(TIMER_TAG, "Timer stopped. Elapsed time: %lld ms", timeElapsedLocal);
+
+                        SevenSegmentDisplay toSend;
+                        toSend.type = SEVEN_SEGMENT_STORE_TO_HISTORY;
+                        toSend.time = timeElapsedLocal;
+                        xQueueSend(sevenSegmentQueue, &toSend, pdMS_TO_TICKS(500));
+
+                        glow_state_t glow_state;
+                        glow_state.state = 0;
+                        glow_state.pinNumber = BUTTON_GLOW_GPIO_TYPE_RESET;
+                        xQueueSend(buttonQueue, &glow_state, pdMS_TO_TICKS(50));
+                    }
                 }
-                else if (timerIsRunning &&
-                         (strcmp(pc_programm, "ths") != 0 || timerTriggerCause.is_start != start_hurdle))
+                else if (timerIsRunning && (!IS_THS_MODE || !timerTriggerCause.is_start)) // In THS mode we only stop on the dedicated stop trigger
                 {
                     int64_t timeElapsedLocal = (timerTriggerCause.timestamp - timerTime) / 1000;
                     if (timeElapsedLocal < 0)
@@ -126,14 +159,25 @@ void Timer_Task(void *params)
                     stopTimer();
 
                     xQueueSend(timeQueue, &timeElapsedLocal, 0);
+                    ESP_LOGI(TIMER_TAG, "Timer stopped. Elapsed time: %lld ms", timeElapsedLocal);
 
-                    SevenSegmentDisplay toSend;
-                    toSend.type = SEVEN_SEGMENT_STORE_TO_HISTORY;
-                    toSend.time = timeElapsedLocal;
-                    xQueueSend(sevenSegmentQueue, &toSend, pdMS_TO_TICKS(500));
+                    if (!IS_THS_MODE)
+                    {
+                        SevenSegmentDisplay toSend;
+                        toSend.type = SEVEN_SEGMENT_STORE_TO_HISTORY;
+                        toSend.time = timeElapsedLocal;
+                        xQueueSend(sevenSegmentQueue, &toSend, pdMS_TO_TICKS(500));
+                    }
+                    else
+                    {
+                        SevenSegmentDisplay toSend;
+                        toSend.type = SEVEN_SEGMENT_TEMP_TIME;
+                        toSend.time = timeElapsedLocal;
+                        xQueueSend(sevenSegmentQueue, &toSend, pdMS_TO_TICKS(500));
+                    }
                     ESP_LOGI(TIMER_TAG, "Stopped timer. Run was %" PRId64 "ms", timeElapsedLocal);
                 }
-                else if (timerIsRunning && timerTriggerCause.is_start == start_hurdle)
+                else if (timerIsRunning && timerTriggerCause.is_start == is_start_hurdle)
                 {
                     // If we reach this point, it means the timer was running and we received a conflicting start/stop signal
                     ESP_LOGW(TIMER_TAG, "Conflicting timer signal received");

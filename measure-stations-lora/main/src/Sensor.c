@@ -45,7 +45,6 @@ extern int num_sensors;
 extern int triggerLevel;
 extern int *sensorPins;
 
-
 // #ifndef CONFIG_IS_XLR
 // const int triggerLevel = 0;
 // const int sensorPins[] = {GPIO_NUM_15, GPIO_NUM_16, GPIO_NUM_17, GPIO_NUM_18, GPIO_NUM_8, GPIO_NUM_19, GPIO_NUM_20, GPIO_NUM_39, GPIO_NUM_38, GPIO_NUM_37}; // GPIO pins for the sensors
@@ -68,7 +67,7 @@ bool faultWarning = false;
 bool fault = false;
 
 uint32_t cpu_hz = 1;
-esp_cpu_cycle_count_t last_trigger_cpu_cycles;
+int64_t last_release_timestamp = 0;
 
 static void IRAM_ATTR gpio_interrupt_handler(void *args)
 {
@@ -77,12 +76,12 @@ static void IRAM_ATTR gpio_interrupt_handler(void *args)
     // read pin state
     int pinState = gpio_get_level(pinNumber);
 
-    if (pinState == triggerLevel)
-    {
-        xQueueSendFromISR(sensorInterputQueue, &pinNumber, NULL);
+    PinTrigger trigger;
+    trigger.pin = pinNumber;
+    trigger.state = pinState;
+    trigger.triggered_at = triggered_at;
 
-        last_trigger_cpu_cycles = triggered_at;
-    }
+    xQueueSendFromISR(sensorInterputQueue, &trigger, NULL);
     xQueueSendFromISR(sensorStatusQueue, &pinNumber, NULL);
 }
 
@@ -115,7 +114,6 @@ void Sensor_Interrupt_Task(void *params)
 {
     ESP_LOGI(TAG, "Setting up Sensors");
 
-
     init_Pins();
 
     sensorStatusQueue = xQueueCreate(1, sizeof(char *));
@@ -127,21 +125,21 @@ void Sensor_Interrupt_Task(void *params)
     xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 2048 * 2, NULL, 1, NULL);
     // Wait for led
 
-    int pinNumber = 0;
+    PinTrigger trigger;
     uint64_t lastTriggerTime = 0;
 
     while (true)
     {
 
-        if (xQueueReceive(sensorInterputQueue, &pinNumber, pdMS_TO_TICKS(500)))
+        if (xQueueReceive(sensorInterputQueue, &trigger, pdMS_TO_TICKS(500)))
         {
-            ESP_LOGI(TAG, "Checking interrupt of Pin: %i", pinNumber);
+            ESP_LOGI(TAG, "Checking interrupt of Pin: %i", trigger.pin);
 
             // vTaskDelay(pdMS_TO_TICKS(3));
 
-            if (gpio_get_level(pinNumber) == triggerLevel)
+            if (gpio_get_level(trigger.pin) == triggerLevel)
             {
-                ESP_LOGI(TAG, "Confirmed interrupt of Pin: %i", pinNumber);
+                ESP_LOGI(TAG, "Confirmed interrupt of Pin: %i", trigger.pin);
                 uint64_t currentTickMs = pdTICKS_TO_MS(xTaskGetTickCount());
                 if (lastTriggerTime < currentTickMs - sensorCooldown)
                 {
@@ -149,7 +147,7 @@ void Sensor_Interrupt_Task(void *params)
                     {
                         int cause = 0;
 
-                        ESP_LOGI(TAG, "Interrupt of Pin: %i", pinNumber);
+                        ESP_LOGI(TAG, "Interrupt of Pin: %i", trigger.pin);
 
                         int num_triggered_sensors = 0;
                         // Check how many sensors are currently triggered
@@ -178,7 +176,7 @@ void Sensor_Interrupt_Task(void *params)
                         taskEXIT_CRITICAL(&timesync_spinlock);
 
                         esp_cpu_cycle_count_t current_cpu_cycle = esp_cpu_get_cycle_count();
-                        esp_cpu_cycle_count_t diff_cycles = current_cpu_cycle - last_trigger_cpu_cycles;
+                        esp_cpu_cycle_count_t diff_cycles = current_cpu_cycle - trigger.triggered_at;
 
                         uint32_t latency_us = (uint32_t)((uint64_t)diff_cycles * 1000000ULL / cpu_hz);
 
@@ -227,6 +225,25 @@ void Sensor_Interrupt_Task(void *params)
                     }
                 }
             }
+        }
+        else
+        {
+            timeval_t current_time;
+            gettimeofday(&current_time, NULL);
+
+            int64_t offset;
+            taskENTER_CRITICAL(&timesync_spinlock);
+            offset = time_offset_to_controller;
+            taskEXIT_CRITICAL(&timesync_spinlock);
+
+            esp_cpu_cycle_count_t current_cpu_cycle = esp_cpu_get_cycle_count();
+            esp_cpu_cycle_count_t diff_cycles = current_cpu_cycle - trigger.triggered_at;
+
+            uint32_t latency_us = (uint32_t)((uint64_t)diff_cycles * 1000000ULL / cpu_hz);
+
+            last_release_timestamp = TIME_US(current_time) + offset - (int64_t)latency_us;
+
+            continue;
         }
 
         // Check for faults only 4 seconds after startup
@@ -307,7 +324,7 @@ void Sensor_Status_Task(void *params)
     while (true)
     {
         int pinNumber;
-        BaseType_t newDataReceived = xQueueReceive(sensorStatusQueue, &pinNumber, pdMS_TO_TICKS(5000-(esp_random() % 500)));
+        BaseType_t newDataReceived = xQueueReceive(sensorStatusQueue, &pinNumber, pdMS_TO_TICKS(5000 - (esp_random() % 500)));
         gettimeofday(&current_time, NULL);
         // check if any of the gpio pins are high with bit mask call
         bool any_tiggered = 0;
@@ -356,7 +373,7 @@ void Sensor_Status_Task(void *params)
             last_state[i] = level;
         }
 
-        if (!newDataReceived || TIME_US(current_time) - TIME_US(last_time_sent) > 4500000-(esp_random() % 500000)) // Send update at least every 4.5 seconds with some randomization to avoid collisions
+        if (!newDataReceived || TIME_US(current_time) - TIME_US(last_time_sent) > 4500000 - (esp_random() % 500000)) // Send update at least every 4.5 seconds with some randomization to avoid collisions
         {
             // Send the packet
 

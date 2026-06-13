@@ -8,3 +8,10 @@ void Sensor_Interrupt_Task(void *params);
 void Sensor_Status_Task(void *params);
 void init_Pins();
 int get_num_sensors();
+
+typedef struct PinTrigger
+{
+    int pin;
+    int state;
+    esp_cpu_cycle_count_t triggered_at;
+} PinTrigger;

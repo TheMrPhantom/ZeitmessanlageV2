@@ -17,6 +17,8 @@ extern portMUX_TYPE timesync_spinlock;
 
 extern TaskHandle_t sensorInterruptTaskHandle;
 bool is_time_synced = false;
+extern uint8_t station_id;
+extern int64_t last_release_timestamp;
 
 void HandleReceivedPacket(DogDogPacket *packet)
 {
@@ -66,6 +68,43 @@ void HandleReceivedPacket(DogDogPacket *packet)
     case LORA_FINAL_TIME:
     {
         // Measure station never gets this info
+        break;
+    }
+    case LORA_REQUEST_FINAL_TIME:
+    {
+        if (packet->payload_length != sizeof(uint8_t))
+        {
+            ESP_LOGW(pcTaskGetName(NULL), "Invalid payload length for final time request: %d", packet->payload_length);
+            break;
+        }
+
+        uint8_t requested_station_id = packet->payload[0];
+        if (requested_station_id != station_id)
+        {
+            ESP_LOGW(pcTaskGetName(NULL), "Final time request for different station id: %d", requested_station_id);
+            break;
+        }
+
+        PacketTypeAck ack;
+        ack.station_id = packet->station_id;
+        ack.packet_id = packet->packet_id;
+
+        DogDogPacket *ack_packet = create_dogdog_packet_from_ack_information(&ack);
+        if (!ack_packet)
+        {
+            ESP_LOGE(pcTaskGetName(NULL), "Failed to allocate DogDogPacket for ACK");
+            break;
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(250));
+        xQueueSend(loraSendQueue, &ack_packet, portMAX_DELAY);
+
+        PacketTypeFinalTime final_time;
+        final_time.timestamp = last_release_timestamp;
+        DogDogPacket *final_time_packet = create_dogdog_packet_from_final_time_information(&final_time);
+        vTaskDelay(pdMS_TO_TICKS(250));
+        xQueueSend(loraSendQueue, &final_time_packet, portMAX_DELAY);
+
         break;
     }
     case LORA_SENSOR_STATE:

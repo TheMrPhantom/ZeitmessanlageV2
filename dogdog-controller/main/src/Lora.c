@@ -62,6 +62,7 @@ void HandleReceivedPacket(DogDogPacket *packet)
         TimerTrigger timerTriggerCause;
         timerTriggerCause.is_start = packet->station_id == start_id;
         timerTriggerCause.timestamp = trigger->timestamp;
+        timerTriggerCause.is_final_time = false;
 
         // Only send ack it time makes sense (i.e. the timestamp is not too far in the past or future compared to the current time)
         timeval_t current_time;
@@ -130,6 +131,7 @@ void HandleReceivedPacket(DogDogPacket *packet)
         if (!ack_packet)
         {
             ESP_LOGE(pcTaskGetName(NULL), "Failed to allocate DogDogPacket for ACK");
+            free(trigger);
             break;
         }
         vTaskDelay(pdMS_TO_TICKS(1000));
@@ -141,7 +143,59 @@ void HandleReceivedPacket(DogDogPacket *packet)
     }
     case LORA_FINAL_TIME:
     {
-        // The controller should not receive final time information
+        PacketTypeFinalTime *trigger = create_final_time_information(packet);
+        if (!trigger)
+        {
+            ESP_LOGE(pcTaskGetName(NULL), "Failed to allocate PacketTypeTrigger");
+            break;
+        }
+        TimerTrigger timerTriggerCause;
+        timerTriggerCause.is_start = packet->station_id == start_id;
+        timerTriggerCause.timestamp = trigger->timestamp;
+        timerTriggerCause.is_final_time = true;
+
+        ESP_LOGI(pcTaskGetName(NULL), "Received final time trigger");
+
+        if (packet->station_id == start_id)
+        {
+            if (last_start_trigger != packet->packet_id)
+            {
+                last_start_trigger = packet->packet_id;
+                xQueueSend(triggerQueue, &timerTriggerCause, portMAX_DELAY);
+            }
+            else
+            {
+                ESP_LOGW(pcTaskGetName(NULL), "Duplicate start trigger ignored for packet %d", packet->packet_id);
+            }
+        }
+        else
+        {
+            if (last_stop_trigger != packet->packet_id)
+            {
+                last_stop_trigger = packet->packet_id;
+                xQueueSend(triggerQueue, &timerTriggerCause, portMAX_DELAY);
+            }
+            else
+            {
+                ESP_LOGW(pcTaskGetName(NULL), "Duplicate stop trigger ignored for packet %d", packet->packet_id);
+            }
+        }
+
+        free(trigger);
+        // Send ack
+        PacketTypeAck ack;
+        ack.station_id = packet->station_id;
+        ack.packet_id = packet->packet_id;
+
+        DogDogPacket *ack_packet = create_dogdog_packet_from_ack_information(&ack);
+        if (!ack_packet)
+        {
+            ESP_LOGE(pcTaskGetName(NULL), "Failed to allocate DogDogPacket for ACK");
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        xQueueSend(loraSendQueue, &ack_packet, portMAX_DELAY);
+
         break;
     }
     case LORA_SENSOR_STATE:
@@ -168,7 +222,10 @@ void HandleReceivedPacket(DogDogPacket *packet)
     }
     case LORA_ACK:
     {
-        // The controller should not receive ACK information
+        PacketTypeAck *ack = create_ack_information(packet);
+        ESP_LOGI(pcTaskGetName(NULL), "ACK received for packet: %d", ack->packet_id);
+        xQueueSend(ackQueue, &ack->packet_id, 0);
+        free(ack);
         break;
     }
     default:

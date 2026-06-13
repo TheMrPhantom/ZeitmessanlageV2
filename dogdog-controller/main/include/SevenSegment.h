@@ -16,6 +16,9 @@
 #include "soc/soc.h"
 #include "LoraNetwork.h"
 
+#define IS_THS_MODE (strcmp(pc_programm, "ths") == 0)
+#define IS_SIMPLE_AGILITY_MODE (strcmp(pc_programm, "simple-agility") == 0)
+
 typedef struct SevenSegmentDisplay
 {
     int time;
@@ -62,6 +65,8 @@ void setSeconds(long timeToSet);
 void displayFault(int start, int stop);
 void add_reset_button();
 void del_reset_button();
+void add_vorlaeufig();
+void remove_vorlaeufig();
 
 /* End of Adaption */
 
@@ -78,6 +83,7 @@ void reset_btn_event_cb(lv_event_t *e);
 #define SEVEN_SEGMENT_INCREASE_REFUSAL 7
 #define SEVEN_SEGMENT_RESET_FAULT_REFUSAL 8
 #define SEVEN_SEGMENT_DIS 9
+#define SEVEN_SEGMENT_TEMP_TIME 10
 
 /* LCD size */
 #define LCD_H_RES (480)

@@ -96,7 +96,7 @@ DogDogPacket *create_dogdog_packet_from_trigger_information(PacketTypeTrigger *t
 DogDogPacket *create_dogdog_packet_from_final_time_information(PacketTypeFinalTime *final_time);
 DogDogPacket *create_dogdog_packet_from_sensor_state_information(PacketTypeSensorState *sensor_state);
 DogDogPacket *create_dogdog_packet_from_ack_information(PacketTypeAck *ack);
-DogDogPacket *create_dogdog_packet_from_request_final_time_information(uint8_t station_id);
+DogDogPacket *create_dogdog_packet_from_request_final_time_information(uint8_t requested_station_id);
 
 bool requires_ack(DogDogPacket *packet);
 void confirm_station_alive(DogDogPacket *packet);

@@ -290,6 +290,34 @@ DogDogPacket *create_dogdog_packet_from_ack_information(PacketTypeAck *ack)
     return packet;
 }
 
+DogDogPacket *create_dogdog_packet_from_request_final_time_information(uint8_t requested_station_id)
+{
+    DogDogPacket *packet = calloc(1, sizeof(DogDogPacket));
+    if (!packet)
+    {
+        ESP_LOGE(TAG_LORA, "Failed to allocate memory for DogDogPacket");
+        return NULL;
+    }
+
+    packet->magic = LORA_MAGIC;
+    packet->protocol_version = LORA_PROTOCOL_VERSION;
+    packet->station_id = station_id;
+    packet->packet_id = 0; // Set to 0 for now
+    packet->type = LORA_REQUEST_FINAL_TIME;
+    packet->payload_length = sizeof(uint8_t);
+    packet->payload = calloc(1, packet->payload_length);
+    if (!packet->payload)
+    {
+        ESP_LOGE(TAG_LORA, "Failed to allocate memory for packet payload");
+        free(packet);
+        return NULL;
+    }
+
+    packet->payload[0] = requested_station_id;
+
+    return packet;
+}
+
 void log_dogdog_packet(DogDogPacket *packet)
 {
     char *packet_type_str;
@@ -312,6 +340,9 @@ void log_dogdog_packet(DogDogPacket *packet)
         break;
     case LORA_ACK:
         packet_type_str = "LORA_ACK";
+        break;
+    case LORA_REQUEST_FINAL_TIME:
+        packet_type_str = "LORA_REQUEST_FINAL_TIME";
         break;
     default:
         packet_type_str = "UNKNOWN_TYPE";
@@ -580,6 +611,11 @@ void ResendTask(void *pvParameters)
                 free(waiting_for_ack->payload);
                 free(waiting_for_ack);
                 vTaskDelete(NULL);
+            }
+            else
+            {
+                ESP_LOGW(pcTaskGetName(NULL), "ACK received for packet: %d, but waiting for %d", packetid, waiting_for_ack->packet_id);
+                xQueueSend(ackQueue, &packetid, 0); // Put it back for the correct ResendTask to pick it up
             }
             vTaskDelay(pdMS_TO_TICKS(500));
         }

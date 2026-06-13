@@ -29,6 +29,9 @@ extern QueueHandle_t resetQueue;
 extern QueueHandle_t sevenSegmentQueue;
 extern QueueHandle_t buzzerQueue;
 extern TaskHandle_t sevenSegmentTask;
+extern QueueHandle_t loraSendQueue;
+
+extern int stop_id;
 static const char *TAG = "BUTTON_INPUT";
 const int sensorButtonPins[] = {BUTTON_INPUT_GPIO_TYPE_ACTIVATE,
                                 BUTTON_INPUT_GPIO_TYPE_DIS,
@@ -134,6 +137,21 @@ void Button_Input_Task(void *params)
 
                 if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_ACTIVATE)
                 {
+                    if (IS_THS_MODE && sensors_active)
+                    {
+                        DogDogPacket *request_final_time = create_dogdog_packet_from_request_final_time_information(stop_id);
+                        xQueueSend(loraSendQueue, &request_final_time, portMAX_DELAY);
+
+                        glow_state_t glow_state;
+                        glow_state.state = 1;
+                        glow_state.pinNumber = BUTTON_GLOW_GPIO_TYPE_RESET;
+                        xQueueSend(buttonQueue, &glow_state, pdMS_TO_TICKS(50));
+                    }
+                    if (IS_THS_MODE && !sensors_active)
+                    {
+                        sendKey(HID_KEY_S);
+                    }
+
                     sensors_active = !sensors_active;
 
                     glow_state_t glow_state;
@@ -148,7 +166,7 @@ void Button_Input_Task(void *params)
                         glow_state.state = 0;
                     }
 
-                    if (strcmp(pc_programm, "simple-agility") == 0)
+                    if (IS_SIMPLE_AGILITY_MODE)
                     {
                         sendKey(HID_KEY_S);
                     }
@@ -184,11 +202,11 @@ void Button_Input_Task(void *params)
                     toSendSevenSegment.type = SEVEN_SEGMENT_RESET_FAULT_REFUSAL;
                     xQueueSend(sevenSegmentQueue, &toSendSevenSegment, pdMS_TO_TICKS(500));
 
-                    if (strcmp(pc_programm, "simple-agility") == 0 && !sensors_active)
+                    if ((IS_SIMPLE_AGILITY_MODE || IS_THS_MODE) && !sensors_active)
                     {
                         sendKey(HID_KEY_N);
                     }
-                    if (strcmp(pc_programm, "simple-agility") == 0 && sensors_active)
+                    if ((IS_SIMPLE_AGILITY_MODE || IS_THS_MODE) && sensors_active)
                     {
                         printf("e00000,00\n");
                     }
@@ -209,7 +227,7 @@ void Button_Input_Task(void *params)
                         else if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_REFUSAL)
                         {
                             BaseType_t result = pdFALSE;
-                            if (strcmp(pc_programm, "simple-agility") == 0)
+                            if (IS_SIMPLE_AGILITY_MODE || IS_THS_MODE)
                             {
                                 result = sendKey(HID_KEY_V);
                             }
@@ -238,7 +256,7 @@ void Button_Input_Task(void *params)
                     {
                         if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_DIS)
                         {
-                            if (strcmp(pc_programm, "simple-agility") == 0)
+                            if (IS_SIMPLE_AGILITY_MODE || IS_THS_MODE)
                             {
                                 sendKey(HID_KEY_N);
                             }

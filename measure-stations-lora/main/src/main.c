@@ -167,7 +167,7 @@ void app_main(void)
     // mainTask = xTaskGetCurrentTaskHandle();
     InitLoraHandlers(HandleReceivedPacket);
 
-    sensorInterputQueue = xQueueCreate(1, sizeof(int));
+    sensorInterputQueue = xQueueCreate(5, sizeof(PinTrigger));
     triggerQueue = xQueueCreate(1, sizeof(int));
     buzzerQueue = xQueueCreate(5, sizeof(int));
     faultQueue = xQueueCreate(5, sizeof(int));
@@ -198,7 +198,7 @@ void app_main(void)
         sensorPins[8] = GPIO_NUM_38;
         sensorPins[9] = GPIO_NUM_37;
     }
-    
+
     init_led(num_sensors); // Pass the number of sensors as argument
     init_lora();
 
