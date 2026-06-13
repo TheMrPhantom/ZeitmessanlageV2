@@ -38,12 +38,6 @@ void startTimer(int64_t timestamp)
         if (IS_SIMPLE_AGILITY_MODE || IS_THS_MODE)
         {
             // the programm is simple-agility
-            // output the message: 's00000,00\n' (the time 0s padded to 5 digits with leading zeros)
-            printf("s00000,00\n");
-        }
-        else if (IS_THS_MODE)
-        {
-            // the programm is simple-agility
             // output the message: 's00024,65\n' (the time 24,65s padded to 5 digits with leading zeros)
             // time text is the time in seconds with 2 decimals and comma as decimal separator
 

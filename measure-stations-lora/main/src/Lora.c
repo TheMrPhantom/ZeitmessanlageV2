@@ -102,6 +102,11 @@ void HandleReceivedPacket(DogDogPacket *packet)
         PacketTypeFinalTime final_time;
         final_time.timestamp = last_release_timestamp;
         DogDogPacket *final_time_packet = create_dogdog_packet_from_final_time_information(&final_time);
+        if (!final_time_packet)
+        {
+            ESP_LOGE(pcTaskGetName(NULL), "Failed to allocate DogDogPacket for final time");
+            break;
+        }
         vTaskDelay(pdMS_TO_TICKS(250));
         xQueueSend(loraSendQueue, &final_time_packet, portMAX_DELAY);
 
