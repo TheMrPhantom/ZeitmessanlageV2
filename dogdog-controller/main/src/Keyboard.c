@@ -91,9 +91,11 @@ static void send_keyboard_stroke(uint8_t keycode)
 {
     uint8_t keycodes[6] = {keycode};
     tud_hid_keyboard_report(HID_ITF_PROTOCOL_KEYBOARD, 0, keycodes);
-    vTaskDelay(pdMS_TO_TICKS(20));
+    vTaskDelay(pdMS_TO_TICKS(25));
     tud_hid_keyboard_report(HID_ITF_PROTOCOL_KEYBOARD, 0, NULL);
-    vTaskDelay(pdMS_TO_TICKS(20));
+    vTaskDelay(pdMS_TO_TICKS(25));
+    tud_hid_keyboard_report(HID_ITF_PROTOCOL_KEYBOARD, 0, NULL);
+    vTaskDelay(pdMS_TO_TICKS(25));
     ESP_LOGI(TAG, "Keycode sent: %i", keycode);
 }
 
