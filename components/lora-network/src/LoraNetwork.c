@@ -44,7 +44,7 @@ DogDogPacket *create_dogdog_packet_from_bytes(uint8_t *data, uint16_t length)
     packet->magic = *((uint32_t *)data);
     packet->protocol_version = data[4];
 
-    if(packet->protocol_version != LORA_PROTOCOL_VERSION)
+    if (packet->protocol_version != LORA_PROTOCOL_VERSION)
     {
         ESP_LOGW(TAG_LORA, "Received packet with unsupported protocol version: %d", packet->protocol_version);
         free(packet);
@@ -53,7 +53,7 @@ DogDogPacket *create_dogdog_packet_from_bytes(uint8_t *data, uint16_t length)
 
     packet->station_id = data[5];
 
-    if(packet->station_id != controller_id && packet->station_id != start_id && packet->station_id != stop_id)
+    if (packet->station_id != controller_id && packet->station_id != start_id && packet->station_id != stop_id)
     {
         ESP_LOGW(TAG_LORA, "Received packet with invalid station id: %d", packet->station_id);
         free(packet);
@@ -475,6 +475,11 @@ void LoraReceiveTask(void *pvParameters)
     }
 }
 
+bool requires_ack(DogDogPacket *packet)
+{
+    return packet->type == LORA_TRIGGER || packet->type == LORA_FINAL_TIME || packet->type == LORA_REQUEST_FINAL_TIME;
+}
+
 void LoraSendTask(void *pvParameters)
 {
 
@@ -505,7 +510,7 @@ void LoraSendTask(void *pvParameters)
 
             int txLen = create_bytes_from_dogdog_packet(packet, buf, sizeof(buf));
             // clean up packet
-            if (packet->type != LORA_TRIGGER)
+            if (!requires_ack(packet) || packet->retries >= 6)
             {
                 free(packet->payload);
                 free(packet);

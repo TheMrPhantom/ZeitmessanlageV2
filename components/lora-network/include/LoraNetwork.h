@@ -20,6 +20,7 @@
 #define LORA_FINAL_TIME 0x04
 #define LORA_SENSOR_STATE 0x05
 #define LORA_ACK 0x06
+#define LORA_REQUEST_FINAL_TIME 0x07
 
 typedef struct SensorStatus
 {
@@ -95,7 +96,9 @@ DogDogPacket *create_dogdog_packet_from_trigger_information(PacketTypeTrigger *t
 DogDogPacket *create_dogdog_packet_from_final_time_information(PacketTypeFinalTime *final_time);
 DogDogPacket *create_dogdog_packet_from_sensor_state_information(PacketTypeSensorState *sensor_state);
 DogDogPacket *create_dogdog_packet_from_ack_information(PacketTypeAck *ack);
+DogDogPacket *create_dogdog_packet_from_request_final_time_information(uint8_t station_id);
 
+bool requires_ack(DogDogPacket *packet);
 void confirm_station_alive(DogDogPacket *packet);
 void populate_sensor_status(SensorStatus *sensorStatus, PacketTypeSensorState *sensor_state, uint8_t station_id, bool is_trigger);
 void log_dogdog_packet(DogDogPacket *packet);
