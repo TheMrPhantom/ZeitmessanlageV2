@@ -114,7 +114,8 @@ void Timer_Task(void *params)
                     xQueueSend(timeQueue, &x, 0);
                     ESP_LOGI(TIMER_TAG, "Started timer");
                 }
-                else if (timerIsRunning /*&& timerTriggerCause.is_start != start_hurdle*/)
+                else if (timerIsRunning &&
+                         (strcmp(pc_programm, "ths") != 0 || timerTriggerCause.is_start != start_hurdle))
                 {
                     int64_t timeElapsedLocal = (timerTriggerCause.timestamp - timerTime) / 1000;
                     if (timeElapsedLocal < 0)

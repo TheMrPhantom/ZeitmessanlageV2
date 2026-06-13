@@ -10,6 +10,7 @@ typedef struct TimerTrigger
 {
     bool is_start;
     int64_t timestamp;
+    bool is_final_time;
 } TimerTrigger;
 
 #endif
