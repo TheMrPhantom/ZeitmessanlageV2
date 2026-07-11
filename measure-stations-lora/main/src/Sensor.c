@@ -243,7 +243,7 @@ void Sensor_Interrupt_Task(void *params)
 
             last_release_timestamp = TIME_US(current_time) + offset - (int64_t)latency_us;
 
-            continue;
+            
         }
 
         // Check for faults only 4 seconds after startup
@@ -257,14 +257,17 @@ void Sensor_Interrupt_Task(void *params)
                 level = level == triggerLevel ? 1 : 0; // Invert the level so that 1 means triggered
                 currentFaults += level;
             }
+            ESP_LOGI(TAG, "Current Faults: %i", currentFaults);
 
             if (currentFaults > 0)
             {
+                ESP_LOGI(TAG, "Fault detected on sensor %i", currentFaults);
                 isCurrentlyGood = false;
             }
 
             if (!faultWarning && !isCurrentlyGood)
             {
+                ESP_LOGI(TAG, "Sensor connection is lost, entering warning state");
                 // Currently disconnected but not in warning state -> aktivate warning state
                 faultTime = pdTICKS_TO_MS(xTaskGetTickCount());
                 faultWarning = true;
@@ -272,6 +275,7 @@ void Sensor_Interrupt_Task(void *params)
 
             if (faultWarning)
             {
+                ESP_LOGI(TAG, "Currently in warning state, checking if timeout reached");
                 if (pdTICKS_TO_MS(xTaskGetTickCount()) - faultTime > faultCooldown && !fault)
                 {
                     // Currently in warning state, timout reached but no fault activated yet -> go into fault state
@@ -282,6 +286,8 @@ void Sensor_Interrupt_Task(void *params)
                     xQueueSend(faultQueue, &cause, 0);
 
                     ESP_LOGI(TAG, "Sensor connection is lost");
+                }else{
+                    ESP_LOGI(TAG, "Warning state timeout not reached yet");
                 }
             }
 

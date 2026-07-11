@@ -26,10 +26,83 @@ QueueHandle_t localReceiveTimestampQueue;
 QueueHandle_t ackQueue;
 QueueHandle_t loraInterruptQueue;
 
+#define MAX_PENDING_ACKS 40
+
+typedef struct PendingAck
+{
+    bool active;
+    uint8_t station_id;
+    uint8_t packet_id;
+    TaskHandle_t task;
+} PendingAck;
+
+static PendingAck pending_acks[MAX_PENDING_ACKS];
+static portMUX_TYPE pending_ack_spinlock = portMUX_INITIALIZER_UNLOCKED;
+
 extern int controller_id;
 extern int start_id;
 extern int stop_id;
 extern int station_id;
+
+static bool register_pending_ack(uint8_t ack_station_id, uint8_t ack_packet_id, TaskHandle_t task)
+{
+    bool registered = false;
+
+    portENTER_CRITICAL(&pending_ack_spinlock);
+    for (int i = 0; i < MAX_PENDING_ACKS; i++)
+    {
+        if (!pending_acks[i].active)
+        {
+            pending_acks[i].active = true;
+            pending_acks[i].station_id = ack_station_id;
+            pending_acks[i].packet_id = ack_packet_id;
+            pending_acks[i].task = task;
+            registered = true;
+            break;
+        }
+    }
+    portEXIT_CRITICAL(&pending_ack_spinlock);
+
+    return registered;
+}
+
+static void unregister_pending_ack(uint8_t ack_station_id, uint8_t ack_packet_id, TaskHandle_t task)
+{
+    portENTER_CRITICAL(&pending_ack_spinlock);
+    for (int i = 0; i < MAX_PENDING_ACKS; i++)
+    {
+        if (pending_acks[i].active &&
+            pending_acks[i].station_id == ack_station_id &&
+            pending_acks[i].packet_id == ack_packet_id &&
+            pending_acks[i].task == task)
+        {
+            pending_acks[i].active = false;
+            break;
+        }
+    }
+    portEXIT_CRITICAL(&pending_ack_spinlock);
+}
+
+static TaskHandle_t take_pending_ack_task(uint8_t ack_station_id, uint8_t ack_packet_id)
+{
+    TaskHandle_t task = NULL;
+
+    portENTER_CRITICAL(&pending_ack_spinlock);
+    for (int i = 0; i < MAX_PENDING_ACKS; i++)
+    {
+        if (pending_acks[i].active &&
+            pending_acks[i].station_id == ack_station_id &&
+            pending_acks[i].packet_id == ack_packet_id)
+        {
+            task = pending_acks[i].task;
+            pending_acks[i].active = false;
+            break;
+        }
+    }
+    portEXIT_CRITICAL(&pending_ack_spinlock);
+
+    return task;
+}
 
 DogDogPacket *create_dogdog_packet_from_bytes(uint8_t *data, uint16_t length)
 {
@@ -350,6 +423,15 @@ void log_dogdog_packet(DogDogPacket *packet)
 
     ESP_LOGI(pcTaskGetName(NULL), "DogDogPacket: magic=0x%04X, protocol_version=%d, station_id=%d, packet_id=%d, type=%s, length=%d, rssi=%d, snr=%d",
              (unsigned int)packet->magic, packet->protocol_version, packet->station_id, packet->packet_id, packet_type_str, packet->payload_length, packet->rssi, packet->snr);
+    if (packet->type == LORA_ACK && packet->payload_length == 2)
+    {
+        PacketTypeAck *ack = create_ack_information(packet);
+        if (ack != NULL)
+        {
+            ESP_LOGI(pcTaskGetName(NULL), "ACK payload: station_id=%d, packet_id=%d", ack->station_id, ack->packet_id);
+            free(ack);
+        }
+    }
     ESP_LOGD(pcTaskGetName(NULL), "Payload: ");
     for (int i = 0; i < packet->payload_length; i++)
     {
@@ -380,6 +462,29 @@ void LoraInterruptTask(void *pvParameters)
             if (sent != pdTRUE)
             {
                 ESP_LOGW(pcTaskGetName(NULL), "Warning: localReceiveTimestampQueue full, timestamp lost");
+            }
+        }
+    }
+}
+
+void AckDispatchTask(void *pvParameters)
+{
+    PacketTypeAck ack;
+
+    while (true)
+    {
+        if (xQueueReceive(ackQueue, &ack, portMAX_DELAY))
+        {
+            TaskHandle_t task = take_pending_ack_task(ack.station_id, ack.packet_id);
+            if (task != NULL)
+            {
+                ESP_LOGI(pcTaskGetName(NULL), "Dispatching ACK for station: %d packet: %d", ack.station_id, ack.packet_id);
+                xTaskNotifyGive(task);
+            }
+            else
+            {
+                ESP_LOGW(pcTaskGetName(NULL), "ACK received for station: %d packet: %d, but no pending packet is waiting",
+                         ack.station_id, ack.packet_id);
             }
         }
     }
@@ -417,7 +522,8 @@ void init_lora(void)
     bool invertIrq = false;
 
     LoRaConfig(spreadingFactor, bandwidth, codingRate, preambleLength, payloadLen, crcOn, invertIrq);
-    ackQueue = xQueueCreate(3, sizeof(uint8_t));
+    ackQueue = xQueueCreate(40, sizeof(PacketTypeAck));
+    xTaskCreate(AckDispatchTask, "AckDispatchTask", 4048, NULL, 24, NULL);
 }
 
 int create_bytes_from_dogdog_packet(DogDogPacket *packet, uint8_t *buf, size_t buf_len)
@@ -556,7 +662,18 @@ void LoraSendTask(void *pvParameters)
                     continue;
                 }
                 packet->retries++;
-                xTaskCreate(ResendTask, "ResendTask", 4048, packet, 5, NULL);
+                TaskHandle_t resend_task = NULL;
+                BaseType_t resend_task_created = xTaskCreate(ResendTask, "ResendTask", 4048, packet, 5, &resend_task);
+                if (resend_task_created != pdPASS || resend_task == NULL)
+                {
+                    ESP_LOGE(pcTaskGetName(NULL), "Failed to create resend task for station: %d packet: %d", packet->station_id, packet->packet_id);
+                    free(packet->payload);
+                    free(packet);
+                }
+                else if (!register_pending_ack(packet->station_id, packet->packet_id, resend_task))
+                {
+                    ESP_LOGE(pcTaskGetName(NULL), "No pending ACK slot available for station: %d packet: %d", packet->station_id, packet->packet_id);
+                }
             }
 
             if (txLen < 0)
@@ -598,30 +715,18 @@ void ResendTask(void *pvParameters)
 {
     DogDogPacket *waiting_for_ack = (DogDogPacket *)pvParameters;
 
-    uint8_t packetid;
-    vTaskDelay(pdMS_TO_TICKS(500));
-    for (int i = 0; i < 3; i++)
+    if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(2000)) > 0)
     {
-        if (xQueueReceive(ackQueue, &packetid, pdMS_TO_TICKS(500)))
-        {
-            ESP_LOGI(pcTaskGetName(NULL), "ACK received for packet: %d, waiting for %d", packetid, waiting_for_ack->packet_id);
-            if (waiting_for_ack->packet_id == packetid)
-            {
-                ESP_LOGI(pcTaskGetName(NULL), "ACK received for packet: %d, deleting task", waiting_for_ack->packet_id);
-                free(waiting_for_ack->payload);
-                free(waiting_for_ack);
-                vTaskDelete(NULL);
-            }
-            else
-            {
-                ESP_LOGW(pcTaskGetName(NULL), "ACK received for packet: %d, but waiting for %d", packetid, waiting_for_ack->packet_id);
-                xQueueSend(ackQueue, &packetid, 0); // Put it back for the correct ResendTask to pick it up
-            }
-            vTaskDelay(pdMS_TO_TICKS(500));
-        }
+        ESP_LOGI(pcTaskGetName(NULL), "ACK received for station: %d packet: %d, deleting task",
+                 waiting_for_ack->station_id, waiting_for_ack->packet_id);
+        free(waiting_for_ack->payload);
+        free(waiting_for_ack);
+        vTaskDelete(NULL);
     }
 
-    ESP_LOGW(pcTaskGetName(NULL), "No ACK received for packet: %d, resending", waiting_for_ack->packet_id);
+    unregister_pending_ack(waiting_for_ack->station_id, waiting_for_ack->packet_id, xTaskGetCurrentTaskHandle());
+    ESP_LOGW(pcTaskGetName(NULL), "No ACK received for station: %d packet: %d, resending",
+             waiting_for_ack->station_id, waiting_for_ack->packet_id);
 
     xQueueSend(loraSendQueue, &waiting_for_ack, portMAX_DELAY);
 

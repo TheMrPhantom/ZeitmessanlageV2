@@ -120,8 +120,8 @@ void HandleReceivedPacket(DogDogPacket *packet)
     case LORA_ACK:
     {
         PacketTypeAck *ack = create_ack_information(packet);
-        ESP_LOGI(pcTaskGetName(NULL), "ACK received for packet: %d", ack->packet_id);
-        xQueueSend(ackQueue, &ack->packet_id, 0);
+        ESP_LOGI(pcTaskGetName(NULL), "ACK received for station: %d packet: %d", ack->station_id, ack->packet_id);
+        xQueueSend(ackQueue, ack, 0);
         free(ack);
         break;
     }

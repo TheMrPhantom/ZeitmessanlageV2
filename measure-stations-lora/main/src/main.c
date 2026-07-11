@@ -111,6 +111,7 @@ void app_main(void)
 
     controller_id = getValue("controller_id");
 
+    
     if (controller_id == 0)
     {
         controller_id = CONFIG_LORA_CONTROLLER_ID;
