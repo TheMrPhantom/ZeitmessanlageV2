@@ -24,6 +24,7 @@ extern char *pc_programm;
 char *TIMER_TAG = "TIMER";
 TimerTrigger timerTriggerCause;
 int64_t timerTime = 0;
+int64_t lastTriggerTime = 0;
 int resetCause = 0;
 bool timerIsRunning = false;
 extern bool sensors_active;
@@ -103,6 +104,7 @@ void Timer_Task(void *params)
             if (selectedQueue == triggerQueue)
             {
                 xQueueReceive(triggerQueue, &timerTriggerCause, 0);
+                lastTriggerTime = timerTriggerCause.timestamp;
                 ESP_LOGI(TIMER_TAG, "Received trigger! From start? -> %d", timerTriggerCause.is_start);
                 ESP_LOGI(TIMER_TAG, "Trigger is final time? -> %d", timerTriggerCause.is_final_time);
                 // The trigger was the sensor

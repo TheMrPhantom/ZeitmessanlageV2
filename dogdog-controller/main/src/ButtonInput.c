@@ -16,6 +16,7 @@
 #include "GPIOPins.h"
 #include "SevenSegment.h"
 #include "Buzzer.h"
+#include "Timer.h"
 
 #if CONFIG_START
 #define STATION_TYPE 0
@@ -30,6 +31,7 @@ extern QueueHandle_t sevenSegmentQueue;
 extern QueueHandle_t buzzerQueue;
 extern TaskHandle_t sevenSegmentTask;
 extern QueueHandle_t loraSendQueue;
+extern QueueHandle_t timeQueue;
 
 extern int stop_id;
 static const char *TAG = "BUTTON_INPUT";
@@ -41,6 +43,28 @@ const int sensorButtonPins[] = {BUTTON_INPUT_GPIO_TYPE_ACTIVATE,
 
 bool sensors_active = false;
 extern char *pc_programm;
+
+static void send_dis_command()
+{
+    if (sensors_active)
+    {
+        BaseType_t result = sendKey(HID_KEY_D);
+        ESP_LOGI(TAG, "Result of sending key: %i", result);
+
+        SevenSegmentDisplay toSendSevenSegment;
+        toSendSevenSegment.type = SEVEN_SEGMENT_DIS;
+        xQueueSend(sevenSegmentQueue, &toSendSevenSegment, pdMS_TO_TICKS(500));
+        xQueueSend(buzzerQueue, &(int){BUZZER_BUTTON_PRESS}, 0);
+    }
+    else
+    {
+        if (IS_SIMPLE_AGILITY_MODE || IS_THS_MODE)
+        {
+            sendKey(HID_KEY_N);
+        }
+        ESP_LOGI(TAG, "Sensors are not active");
+    }
+}
 
 static void IRAM_ATTR gpio_interrupt_handler(void *args)
 {
@@ -87,9 +111,14 @@ void Button_Input_Task(void *params)
 
     timeval_t last_button_interrupt;
     timeval_t reset_pressed;
+    timeval_t dis_pressed;
     gettimeofday(&last_button_interrupt, NULL);
     gettimeofday(&reset_pressed, NULL);
+    gettimeofday(&dis_pressed, NULL);
     int countdown_sent = 1;
+    bool reset_ignore_until_release = false;
+    bool dis_press_pending = false;
+    bool dis_long_press_sent = false;
 
     bool canContinue = false;
     while (!canContinue)
@@ -129,7 +158,21 @@ void Button_Input_Task(void *params)
             timeval_t now;
             gettimeofday(&now, NULL);
 
-            if (gpio_get_level(sensor_interrupt.pinNumber) == 0 && (TIME_US(now) - TIME_US(last_button_interrupt) > 300000))
+            if (gpio_get_level(sensor_interrupt.pinNumber) == 1 && sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_RESET && reset_ignore_until_release)
+            {
+                reset_ignore_until_release = false;
+                gettimeofday(&last_button_interrupt, NULL);
+                ESP_LOGI(TAG, "Reset release after countdown");
+            }
+            else if (gpio_get_level(sensor_interrupt.pinNumber) == 1 && sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_DIS && dis_press_pending)
+            {
+                if (!dis_long_press_sent)
+                {
+                    send_dis_command();
+                }
+                dis_press_pending = false;
+            }
+            else if (gpio_get_level(sensor_interrupt.pinNumber) == 0 && (TIME_US(now) - TIME_US(last_button_interrupt) > 300000))
             {
                 gettimeofday(&last_button_interrupt, NULL);
 
@@ -184,6 +227,12 @@ void Button_Input_Task(void *params)
                 }
                 else if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_RESET)
                 {
+                    if (reset_ignore_until_release)
+                    {
+                        ESP_LOGI(TAG, "Ignoring reset press while waiting for release after countdown");
+                        continue;
+                    }
+
                     glow_state_t glow_state;
                     glow_state.state = 0;
                     glow_state.pinNumber = BUTTON_GLOW_GPIO_TYPE_RESET;
@@ -244,24 +293,23 @@ void Button_Input_Task(void *params)
                         }
                         else if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_DIS)
                         {
-                            BaseType_t result = sendKey(HID_KEY_D);
-                            ESP_LOGI(TAG, "Result of sending key: %i", result);
-                            SevenSegmentDisplay toSendSevenSegment;
-                            toSendSevenSegment.type = SEVEN_SEGMENT_DIS;
-                            xQueueSend(sevenSegmentQueue, &toSendSevenSegment, pdMS_TO_TICKS(500));
-                            xQueueSend(buzzerQueue, &(int){BUZZER_BUTTON_PRESS}, 0);
+                            gettimeofday(&dis_pressed, NULL);
+                            dis_press_pending = true;
+                            dis_long_press_sent = false;
                         }
                     }
                     else
                     {
                         if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_DIS)
                         {
-                            if (IS_SIMPLE_AGILITY_MODE || IS_THS_MODE)
-                            {
-                                sendKey(HID_KEY_N);
-                            }
+                            gettimeofday(&dis_pressed, NULL);
+                            dis_press_pending = true;
+                            dis_long_press_sent = false;
                         }
-                        ESP_LOGI(TAG, "Sensors are not active");
+                        else
+                        {
+                            ESP_LOGI(TAG, "Sensors are not active");
+                        }
                     }
                 }
             }
@@ -273,12 +321,30 @@ void Button_Input_Task(void *params)
         if (gpio_get_level(BUTTON_INPUT_GPIO_TYPE_RESET) == 0 && (TIME_US(now) - TIME_US(reset_pressed) > 1000000) && countdown_sent == 0)
         {
             countdown_sent = 1;
+            reset_ignore_until_release = true;
             SevenSegmentDisplay toSend;
             toSend.type = SEVEN_SEGMENT_COUNTDOWN;
             toSend.time = 60 * 7 * 1000;
             xQueueSend(sevenSegmentQueue, &toSend, 0);
             gettimeofday(&reset_pressed, NULL);
             ESP_LOGI(TAG, "Countdown started");
+        }
+
+        if (gpio_get_level(BUTTON_INPUT_GPIO_TYPE_DIS) == 0 && dis_press_pending && !dis_long_press_sent && (TIME_US(now) - TIME_US(dis_pressed) > 1500000))
+        {
+            dis_long_press_sent = true;
+
+            if (lastTriggerTime != 0)
+            {
+                startTimer(lastTriggerTime);
+                int64_t x = -1;
+                xQueueSend(timeQueue, &x, 0);
+                ESP_LOGI(TAG, "Restarted timer from last trigger timestamp: %" PRId64, lastTriggerTime);
+            }
+            else
+            {
+                ESP_LOGW(TAG, "DIS long press ignored because no trigger timestamp is available");
+            }
         }
     }
 }
