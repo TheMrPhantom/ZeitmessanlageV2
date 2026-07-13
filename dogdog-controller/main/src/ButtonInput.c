@@ -44,17 +44,37 @@ const int sensorButtonPins[] = {BUTTON_INPUT_GPIO_TYPE_ACTIVATE,
 bool sensors_active = false;
 extern char *pc_programm;
 
-static void send_dis_command()
+static void show_dis_press_feedback()
+{
+    if (sensors_active)
+    {
+        SevenSegmentDisplay toSendSevenSegment;
+        toSendSevenSegment.type = SEVEN_SEGMENT_DIS_PREVIEW;
+        xQueueSend(sevenSegmentQueue, &toSendSevenSegment, pdMS_TO_TICKS(500));
+        xQueueSend(buzzerQueue, &(int){BUZZER_BUTTON_PRESS}, 0);
+    }
+}
+
+static void confirm_dis_press_feedback()
+{
+    SevenSegmentDisplay toSendSevenSegment;
+    toSendSevenSegment.type = SEVEN_SEGMENT_DIS_PREVIEW_CONFIRM;
+    xQueueSend(sevenSegmentQueue, &toSendSevenSegment, pdMS_TO_TICKS(500));
+}
+
+static void revert_dis_press_feedback()
+{
+    SevenSegmentDisplay toSendSevenSegment;
+    toSendSevenSegment.type = SEVEN_SEGMENT_DIS_PREVIEW_REVERT;
+    xQueueSend(sevenSegmentQueue, &toSendSevenSegment, pdMS_TO_TICKS(500));
+}
+
+static void send_dis_key_to_pc()
 {
     if (sensors_active)
     {
         BaseType_t result = sendKey(HID_KEY_D);
         ESP_LOGI(TAG, "Result of sending key: %i", result);
-
-        SevenSegmentDisplay toSendSevenSegment;
-        toSendSevenSegment.type = SEVEN_SEGMENT_DIS;
-        xQueueSend(sevenSegmentQueue, &toSendSevenSegment, pdMS_TO_TICKS(500));
-        xQueueSend(buzzerQueue, &(int){BUZZER_BUTTON_PRESS}, 0);
     }
     else
     {
@@ -119,6 +139,7 @@ void Button_Input_Task(void *params)
     bool reset_ignore_until_release = false;
     bool dis_press_pending = false;
     bool dis_long_press_sent = false;
+    bool dis_feedback_shown = false;
 
     bool canContinue = false;
     while (!canContinue)
@@ -168,9 +189,14 @@ void Button_Input_Task(void *params)
             {
                 if (!dis_long_press_sent)
                 {
-                    send_dis_command();
+                    send_dis_key_to_pc();
+                    if (dis_feedback_shown)
+                    {
+                        confirm_dis_press_feedback();
+                    }
                 }
                 dis_press_pending = false;
+                dis_feedback_shown = false;
             }
             else if (gpio_get_level(sensor_interrupt.pinNumber) == 0 && (TIME_US(now) - TIME_US(last_button_interrupt) > 300000))
             {
@@ -296,6 +322,8 @@ void Button_Input_Task(void *params)
                             gettimeofday(&dis_pressed, NULL);
                             dis_press_pending = true;
                             dis_long_press_sent = false;
+                            show_dis_press_feedback();
+                            dis_feedback_shown = sensors_active;
                         }
                     }
                     else
@@ -305,6 +333,7 @@ void Button_Input_Task(void *params)
                             gettimeofday(&dis_pressed, NULL);
                             dis_press_pending = true;
                             dis_long_press_sent = false;
+                            dis_feedback_shown = false;
                         }
                         else
                         {
@@ -333,6 +362,11 @@ void Button_Input_Task(void *params)
         if (gpio_get_level(BUTTON_INPUT_GPIO_TYPE_DIS) == 0 && dis_press_pending && !dis_long_press_sent && (TIME_US(now) - TIME_US(dis_pressed) > 1500000))
         {
             dis_long_press_sent = true;
+            if (dis_feedback_shown)
+            {
+                revert_dis_press_feedback();
+                dis_feedback_shown = false;
+            }
 
             if (lastTriggerTime != 0)
             {

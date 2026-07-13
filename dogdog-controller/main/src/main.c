@@ -50,6 +50,7 @@
 #include "Clock.h"
 #include "Lora.h"
 #include "Sensor.h"
+#include "HornTimer.h"
 #include "sdkconfig.h"
 
 QueueHandle_t sensorInterruptQueue;
@@ -151,6 +152,7 @@ void app_main(void)
 
     BaseType_t clock_initialized = init_external_clock();
     ESP_LOGI(TAG, "Clock initialized: %d", clock_initialized);
+    ESP_ERROR_CHECK_WITHOUT_ABORT(init_horn_timer_broadcast());
     init_keyboard();
     init_glow_pins();
 

@@ -9,6 +9,7 @@
 #include "Buzzer.h"
 #include "Button.h"
 #include "GPIOPins.h"
+#include "HornTimer.h"
 
 extern QueueHandle_t sevenSegmentQueue;
 
@@ -28,11 +29,25 @@ int64_t lastTriggerTime = 0;
 int resetCause = 0;
 bool timerIsRunning = false;
 extern bool sensors_active;
+static int64_t last_horn_broadcast_time = 0;
 
 void startTimer(int64_t timestamp)
 {
     timerTime = timestamp;
     timerIsRunning = true;
+
+    timeval_t current_time;
+    gettimeofday(&current_time, NULL);
+    int64_t elapsed_time = TIME_US(current_time) - timerTime;
+
+    if (elapsed_time < 0)
+    {
+        ESP_LOGW(TIMER_TAG, "Negative elapsed time detected: %lld", elapsed_time);
+        elapsed_time = 0; // Reset to zero if negative
+    }
+
+    horn_timer_broadcast_elapsed_us(elapsed_time);
+    last_horn_broadcast_time = elapsed_time;
 
     if (sensors_active)
     {
@@ -42,17 +57,9 @@ void startTimer(int64_t timestamp)
             // output the message: 's00024,65\n' (the time 24,65s padded to 5 digits with leading zeros)
             // time text is the time in seconds with 2 decimals and comma as decimal separator
 
-            timeval_t current_time;
-            gettimeofday(&current_time, NULL);
-            int64_t elapsed_time = (TIME_US(current_time) - timerTime) / 1000;
+            int64_t elapsed_time_ms = elapsed_time / 1000;
 
-            if (elapsed_time < 0)
-            {
-                ESP_LOGW(TIMER_TAG, "Negative elapsed time detected: %lld", elapsed_time);
-                elapsed_time = 0; // Reset to zero if negative
-            }
-
-            float time_float = elapsed_time / 1000.0f;
+            float time_float = elapsed_time_ms / 1000.0f;
 
             char padded_time[10]; // 8 digits + null terminator
             // fill padded time with zeros
@@ -183,6 +190,7 @@ void Timer_Task(void *params)
             {
                 xQueueReceive(resetQueue, &resetCause, 0);
                 stopTimer();
+                horn_timer_broadcast_reset();
 
                 int x = -2;
                 xQueueSend(timeQueue, &x, 0);
@@ -205,6 +213,12 @@ void Timer_Task(void *params)
             {
                 ESP_LOGW(TIMER_TAG, "Negative elapsed time detected: %lld", elapsed_time);
                 elapsed_time = 0; // Reset to zero if negative
+            }
+
+            if (elapsed_time - last_horn_broadcast_time >= 250000)
+            {
+                horn_timer_broadcast_elapsed_us(elapsed_time);
+                last_horn_broadcast_time = elapsed_time;
             }
 
             SevenSegmentDisplay toSend;

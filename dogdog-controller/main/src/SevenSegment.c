@@ -58,6 +58,9 @@ LV_IMG_DECLARE(hand);
 HistoryEntry history[4];
 int history_index = 0;
 bool isDis = false;
+static bool dis_preview_active = false;
+static bool dis_preview_previous_state = false;
+static long last_displayed_time_ms = 0;
 extern bool sensors_active;
 
 extern char *pc_programm;
@@ -147,6 +150,36 @@ void Seven_Segment_Task(void *params)
                 lv_label_set_text(top_label, "DIS");
                 lv_obj_set_style_text_color(top_label, lv_color_hex(0xFF0000), 0);
                 lvgl_port_unlock();
+                break;
+            case SEVEN_SEGMENT_DIS_PREVIEW:
+                lvgl_port_lock(-1);
+                if (!dis_preview_active)
+                {
+                    dis_preview_previous_state = isDis;
+                    dis_preview_active = true;
+                }
+                if (IS_SIMPLE_AGILITY_MODE || IS_THS_MODE)
+                {
+                    isDis = !dis_preview_previous_state;
+                }
+                else
+                {
+                    isDis = true;
+                }
+                lv_label_set_text(top_label, "DIS");
+                lv_obj_set_style_text_color(top_label, lv_color_hex(0xFF0000), 0);
+                lvgl_port_unlock();
+                break;
+            case SEVEN_SEGMENT_DIS_PREVIEW_REVERT:
+                if (dis_preview_active)
+                {
+                    isDis = dis_preview_previous_state;
+                    dis_preview_active = false;
+                    setMilliseconds(last_displayed_time_ms);
+                }
+                break;
+            case SEVEN_SEGMENT_DIS_PREVIEW_CONFIRM:
+                dis_preview_active = false;
                 break;
             default:
                 ESP_LOGW(SEVEN_SEGMENT_TAG, "Unknown display type");
@@ -523,6 +556,7 @@ void setup_pc_programm_screen()
 void setMilliseconds(long timeToSet)
 {
     timeToSet = timeToSet - timeToSet % 10; // Round down to nearest 10 ms
+    last_displayed_time_ms = timeToSet;
     float sec = timeToSet / 1000.0f;
     char numberString[8]; // Enough for "9999.99\0"
     numberString[7] = 0x00;
