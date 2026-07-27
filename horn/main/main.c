@@ -60,8 +60,12 @@ static rmt_channel_handle_t s_status_led_rmt_channel;
 static rmt_encoder_handle_t s_status_led_encoder;
 static QueueHandle_t s_button0_queue;
 static portMUX_TYPE s_config_lock = portMUX_INITIALIZER_UNLOCKED;
+static portMUX_TYPE s_buzz_state_lock = portMUX_INITIALIZER_UNLOCKED;
 static int64_t s_runtime_delay_us = BUZZER_DELAY_US_MAX;
 static int64_t s_runtime_buzz_duration_us = BUZZER_DURATION_US_DEFAULT;
+static bool s_buzz_fired;
+static bool s_have_last_start_elapsed;
+static uint64_t s_last_start_elapsed_ns;
 
 typedef struct {
     uint8_t red;
@@ -132,6 +136,35 @@ static void stop_timer_if_active(esp_timer_handle_t timer)
     }
 }
 
+static bool start_message_should_schedule(uint64_t elapsed_ns)
+{
+    portENTER_CRITICAL(&s_buzz_state_lock);
+    if (!s_have_last_start_elapsed || elapsed_ns < s_last_start_elapsed_ns) {
+        s_buzz_fired = false;
+    }
+    s_have_last_start_elapsed = true;
+    s_last_start_elapsed_ns = elapsed_ns;
+    bool should_schedule = !s_buzz_fired;
+    portEXIT_CRITICAL(&s_buzz_state_lock);
+    return should_schedule;
+}
+
+static void mark_buzz_fired(bool fired)
+{
+    portENTER_CRITICAL(&s_buzz_state_lock);
+    s_buzz_fired = fired;
+    portEXIT_CRITICAL(&s_buzz_state_lock);
+}
+
+static void reset_buzz_sequence(void)
+{
+    portENTER_CRITICAL(&s_buzz_state_lock);
+    s_buzz_fired = false;
+    s_have_last_start_elapsed = false;
+    s_last_start_elapsed_ns = 0;
+    portEXIT_CRITICAL(&s_buzz_state_lock);
+}
+
 static void buzzer_set(bool enabled)
 {
     gpio_set_level(CONFIG_BUZZER_GPIO, enabled ? 1 : 0);
@@ -141,18 +174,29 @@ static void buzz_stop_timer_cb(void *arg)
 {
     (void)arg;
     buzzer_set(false);
+    esp_err_t led_err = status_led_set(STATUS_LED_READY);
+    if (led_err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to set ready LED after buzz: %s", esp_err_to_name(led_err));
+    }
+    ESP_LOGI(TAG, "Buzzer stopped");
 }
 
 static void buzz_start_timer_cb(void *arg)
 {
     (void)arg;
+    int64_t duration_us = get_runtime_buzz_duration_us();
+
+    mark_buzz_fired(true);
     buzzer_set(true);
 
     stop_timer_if_active(s_buzz_stop_timer);
-    esp_err_t err = esp_timer_start_once(s_buzz_stop_timer, get_runtime_buzz_duration_us());
+    esp_err_t err = esp_timer_start_once(s_buzz_stop_timer, duration_us);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start buzz stop timer: %s", esp_err_to_name(err));
+        mark_buzz_fired(false);
         buzzer_set(false);
+    } else {
+        ESP_LOGI(TAG, "Buzzer started for %" PRId64 " us", duration_us);
     }
 }
 
@@ -165,6 +209,10 @@ static void cancel_buzz_state(void)
 
 static void schedule_buzz(uint64_t elapsed_ns)
 {
+    if (!start_message_should_schedule(elapsed_ns)) {
+        return;
+    }
+
     int64_t configured_delay_us = get_runtime_delay_us();
     uint64_t elapsed_us = elapsed_ns / 1000ULL;
     int64_t remaining_us = elapsed_us >= (uint64_t)configured_delay_us
@@ -195,6 +243,7 @@ static void schedule_buzz(uint64_t elapsed_ns)
 
 static void reset_buzz_timer(void)
 {
+    reset_buzz_sequence();
     cancel_buzz_state();
     esp_err_t led_err = status_led_set(STATUS_LED_READY);
     if (led_err != ESP_OK) {
