@@ -1,0 +1,53 @@
+menu "Buzzer Timer"
+
+    config BUZZER_GPIO
+        int "Buzzer GPIO"
+        default 4
+        range 0 33
+        help
+            GPIO driven high while the buzzer is active.
+
+    config STATUS_LED_GPIO
+        int "WS2812B status LED GPIO"
+        default 48
+        range 0 48
+        help
+            GPIO connected to the dev board WS2812B data input.
+
+    config BUZZER_DELAY_MS
+        int "Default buzzer delay in milliseconds"
+        default 30000
+        range 0 3600000
+        help
+            Default delay from the remote timer start to the buzzer sound.
+            The web interface can change this at runtime until the next reboot.
+
+    config BUZZER_DURATION_MS
+        int "Buzzer duration in milliseconds"
+        default 500
+        range 1 60000
+        help
+            How long the buzzer output stays high once it starts buzzing.
+
+    config BUZZER_SOFTAP_SSID
+        string "SoftAP SSID"
+        default "buzzer-timer"
+        help
+            Wi-Fi network name created by the ESP32.
+
+    config BUZZER_SOFTAP_PASSWORD
+        string "SoftAP password"
+        default "buzzer123"
+        help
+            Wi-Fi password for the ESP32 access point. Use at least 8
+            characters. Leave empty for an open network.
+
+    config BUZZER_SOFTAP_CHANNEL
+        int "SoftAP and promiscuous channel"
+        default 1
+        range 1 13
+        help
+            Wi-Fi channel used by both the ESP32 access point and the
+            promiscuous receiver.
+
+endmenu
