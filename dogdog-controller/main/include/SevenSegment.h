@@ -53,7 +53,7 @@ void increase_refusals();
 
 void inrease_fault();
 
-void setupSevenSegment();
+esp_err_t setupSevenSegment(void);
 
 void setup_timing_screen();
 void setup_splashscreen();
@@ -76,6 +76,8 @@ void add_reset_button();
 void del_reset_button();
 void add_vorlaeufig();
 void remove_vorlaeufig();
+esp_err_t init_firmware_upgrade_screen(void);
+esp_err_t display_firmware_upgrade_status(const char *message);
 
 /* End of Adaption */
 
@@ -96,6 +98,7 @@ void reset_btn_event_cb(lv_event_t *e);
 #define SEVEN_SEGMENT_DIS_PREVIEW 11
 #define SEVEN_SEGMENT_DIS_PREVIEW_REVERT 12
 #define SEVEN_SEGMENT_DIS_PREVIEW_CONFIRM 13
+#define SEVEN_SEGMENT_FIRMWARE_UPGRADE 14
 
 /* LCD size */
 #define LCD_H_RES (480)

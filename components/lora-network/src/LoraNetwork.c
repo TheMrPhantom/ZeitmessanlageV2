@@ -803,7 +803,7 @@ static void IRAM_ATTR lora_module_rx_isr(void *arg)
 
 void LoraReceiveTask(void *pvParameters)
 {
-    (void)pvParameters;
+    TaskHandle_t startup_waiter = (TaskHandle_t)pvParameters;
     esp_err_t err = gpio_reset_pin(CONFIG_LORA_GPIO_DIO1);
     if (err == ESP_OK)
     {
@@ -822,6 +822,10 @@ void LoraReceiveTask(void *pvParameters)
     if (err != ESP_OK)
     {
         ESP_LOGE(TAG_LORA, "Failed to configure LoRa receive interrupt: %s", esp_err_to_name(err));
+        if (startup_waiter != NULL)
+        {
+            (void)xTaskNotify(startup_waiter, (uint32_t)err, eSetValueWithOverwrite);
+        }
         vTaskDelete(NULL);
         return;
     }
@@ -829,6 +833,13 @@ void LoraReceiveTask(void *pvParameters)
     if (localReceiveTimestampQueue == NULL)
     {
         ESP_LOGE(TAG_LORA, "LoRa receive timestamp queue is not initialized");
+        err = ESP_ERR_INVALID_STATE;
+        (void)gpio_intr_disable(CONFIG_LORA_GPIO_DIO1);
+        (void)gpio_isr_handler_remove(CONFIG_LORA_GPIO_DIO1);
+        if (startup_waiter != NULL)
+        {
+            (void)xTaskNotify(startup_waiter, (uint32_t)err, eSetValueWithOverwrite);
+        }
         vTaskDelete(NULL);
         return;
     }
@@ -841,6 +852,11 @@ void LoraReceiveTask(void *pvParameters)
         {
             ESP_LOGW(TAG_LORA, "Could not queue the pending LoRa interrupt");
         }
+    }
+
+    if (startup_waiter != NULL)
+    {
+        (void)xTaskNotify(startup_waiter, (uint32_t)ESP_OK, eSetValueWithOverwrite);
     }
 
     ESP_LOGI(pcTaskGetName(NULL), "Starting");

@@ -5,6 +5,12 @@
 #include <stdint.h>
 
 #include "esp_err.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/event_groups.h"
+
+#define MEASUREMENT_SENSOR_READY BIT0
+
+extern EventGroupHandle_t measurementStartupEvents;
 
 typedef struct PinTrigger
 {

@@ -110,6 +110,9 @@ void log_dogdog_packet(DogDogPacket *packet);
 
 BaseType_t send_dogdog_packet(DogDogPacket *packet);
 esp_err_t init_lora(void);
+/* If pvParameters is a non-NULL TaskHandle_t, the receive task notifies that
+ * task exactly once after its GPIO/ISR startup attempt.  The notification
+ * value is ESP_OK on success or the esp_err_t failure code. */
 void LoraReceiveTask(void *pvParameters);
 void LoraSendTask(void *pvParameters);
 void LoraSyncTask(void *pvParameters);

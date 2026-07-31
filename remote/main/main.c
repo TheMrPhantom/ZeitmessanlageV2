@@ -12,14 +12,17 @@
 #include "esp_netif.h"
 #include "esp_random.h"
 #include "esp_sleep.h"
+#include "esp_timer.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
 #include "sdkconfig.h"
+#include "OTA.h"
 
 #define BUTTON_GPIO GPIO_NUM_33
 #define BUTTON_RELEASE_DEBOUNCE_MS 50
+#define OTA_BUTTON_HOLD_MS 10000
 #define HORN_TX_ATTEMPTS 3
 #define HORN_TX_INTERVAL_MS 10
 #define HORN_TX_DRAIN_MS 20
@@ -35,6 +38,31 @@ static const uint8_t s_horn_mac[6] = {0xde, 0x09, 0xdd, 0x09, 0x00, 0x01};
 
 static uint8_t s_source_mac[6];
 static uint16_t s_sequence_number;
+
+static void remote_ota_status(dd_ota_state_t state, esp_err_t error, void *context)
+{
+    (void)context;
+    if (state == DD_OTA_FAILED) {
+        ESP_LOGE(TAG, "Firmware upgrade failed: %s", esp_err_to_name(error));
+    } else if (state == DD_OTA_SUCCEEDED) {
+        ESP_LOGI(TAG, "Firmware upgrade complete; restarting");
+    }
+}
+
+static void start_remote_ota_mode(void)
+{
+    const dd_ota_options_t options = {
+        .status_cb = remote_ota_status,
+        .context = NULL,
+    };
+    esp_err_t err = dd_ota_start(&options);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Could not start OTA worker: %s", esp_err_to_name(err));
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        esp_restart();
+    }
+    vTaskDelete(NULL);
+}
 
 static esp_err_t init_nvs(void)
 {
@@ -147,16 +175,29 @@ static esp_err_t send_stop_command(void)
     return err;
 }
 
-static void wait_for_button_release(void)
+static void wait_for_button_release_or_request_ota(int64_t pressed_at_us)
 {
     const TickType_t debounce_ticks = pdMS_TO_TICKS(BUTTON_RELEASE_DEBOUNCE_MS);
     TickType_t released_since = xTaskGetTickCount();
+    bool ota_requested = false;
 
     while (true) {
         TickType_t now = xTaskGetTickCount();
         if (gpio_get_level(BUTTON_GPIO) == 0) {
             released_since = now;
+            if (!ota_requested &&
+                esp_timer_get_time() - pressed_at_us >=
+                (int64_t)OTA_BUTTON_HOLD_MS * 1000LL) {
+                ESP_LOGI(TAG, "Button held for %d seconds; firmware upgrade requested",
+                         OTA_BUTTON_HOLD_MS / 1000);
+                ota_requested = true;
+            }
         } else if ((TickType_t)(now - released_since) >= debounce_ticks) {
+            if (ota_requested) {
+                // Require a continuously stable release before rebooting so
+                // switch bounce cannot leave the wake button asserted.
+                dd_ota_request_reboot();
+            }
             return;
         }
         vTaskDelay(1);
@@ -212,9 +253,23 @@ static bool sleep_until_button_press(void)
 
 void app_main(void)
 {
+    if (dd_ota_consume_reboot_request()) {
+        ESP_LOGI(TAG, "Starting clean firmware upgrade boot");
+        start_remote_ota_mode();
+        return;
+    }
+
     ESP_ERROR_CHECK(init_nvs());
     ESP_ERROR_CHECK(init_button());
     ESP_ERROR_CHECK(init_wifi());
+
+    esp_err_t valid_err = dd_ota_mark_app_valid();
+    if (valid_err != ESP_OK) {
+        ESP_LOGE(TAG, "Could not mark running firmware valid: %s; restarting for rollback",
+                 esp_err_to_name(valid_err));
+        vTaskDelay(pdMS_TO_TICKS(250));
+        esp_restart();
+    }
 
     ESP_LOGI(TAG,
              "Ready on button GPIO %d; horn Wi-Fi channel %d",
@@ -224,8 +279,9 @@ void app_main(void)
     bool button_pressed = gpio_get_level(BUTTON_GPIO) == 0;
     while (true) {
         if (button_pressed) {
+            const int64_t pressed_at_us = esp_timer_get_time();
             send_stop_command();
-            wait_for_button_release();
+            wait_for_button_release_or_request_ota(pressed_at_us);
         }
 
         button_pressed = sleep_until_button_press();

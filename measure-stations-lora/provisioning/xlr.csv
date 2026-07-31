@@ -1,0 +1,5 @@
+key,type,encoding,value
+storage,namespace,,
+is_xrl,data,i32,1
+num_fake_s,data,i32,5
+num_s_req,data,i32,2

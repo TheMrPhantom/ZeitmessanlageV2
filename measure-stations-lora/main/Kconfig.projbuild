@@ -1,22 +1,16 @@
 menu "EDIT HERE: Zeitmessanlage configuration"
-    config IS_XLR
-        bool "is_xlr"
-        default n
-        help
-            Set to true if this is an XLR board. This will be available in code as
-            CONFIG_IS_XLR.
     config NUM_SENSORS_REQUIRED_FOR_TRIGGER
-        int "num_sensors_required_for_trigger"
+        int "Default sensors required for trigger"
         range 1 10
         default 2
-        depends on !IS_XLR
         help
-            Number of sensors that need to be triggered for the system to trigger. This will be available in code as CONFIG_NUM_SENSORS_REQUIRED_FOR_TRIGGER.
+            Fallback used when num_s_req has not yet been provisioned in NVS.
+            The stored NVS value is authoritative at runtime.
     config NUM_FAKE_SENSORS
-        int "num_fake_sensors"
+        int "Default XLR virtual sensor count"
         range 1 64
         default 5
-        depends on IS_XLR
         help
-            Number of sensors that are connected to the xrl port. This is only used if IS_XLR is set to true. This value will be available in code as CONFIG_NUM_FAKE_SENSORS.
+            Fallback used when num_fake_s has not yet been provisioned in NVS.
+            The stored NVS value is authoritative at runtime.
 endmenu

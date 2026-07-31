@@ -14,6 +14,7 @@
 #include "GPIOPins.h"
 #include "LoraNetwork.h"
 #include "esp_timer.h"
+#include "Startup.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -49,6 +50,8 @@ static lv_obj_t *end_label = NULL;
 static lv_obj_t *sensor_left = NULL;
 static lv_obj_t *sensor_right = NULL;
 static lv_obj_t *vorlaeufig = NULL;
+static lv_obj_t *firmware_upgrade_screen = NULL;
+static lv_obj_t *firmware_upgrade_label = NULL;
 
 /* Font and image declarations */
 LV_FONT_DECLARE(monospace);
@@ -60,6 +63,7 @@ int history_index = 0;
 bool isDis = false;
 static bool dis_preview_active = false;
 static bool dis_preview_previous_state = false;
+static bool firmware_upgrade_display_active = false;
 static long last_displayed_time_ms = 0;
 extern volatile bool sensors_active;
 
@@ -68,12 +72,56 @@ extern int controller_id;
 extern int start_id;
 extern int stop_id;
 
+static bool service_firmware_upgrade_display(bool force)
+{
+    const EventBits_t bits = xEventGroupGetBits(startupEventGroup);
+    if (!force && (bits & DOGDOG_OTA_DISPLAY_REQUEST_BIT) == 0)
+    {
+        return false;
+    }
+
+    xEventGroupClearBits(startupEventGroup, DOGDOG_OTA_DISPLAY_REQUEST_BIT);
+    xQueueReset(sevenSegmentQueue);
+
+    const esp_err_t err = display_firmware_upgrade_status("Firmware Upgrade in progress");
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(SEVEN_SEGMENT_TAG, "Could not display firmware-upgrade screen: %s",
+                 esp_err_to_name(err));
+        return true;
+    }
+
+    firmware_upgrade_display_active = true;
+    xEventGroupSetBits(startupEventGroup, DOGDOG_OTA_DISPLAY_ACK_BIT);
+    return true;
+}
+
 void Seven_Segment_Task(void *params)
 {
-    setupSevenSegment();
+    (void)params;
+
+    const esp_err_t setup_err = setupSevenSegment();
+    if (setup_err != ESP_OK)
+    {
+        ESP_LOGE(SEVEN_SEGMENT_TAG, "Display initialization failed: %s",
+                 esp_err_to_name(setup_err));
+        dogdog_startup_signal_failure();
+        vTaskDelete(NULL);
+        return;
+    }
 
     while (true)
     {
+        if (service_firmware_upgrade_display(false))
+        {
+            continue;
+        }
+        if (firmware_upgrade_display_active)
+        {
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
+
         SevenSegmentDisplay toDisplay;
         if (xQueueReceive(sevenSegmentQueue, &toDisplay, portMAX_DELAY))
         {
@@ -177,6 +225,9 @@ void Seven_Segment_Task(void *params)
                 break;
             case SEVEN_SEGMENT_DIS_PREVIEW_CONFIRM:
                 dis_preview_active = false;
+                break;
+            case SEVEN_SEGMENT_FIRMWARE_UPGRADE:
+                service_firmware_upgrade_display(true);
                 break;
             default:
                 ESP_LOGW(SEVEN_SEGMENT_TAG, "Unknown display type");
@@ -395,21 +446,36 @@ esp_err_t app_lvgl_init(void)
     return ESP_OK;
 }
 
-void setupSevenSegment()
+esp_err_t setupSevenSegment(void)
 {
     /* LCD HW initialization */
-    ESP_ERROR_CHECK(app_lcd_init());
+    esp_err_t err = app_lcd_init();
+    if (err != ESP_OK)
+    {
+        return err;
+    }
 
     ESP_LOGI(SEVEN_SEGMENT_TAG, "Initialize touch controller");
     // esp_lcd_touch_new_i2c_cst816s(tp_io_handle, &tp_cfg, &touch);
 
     /* LVGL initialization */
-    ESP_ERROR_CHECK(app_lvgl_init());
+    err = app_lvgl_init();
+    if (err != ESP_OK)
+    {
+        cleanup_lcd_resources();
+        return err;
+    }
 
-    lvgl_port_lock(-1);
+    if (!lvgl_port_lock(-1))
+    {
+        cleanup_lcd_resources();
+        return ESP_ERR_TIMEOUT;
+    }
     setup_splashscreen();
     setup_timing_screen();
     setup_pc_programm_screen();
+
+    dogdog_startup_signal_ready(DOGDOG_STARTUP_DISPLAY_READY_BIT);
 
     xTaskNotifyGive(buttonTask);
 
@@ -418,12 +484,16 @@ void setupSevenSegment()
 
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     xTaskNotifyGive(buttonTask);
-    lvgl_port_lock(-1);
-    // Buzz for startup
-    xQueueSend(buzzerQueue, &(int){BUZZER_STARTUP}, 0);
+    if ((xEventGroupGetBits(startupEventGroup) & DOGDOG_OTA_DISPLAY_REQUEST_BIT) == 0)
+    {
+        lvgl_port_lock(-1);
+        // Buzz for startup
+        xQueueSend(buzzerQueue, &(int){BUZZER_STARTUP}, 0);
 
-    lv_scr_load_anim(timing_screen, LV_SCR_LOAD_ANIM_MOVE_TOP, 500, 0, false);
-    lvgl_port_unlock();
+        lv_scr_load_anim(timing_screen, LV_SCR_LOAD_ANIM_MOVE_TOP, 500, 0, false);
+        lvgl_port_unlock();
+    }
+    return ESP_OK;
 }
 
 void setup_splashscreen()
@@ -823,6 +893,11 @@ void handleCountdown(SevenSegmentDisplay toDisplay)
 
     while (remaining_time_ms > 0)
     {
+        if (service_firmware_upgrade_display(false))
+        {
+            return;
+        }
+
         setSeconds((long)(remaining_time_ms / 1000));
         remaining_time_ms = (end_time_us - esp_timer_get_time()) / 1000;
 
@@ -847,6 +922,11 @@ void handleCountdown(SevenSegmentDisplay toDisplay)
             else if (toDisplay.type == SEVEN_SEGMENT_NETWORK_FAULT)
             {
                 displayFault(toDisplay.startFault, toDisplay.stopFault);
+            }
+            else if (toDisplay.type == SEVEN_SEGMENT_FIRMWARE_UPGRADE)
+            {
+                service_firmware_upgrade_display(true);
+                return;
             }
         }
     }
@@ -1042,6 +1122,71 @@ void draw_vertical_line(int x_pos)
 
     /* Position on screen */
     lv_obj_set_pos(line, x_pos, 0); // Screen coordinate (x_pos,0)
+}
+
+static void create_firmware_upgrade_screen_locked(const char *message)
+{
+    if (firmware_upgrade_screen == NULL)
+    {
+        firmware_upgrade_screen = lv_obj_create(NULL);
+        lv_obj_set_style_bg_color(firmware_upgrade_screen, lv_color_white(), 0);
+        lv_obj_set_style_bg_opa(firmware_upgrade_screen, LV_OPA_COVER, 0);
+
+        firmware_upgrade_label = lv_label_create(firmware_upgrade_screen);
+        lv_obj_set_width(firmware_upgrade_label, LCD_H_RES - 40);
+        lv_obj_set_style_text_align(firmware_upgrade_label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_font(firmware_upgrade_label, &lv_font_montserrat_30, 0);
+        lv_obj_set_style_text_color(firmware_upgrade_label, lv_color_hex(0x000000), 0);
+        lv_obj_center(firmware_upgrade_label);
+    }
+
+    lv_label_set_text(firmware_upgrade_label, message);
+    lv_scr_load(firmware_upgrade_screen);
+}
+
+esp_err_t init_firmware_upgrade_screen(void)
+{
+    esp_err_t err = app_lcd_init();
+    if (err != ESP_OK)
+    {
+        return err;
+    }
+
+    err = app_lvgl_init();
+    if (err != ESP_OK)
+    {
+        cleanup_lcd_resources();
+        return err;
+    }
+
+    if (!lvgl_port_lock(-1))
+    {
+        return ESP_ERR_TIMEOUT;
+    }
+    create_firmware_upgrade_screen_locked("Firmware Upgrade in progress");
+    lvgl_port_unlock();
+    return ESP_OK;
+}
+
+esp_err_t display_firmware_upgrade_status(const char *message)
+{
+    if (message == NULL)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (lvgl_disp == NULL)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (!lvgl_port_lock(pdMS_TO_TICKS(1000)))
+    {
+        ESP_LOGW(SEVEN_SEGMENT_TAG, "Timed out updating firmware upgrade screen");
+        return ESP_ERR_TIMEOUT;
+    }
+    create_firmware_upgrade_screen_locked(message);
+    lvgl_port_unlock();
+    return ESP_OK;
 }
 
 static void free_line_points(lv_event_t *event)

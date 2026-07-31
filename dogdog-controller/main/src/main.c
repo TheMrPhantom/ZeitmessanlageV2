@@ -27,6 +27,7 @@
 #include "esp_chip_info.h"
 #include "esp_flash.h"
 #include "esp_system.h"
+#include "esp_timer.h"
 #include "esp_log.h"
 #include "driver/gpio.h"
 #include "freertos/task.h"
@@ -50,6 +51,8 @@
 #include "Lora.h"
 #include "Sensor.h"
 #include "HornTimer.h"
+#include "OTA.h"
+#include "Startup.h"
 #include "sdkconfig.h"
 #include <inttypes.h>
 
@@ -65,8 +68,14 @@ QueueHandle_t buttonQueue;
 QueueSetHandle_t triggerAndResetQueue;
 TaskHandle_t buttonTask;
 TaskHandle_t sevenSegmentTask;
+EventGroupHandle_t startupEventGroup;
+
+int64_t otaGestureDeadlineUs;
 
 static const char *TAG = "Main";
+
+#define STARTUP_READY_TIMEOUT_MS 30000
+#define STARTUP_RESTART_DELAY_MS 250
 
 char *pc_programm = "simple-agility";
 
@@ -74,6 +83,116 @@ int station_id = 0;
 int controller_id = 0;
 int start_id = 0;
 int stop_id = 0;
+
+void dogdog_startup_signal_ready(EventBits_t ready_bit)
+{
+    if (startupEventGroup != NULL)
+    {
+        xEventGroupSetBits(startupEventGroup, ready_bit);
+    }
+}
+
+void dogdog_startup_signal_failure(void)
+{
+    if (startupEventGroup != NULL)
+    {
+        xEventGroupSetBits(startupEventGroup, DOGDOG_STARTUP_FAILED_BIT);
+    }
+}
+
+static void restart_without_validating(const char *reason)
+{
+    ESP_LOGE(TAG, "%s; restarting without validating this image", reason);
+    vTaskDelay(pdMS_TO_TICKS(STARTUP_RESTART_DELAY_MS));
+    esp_restart();
+}
+
+static void validate_image_after_critical_startup(void)
+{
+    const TickType_t wait_started = xTaskGetTickCount();
+    const TickType_t timeout_ticks = pdMS_TO_TICKS(STARTUP_READY_TIMEOUT_MS);
+
+    while (true)
+    {
+        const EventBits_t bits = xEventGroupGetBits(startupEventGroup);
+        if ((bits & DOGDOG_STARTUP_FAILED_BIT) != 0)
+        {
+            restart_without_validating("A critical startup task reported failure");
+        }
+        if ((bits & DOGDOG_STARTUP_REQUIRED_BITS) == DOGDOG_STARTUP_REQUIRED_BITS)
+        {
+            break;
+        }
+        if ((TickType_t)(xTaskGetTickCount() - wait_started) >= timeout_ticks)
+        {
+            ESP_LOGE(TAG, "Critical startup timed out (ready bits 0x%" PRIx32 ")",
+                     (uint32_t)(bits & DOGDOG_STARTUP_REQUIRED_BITS));
+            restart_without_validating("Critical startup readiness timeout");
+        }
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+
+    const esp_err_t err = dd_ota_mark_app_valid();
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Could not mark running firmware valid: %s", esp_err_to_name(err));
+        restart_without_validating("Application validation failed");
+    }
+    ESP_LOGI(TAG, "Critical startup complete; running firmware is valid");
+}
+
+static void dogdog_ota_status(dd_ota_state_t state, esp_err_t error, void *context)
+{
+    (void)context;
+
+    switch (state)
+    {
+    case DD_OTA_CONNECTING:
+    case DD_OTA_DOWNLOADING:
+    case DD_OTA_VALIDATING:
+        display_firmware_upgrade_status("Firmware Upgrade in progress");
+        break;
+    case DD_OTA_SUCCEEDED:
+        display_firmware_upgrade_status("Firmware Upgrade complete\nRestarting...");
+        break;
+    case DD_OTA_FAILED:
+    default:
+    {
+        char message[96];
+        snprintf(message, sizeof(message),
+                 "Firmware Upgrade failed\n%s\nRestarting...",
+                 esp_err_to_name(error));
+        display_firmware_upgrade_status(message);
+        break;
+    }
+    }
+}
+
+static void start_dogdog_ota_mode(void)
+{
+    esp_err_t display_err = init_firmware_upgrade_screen();
+    if (display_err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Could not initialize firmware upgrade screen: %s",
+                 esp_err_to_name(display_err));
+    }
+
+    const dd_ota_options_t options = {
+        .status_cb = dogdog_ota_status,
+        .context = NULL,
+    };
+    esp_err_t err = dd_ota_start(&options);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Could not start OTA worker: %s", esp_err_to_name(err));
+        dogdog_ota_status(DD_OTA_FAILED, err, NULL);
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        esp_restart();
+    }
+
+    // The shared worker owns the remainder of OTA mode and always restarts.
+    vTaskDelete(NULL);
+}
 
 static int load_lora_id(const char *key, int configured_value)
 {
@@ -136,7 +255,28 @@ static bool configure_lora_ids(void)
 
 void app_main(void)
 {
-    esp_err_t err = nvs_flash_init();
+    if (dd_ota_consume_reboot_request())
+    {
+        ESP_LOGI(TAG, "Starting clean firmware upgrade boot");
+        start_dogdog_ota_mode();
+        return;
+    }
+
+    otaGestureDeadlineUs = esp_timer_get_time() + 10000000LL;
+
+    startupEventGroup = xEventGroupCreate();
+    if (startupEventGroup == NULL)
+    {
+        restart_without_validating("Failed to create startup event group");
+    }
+
+    esp_err_t err = start_ota_gesture_monitor();
+    if (err != ESP_OK)
+    {
+        restart_without_validating("Failed to start early OTA gesture monitor");
+    }
+
+    err = nvs_flash_init();
     if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
     {
         ESP_LOGW(TAG, "NVS partition needs reinitialization: %s", esp_err_to_name(err));
@@ -149,7 +289,7 @@ void app_main(void)
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
     {
         ESP_LOGE(TAG, "Failed to install GPIO ISR service: %s", esp_err_to_name(err));
-        return;
+        restart_without_validating("Failed to install GPIO ISR service");
     }
 
     InitLoraHandlers(HandleReceivedPacket);
@@ -172,14 +312,14 @@ void app_main(void)
         !buttonQueue || !triggerAndResetQueue)
     {
         ESP_LOGE(TAG, "Failed to allocate one or more application queues");
-        return;
+        restart_without_validating("Failed to allocate application queues");
     }
 
     if (xQueueAddToSet(triggerQueue, triggerAndResetQueue) != pdPASS ||
         xQueueAddToSet(resetQueue, triggerAndResetQueue) != pdPASS)
     {
         ESP_LOGE(TAG, "Failed to initialize timer queue set");
-        return;
+        restart_without_validating("Failed to initialize timer queue set");
     }
 
     ESP_ERROR_CHECK_WITHOUT_ABORT(increaseKey("startups"));
@@ -203,7 +343,7 @@ void app_main(void)
     // Configure IDs
     if (!configure_lora_ids())
     {
-        return;
+        restart_without_validating("Invalid LoRa identifier configuration");
     }
 
     //-------
@@ -225,7 +365,7 @@ void app_main(void)
         xTaskCreate(Buzzer_Task, "Buzzer_Task", 4048, NULL, 7, NULL) != pdPASS)
     {
         ESP_LOGE(TAG, "Failed to create a core application task");
-        return;
+        restart_without_validating("Failed to create a core application task");
     }
 
     /* The display and button tasks notify each other during startup. Create the
@@ -234,13 +374,14 @@ void app_main(void)
         xTaskCreatePinnedToCore(Seven_Segment_Task, "Seven_Segment_Task", 16096, NULL, 8, &sevenSegmentTask, 1) != pdPASS)
     {
         ESP_LOGE(TAG, "Failed to create display/button task");
-        return;
+        restart_without_validating("Failed to create display/button task");
     }
     if (is_lora_controller != 1)
     {
         if (xTaskCreatePinnedToCore(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 4048, NULL, 23, NULL, 0) != pdPASS)
         {
             ESP_LOGE(TAG, "Failed to create sensor task");
+            restart_without_validating("Failed to create cable sensor task");
         }
     }
     else
@@ -248,11 +389,15 @@ void app_main(void)
         if (xTaskCreate(LoraStartupTask, "LoraStartupTask", 4048, NULL, 10, NULL) != pdPASS)
         {
             ESP_LOGE(TAG, "Failed to create LoRa startup task");
+            restart_without_validating("Failed to create LoRa startup task");
         }
     }
 
     if (xTaskCreate(Button_Input_Task, "Button_Input_Task", 8192, NULL, 8, NULL) != pdPASS)
     {
         ESP_LOGE(TAG, "Failed to create button input task");
+        restart_without_validating("Failed to create button input task");
     }
+
+    validate_image_after_critical_startup();
 }

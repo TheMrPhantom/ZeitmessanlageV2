@@ -3,6 +3,8 @@
 #include "OTA.h"
 
 #include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "freertos/FreeRTOS.h"
@@ -10,15 +12,17 @@
 #include "freertos/task.h"
 
 #include "esp_err.h"
+#include "esp_attr.h"
 #include "esp_event.h"
 #include "esp_https_ota.h"
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "esp_ota_ops.h"
 #include "esp_system.h"
+#include "esp_timer.h"
 #include "esp_wifi.h"
 #include "esp_wifi_default.h"
-#if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
+#if CONFIG_DD_OTA_USE_CERTIFICATE_BUNDLE
 #include "esp_crt_bundle.h"
 #endif
 #include "nvs_flash.h"
@@ -27,6 +31,24 @@ static const char *TAG = "OTA";
 
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
+#define DD_OTA_REBOOT_MAGIC UINT32_C(0x4F544131)
+#define DD_OTA_URL_MAX_LENGTH 256U
+
+// Volatile is required here: the values are observed only after a CPU reset,
+// which is outside the C abstract machine and could otherwise make these
+// apparently dead stores eligible for interprocedural/LTO elimination.
+static RTC_NOINIT_ATTR volatile uint32_t s_reboot_magic;
+static RTC_NOINIT_ATTR volatile uint32_t s_reboot_magic_inverse;
+
+typedef struct
+{
+    dd_ota_status_cb_t status_cb;
+    void *callback_context;
+} ota_task_context_t;
+
+static portMUX_TYPE s_ota_lock = portMUX_INITIALIZER_UNLOCKED;
+static bool s_ota_running;
+static ota_task_context_t s_task_context;
 
 #if CONFIG_ESP_WPA3_SAE_PWE_HUNT_AND_PECK
 #define ESP_WIFI_SAE_MODE WPA3_SAE_PWE_HUNT_AND_PECK
@@ -51,6 +73,156 @@ typedef struct
     bool wifi_initialized;
     volatile bool shutting_down;
 } ota_wifi_context_t;
+
+static void ota_task(void *pvParameters);
+
+static bool is_ascii_alphanumeric(char character)
+{
+    return (character >= 'a' && character <= 'z') ||
+           (character >= 'A' && character <= 'Z') ||
+           (character >= '0' && character <= '9');
+}
+
+static void notify_status(const ota_task_context_t *task_context,
+                          dd_ota_state_t state, esp_err_t error)
+{
+    if (task_context != NULL && task_context->status_cb != NULL)
+    {
+        task_context->status_cb(state, error, task_context->callback_context);
+    }
+}
+
+static esp_err_t build_firmware_url(char *url, size_t url_size)
+{
+    if (url == NULL || url_size == 0)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const esp_partition_t *running_partition = esp_ota_get_running_partition();
+    if (running_partition == NULL)
+    {
+        ESP_LOGE(TAG, "Could not determine the running application partition");
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    esp_app_desc_t running_app_info = {0};
+    esp_err_t err = esp_ota_get_partition_description(running_partition, &running_app_info);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Could not read the running image description: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    const size_t project_name_length = strnlen(
+        running_app_info.project_name, sizeof(running_app_info.project_name));
+    if (project_name_length == 0 ||
+        !is_ascii_alphanumeric(running_app_info.project_name[0]))
+    {
+        ESP_LOGE(TAG, "The running firmware has no URL-safe project name");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    for (size_t index = 0; index < project_name_length; index++)
+    {
+        const char character = running_app_info.project_name[index];
+        if (!is_ascii_alphanumeric(character) && character != '.' &&
+            character != '_' && character != '-')
+        {
+            ESP_LOGE(TAG, "The running project name contains a URL-unsafe character");
+            return ESP_ERR_INVALID_ARG;
+        }
+    }
+
+    const char *base_url = CONFIG_DD_OTA_BASE_URL;
+    size_t base_url_length = strlen(base_url);
+    while (base_url_length > 0 && base_url[base_url_length - 1] == '/')
+    {
+        base_url_length--;
+    }
+
+    if (base_url_length < strlen("https://") ||
+        strncmp(base_url, "https://", strlen("https://")) != 0)
+    {
+        ESP_LOGE(TAG, "The OTA base URL must use HTTPS");
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    const int written = snprintf(url, url_size, "%.*s/%.*s.bin",
+                                 (int)base_url_length, base_url,
+                                 (int)project_name_length,
+                                 running_app_info.project_name);
+    if (written < 0 || (size_t)written >= url_size)
+    {
+        ESP_LOGE(TAG, "The generated firmware URL is too long");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    return ESP_OK;
+}
+
+bool dd_ota_consume_reboot_request(void)
+{
+    const uint32_t magic = s_reboot_magic;
+    const uint32_t inverse = s_reboot_magic_inverse;
+
+    // Clear first so a later reset can never consume the same request twice.
+    s_reboot_magic = 0;
+    s_reboot_magic_inverse = 0;
+    __sync_synchronize();
+
+    return esp_reset_reason() == ESP_RST_SW &&
+           magic == DD_OTA_REBOOT_MAGIC && inverse == ~DD_OTA_REBOOT_MAGIC;
+}
+
+void dd_ota_request_reboot(void)
+{
+    s_reboot_magic = DD_OTA_REBOOT_MAGIC;
+    s_reboot_magic_inverse = ~DD_OTA_REBOOT_MAGIC;
+    __sync_synchronize();
+    esp_restart();
+}
+
+esp_err_t dd_ota_mark_app_valid(void)
+{
+    const esp_partition_t *running_partition = esp_ota_get_running_partition();
+    if (running_partition == NULL)
+    {
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    esp_ota_img_states_t state;
+    esp_err_t err = esp_ota_get_state_partition(running_partition, &state);
+    if (err == ESP_ERR_NOT_SUPPORTED)
+    {
+        // Factory-only layouts do not have OTA state. Treat this as already valid
+        // so the API remains safe during a staged partition-table migration.
+        return ESP_OK;
+    }
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Could not read running image state: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    if (state == ESP_OTA_IMG_PENDING_VERIFY)
+    {
+        err = esp_ota_mark_app_valid_cancel_rollback();
+        if (err != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Could not mark the running image valid: %s", esp_err_to_name(err));
+        }
+        return err;
+    }
+
+    if (state == ESP_OTA_IMG_VALID || state == ESP_OTA_IMG_UNDEFINED)
+    {
+        return ESP_OK;
+    }
+
+    ESP_LOGE(TAG, "Running image cannot be marked valid from OTA state %d", (int)state);
+    return ESP_ERR_INVALID_STATE;
+}
 
 static void set_wifi_failure(ota_wifi_context_t *context)
 {
@@ -324,9 +496,11 @@ static esp_err_t wifi_init_sta(ota_wifi_context_t *context)
         return err;
     }
 
-    if (esp_netif_get_handle_from_ifkey("WIFI_STA_DEF") != NULL)
+    if (esp_netif_get_handle_from_ifkey("WIFI_STA_DEF") != NULL ||
+        esp_netif_get_handle_from_ifkey("WIFI_AP_DEF") != NULL ||
+        esp_netif_get_handle_from_ifkey("WIFI_NAN_DEF") != NULL)
     {
-        ESP_LOGE(TAG, "A default Wi-Fi station interface already exists; refusing to replace it");
+        ESP_LOGE(TAG, "A default Wi-Fi interface already exists; refusing to modify another owner's network state");
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -502,37 +676,53 @@ static esp_err_t validate_image_header(const esp_app_desc_t *new_app_info)
     return ESP_OK;
 }
 
-void ota_task(void *pvParameters)
+static void ota_task(void *pvParameters)
 {
-    (void)pvParameters;
+    const ota_task_context_t task_context =
+        pvParameters != NULL ? *(const ota_task_context_t *)pvParameters
+                             : (ota_task_context_t){0};
 
     ota_wifi_context_t wifi_context = {0};
     esp_https_ota_handle_t https_ota_handle = NULL;
     bool ota_succeeded = false;
+    esp_err_t err = ESP_FAIL;
+    char firmware_url[DD_OTA_URL_MAX_LENGTH] = {0};
 
     ESP_LOGI(TAG, "Starting OTA task");
+    notify_status(&task_context, DD_OTA_CONNECTING, ESP_OK);
 
-    esp_err_t err = wifi_init_sta(&wifi_context);
+    err = build_firmware_url(firmware_url, sizeof(firmware_url));
+    if (err != ESP_OK)
+    {
+        goto cleanup;
+    }
+
+    ESP_LOGI(TAG, "Firmware URL: %s", firmware_url);
+
+    err = wifi_init_sta(&wifi_context);
     if (err != ESP_OK)
     {
         ESP_LOGE(TAG, "OTA Wi-Fi setup failed: %s", esp_err_to_name(err));
         goto cleanup;
     }
 
+    notify_status(&task_context, DD_OTA_DOWNLOADING, ESP_OK);
+
     const esp_http_client_config_t http_config = {
-        .url = CONFIG_FIRMWARE_URL,
-        .timeout_ms = CONFIG_RECV_TIMEOUT,
+        .url = firmware_url,
+        .timeout_ms = CONFIG_DD_OTA_RECV_TIMEOUT_MS,
         .keep_alive_enable = true,
-#if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
+        .disable_auto_redirect = true,
+#if CONFIG_DD_OTA_USE_CERTIFICATE_BUNDLE
         .crt_bundle_attach = esp_crt_bundle_attach,
 #endif
     };
 
     const esp_https_ota_config_t ota_config = {
         .http_config = &http_config,
-#if CONFIG_ENABLE_PARTIAL_HTTP_DOWNLOAD
+#if CONFIG_DD_OTA_ENABLE_PARTIAL_HTTP_DOWNLOAD
         .partial_http_download = true,
-        .max_http_request_size = CONFIG_HTTP_REQUEST_SIZE,
+        .max_http_request_size = CONFIG_DD_OTA_HTTP_REQUEST_SIZE,
 #endif
     };
 
@@ -558,13 +748,30 @@ void ota_task(void *pvParameters)
         goto cleanup;
     }
 
+    int last_image_length = esp_https_ota_get_image_len_read(https_ota_handle);
+    int64_t last_progress_time_us = esp_timer_get_time();
+
     do
     {
         err = esp_https_ota_perform(https_ota_handle);
         if (err == ESP_ERR_HTTPS_OTA_IN_PROGRESS)
         {
-            ESP_LOGD(TAG, "Image bytes read: %d",
-                     esp_https_ota_get_image_len_read(https_ota_handle));
+            const int image_length = esp_https_ota_get_image_len_read(https_ota_handle);
+            const int64_t now_us = esp_timer_get_time();
+            ESP_LOGD(TAG, "Image bytes read: %d", image_length);
+
+            if (image_length > last_image_length)
+            {
+                last_image_length = image_length;
+                last_progress_time_us = now_us;
+            }
+            else if (now_us - last_progress_time_us >=
+                     (int64_t)CONFIG_DD_OTA_NO_PROGRESS_TIMEOUT_MS * 1000LL)
+            {
+                ESP_LOGE(TAG, "OTA download made no progress for %d ms",
+                         CONFIG_DD_OTA_NO_PROGRESS_TIMEOUT_MS);
+                err = ESP_ERR_TIMEOUT;
+            }
         }
     } while (err == ESP_ERR_HTTPS_OTA_IN_PROGRESS);
 
@@ -580,6 +787,8 @@ void ota_task(void *pvParameters)
         err = ESP_ERR_INVALID_SIZE;
         goto cleanup;
     }
+
+    notify_status(&task_context, DD_OTA_VALIDATING, ESP_OK);
 
     // esp_https_ota_finish() always consumes the handle, including on validation failure.
     err = esp_https_ota_finish(https_ota_handle);
@@ -620,11 +829,52 @@ cleanup:
 
     if (ota_succeeded)
     {
+        notify_status(&task_context, DD_OTA_SUCCEEDED, ESP_OK);
         ESP_LOGI(TAG, "Rebooting into the updated firmware");
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        esp_restart();
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_DD_OTA_SUCCESS_REBOOT_DELAY_MS));
+    }
+    else
+    {
+        if (err == ESP_OK)
+        {
+            err = ESP_FAIL;
+        }
+        notify_status(&task_context, DD_OTA_FAILED, err);
+        ESP_LOGW(TAG, "OTA failed; rebooting into the unchanged firmware in %d ms",
+                 CONFIG_DD_OTA_FAILURE_REBOOT_DELAY_MS);
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_DD_OTA_FAILURE_REBOOT_DELAY_MS));
     }
 
-    ESP_LOGW(TAG, "OTA request ended without installing an update");
-    vTaskDelete(NULL);
+    // Keep the singleton claimed until reset. Clearing it before esp_restart()
+    // would leave a small cross-core window in which a second worker could be
+    // created while this task is already committed to rebooting.
+    esp_restart();
+}
+
+esp_err_t dd_ota_start(const dd_ota_options_t *options)
+{
+    portENTER_CRITICAL(&s_ota_lock);
+    if (s_ota_running)
+    {
+        portEXIT_CRITICAL(&s_ota_lock);
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    s_ota_running = true;
+    s_task_context.status_cb = options != NULL ? options->status_cb : NULL;
+    s_task_context.callback_context = options != NULL ? options->context : NULL;
+    portEXIT_CRITICAL(&s_ota_lock);
+
+    if (xTaskCreate(ota_task, "dd_ota", CONFIG_DD_OTA_TASK_STACK_SIZE,
+                    &s_task_context, CONFIG_DD_OTA_TASK_PRIORITY, NULL) != pdPASS)
+    {
+        portENTER_CRITICAL(&s_ota_lock);
+        s_ota_running = false;
+        s_task_context = (ota_task_context_t){0};
+        portEXIT_CRITICAL(&s_ota_lock);
+        ESP_LOGE(TAG, "Could not create the OTA worker task");
+        return ESP_ERR_NO_MEM;
+    }
+
+    return ESP_OK;
 }

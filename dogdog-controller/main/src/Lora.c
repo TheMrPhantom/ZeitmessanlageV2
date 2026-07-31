@@ -2,7 +2,9 @@
 #include "SevenSegment.h"
 #include "Timer.h"
 #include "NetworkFault.h"
+#include "Startup.h"
 
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -35,6 +37,7 @@ extern int station_id;
 #define MAX_SENSOR_STATUS_BITS 64
 #define LORA_QUEUE_TIMEOUT_MS 100
 #define DUPLICATE_WINDOW_MS 15000
+#define LORA_RECEIVER_STARTUP_TIMEOUT_MS 5000
 
 typedef struct
 {
@@ -195,10 +198,13 @@ static void send_ack_for_packet(const DogDogPacket *packet)
 
 void LoraStartupTask(void *pvParameters)
 {
+    (void)pvParameters;
+
     esp_err_t err = init_lora();
     if (err != ESP_OK)
     {
         ESP_LOGE(pcTaskGetName(NULL), "LoRa initialization failed: %s", esp_err_to_name(err));
+        dogdog_startup_signal_failure();
         vTaskDelete(NULL);
         return;
     }
@@ -206,18 +212,46 @@ void LoraStartupTask(void *pvParameters)
     if (xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 23, NULL) != pdPASS)
     {
         ESP_LOGE(pcTaskGetName(NULL), "Failed to create LoRa send task");
+        dogdog_startup_signal_failure();
         vTaskDelete(NULL);
         return;
     }
-    if (xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 23, NULL) != pdPASS)
+    TaskHandle_t startup_task = xTaskGetCurrentTaskHandle();
+    if (xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, startup_task, 23, NULL) != pdPASS)
     {
         ESP_LOGE(pcTaskGetName(NULL), "Failed to create LoRa receive task");
+        dogdog_startup_signal_failure();
+        vTaskDelete(NULL);
+        return;
     }
+
+    uint32_t receive_status = (uint32_t)ESP_FAIL;
+    if (xTaskNotifyWait(0, UINT32_MAX, &receive_status,
+                        pdMS_TO_TICKS(LORA_RECEIVER_STARTUP_TIMEOUT_MS)) != pdTRUE)
+    {
+        ESP_LOGE(pcTaskGetName(NULL), "LoRa receive task did not report readiness");
+        dogdog_startup_signal_failure();
+        vTaskDelete(NULL);
+        return;
+    }
+    if ((esp_err_t)receive_status != ESP_OK)
+    {
+        ESP_LOGE(pcTaskGetName(NULL), "LoRa receive task failed to start: %s",
+                 esp_err_to_name((esp_err_t)receive_status));
+        dogdog_startup_signal_failure();
+        vTaskDelete(NULL);
+        return;
+    }
+
     if (xTaskCreate(LoraSyncTask, "LoraSyncTask", 4048, NULL, 8, NULL) != pdPASS)
     {
         ESP_LOGE(pcTaskGetName(NULL), "Failed to create LoRa sync task");
+        dogdog_startup_signal_failure();
+        vTaskDelete(NULL);
+        return;
     }
 
+    dogdog_startup_signal_ready(DOGDOG_STARTUP_PRIMARY_IO_READY_BIT);
     vTaskDelete(NULL);
 }
 

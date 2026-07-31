@@ -278,6 +278,7 @@ void Sensor_Interrupt_Task(void *params)
     }
 
     ESP_ERROR_CHECK(init_Pins());
+    xEventGroupSetBits(measurementStartupEvents, MEASUREMENT_SENSOR_READY);
     PinTrigger pin_trigger = {0};
 
     ESP_LOGI(TAG, "Waiting for time sync...");

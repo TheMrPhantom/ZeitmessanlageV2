@@ -23,6 +23,7 @@
 #include "GPIOPins.h"
 #include "KeyValue.h"
 #include "NetworkFault.h"
+#include "Startup.h"
 
 extern QueueHandle_t sensorInterruptQueue;
 extern QueueHandle_t buzzerQueue;
@@ -135,6 +136,7 @@ void Sensor_Interrupt_Task(void *params)
     if (!sensorStatusQueue)
     {
         ESP_LOGE(TAG, "Failed to create sensor status queue");
+        dogdog_startup_signal_failure();
         vTaskDelete(NULL);
         return;
     }
@@ -145,13 +147,19 @@ void Sensor_Interrupt_Task(void *params)
         ESP_LOGE(TAG, "Sensor initialization failed: %s", esp_err_to_name(sensor_init_err));
         vQueueDelete(sensorStatusQueue);
         sensorStatusQueue = NULL;
+        dogdog_startup_signal_failure();
         vTaskDelete(NULL);
         return;
     }
     if (xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 4048, NULL, 1, NULL) != pdPASS)
     {
         ESP_LOGE(TAG, "Failed to create sensor status task");
+        dogdog_startup_signal_failure();
+        vTaskDelete(NULL);
+        return;
     }
+
+    dogdog_startup_signal_ready(DOGDOG_STARTUP_PRIMARY_IO_READY_BIT);
 
     SensorTriggerEvent trigger_event = {0};
     TickType_t sensor_started_tick = xTaskGetTickCount();
