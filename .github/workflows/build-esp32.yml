@@ -9,7 +9,7 @@ on:
 
 jobs:
   build-measure-stations-lora:
-    if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build_and_push')"
+    if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build')"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -34,7 +34,7 @@ jobs:
           path: measure-stations-lora/build/measure-stations-lora.bin
 
   build-dogdog-controller:
-    if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build_and_push')"
+    if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build')"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -59,7 +59,7 @@ jobs:
           path: dogdog-controller/build/dogdog-controller.bin
 
   build-remote:
-    if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build_and_push')"
+    if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build')"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
