@@ -37,6 +37,9 @@
 #define TIMER_COMMAND_START 0x01
 #define TIMER_COMMAND_RESET 0x02
 #define TIMER_COMMAND_STOP 0x03
+#define TIMER_FRAME_HEADER_LEN 24
+#define TIMER_DUPLICATE_CACHE_SIZE 16
+#define TIMER_DUPLICATE_WINDOW_US 2000000
 #define HTTP_POST_BUF_LEN 160
 #define DNS_PORT 53
 #define DNS_TASK_STACK_SIZE 3072
@@ -66,6 +69,17 @@ static int64_t s_runtime_buzz_duration_us = BUZZER_DURATION_US_DEFAULT;
 static bool s_buzz_fired;
 static bool s_have_last_start_elapsed;
 static uint64_t s_last_start_elapsed_ns;
+static size_t s_duplicate_cache_next;
+
+typedef struct {
+    uint8_t source_mac[6];
+    uint16_t sequence_number;
+    uint8_t command;
+    int64_t received_at_us;
+    bool valid;
+} timer_packet_signature_t;
+
+static timer_packet_signature_t s_duplicate_cache[TIMER_DUPLICATE_CACHE_SIZE];
 
 typedef struct {
     uint8_t red;
@@ -165,9 +179,35 @@ static void reset_buzz_sequence(void)
     portEXIT_CRITICAL(&s_buzz_state_lock);
 }
 
+static esp_err_t buzzer_set_level(bool enabled)
+{
+    if (enabled) {
+        ESP_RETURN_ON_ERROR(gpio_hold_dis(CONFIG_BUZZER_GPIO),
+                            TAG,
+                            "Failed to release buzzer GPIO hold");
+    }
+
+    ESP_RETURN_ON_ERROR(gpio_set_level(CONFIG_BUZZER_GPIO, enabled ? 1 : 0),
+                        TAG,
+                        "Failed to set buzzer GPIO level");
+
+    if (!enabled) {
+        ESP_RETURN_ON_ERROR(gpio_hold_en(CONFIG_BUZZER_GPIO),
+                            TAG,
+                            "Failed to hold buzzer GPIO low");
+    }
+    return ESP_OK;
+}
+
 static void buzzer_set(bool enabled)
 {
-    gpio_set_level(CONFIG_BUZZER_GPIO, enabled ? 1 : 0);
+    esp_err_t err = buzzer_set_level(enabled);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG,
+                 "Failed to turn buzzer %s: %s",
+                 enabled ? "on" : "off",
+                 esp_err_to_name(err));
+    }
 }
 
 static void buzz_stop_timer_cb(void *arg)
@@ -260,7 +300,6 @@ static void stop_buzz_timer(void)
     if (led_err != ESP_OK) {
         ESP_LOGW(TAG, "Failed to set ready LED: %s", esp_err_to_name(led_err));
     }
-    ESP_LOGI(TAG, "Buzzer timer stopped with buzz");
 }
 
 static void IRAM_ATTR button0_isr_handler(void *arg)
@@ -347,8 +386,55 @@ typedef enum {
     TIMER_ACTION_STOP,
 } timer_action_t;
 
+static bool timer_frame_is_duplicate(const uint8_t *frame, uint8_t command)
+{
+    const uint8_t *source_mac = frame + 10;
+    uint16_t sequence_control = frame[22] | ((uint16_t)frame[23] << 8);
+    uint16_t sequence_number = sequence_control >> 4;
+    int64_t now_us = esp_timer_get_time();
+
+    for (size_t i = 0; i < TIMER_DUPLICATE_CACHE_SIZE; i++) {
+        timer_packet_signature_t *signature = &s_duplicate_cache[i];
+        if (!signature->valid ||
+            signature->sequence_number != sequence_number ||
+            signature->command != command ||
+            memcmp(signature->source_mac, source_mac, sizeof(signature->source_mac)) != 0) {
+            continue;
+        }
+
+        if (now_us - signature->received_at_us <= TIMER_DUPLICATE_WINDOW_US) {
+            return true;
+        }
+
+        signature->received_at_us = now_us;
+        return false;
+    }
+
+    timer_packet_signature_t *signature = &s_duplicate_cache[s_duplicate_cache_next];
+    memcpy(signature->source_mac, source_mac, sizeof(signature->source_mac));
+    signature->sequence_number = sequence_number;
+    signature->command = command;
+    signature->received_at_us = now_us;
+    signature->valid = true;
+    s_duplicate_cache_next = (s_duplicate_cache_next + 1) % TIMER_DUPLICATE_CACHE_SIZE;
+    return false;
+}
+
 static timer_action_t parse_timer_message(const uint8_t *frame, uint16_t len, uint64_t *elapsed_ns)
 {
+    if (len < TIMER_FRAME_HEADER_LEN) {
+        return TIMER_ACTION_NONE;
+    }
+
+    uint16_t frame_ctrl = frame[0] | ((uint16_t)frame[1] << 8);
+    uint8_t type = (frame_ctrl >> 2) & 0x03;
+    uint8_t subtype = (frame_ctrl >> 4) & 0x0f;
+    if (type != 0 || subtype != 13 ||
+        memcmp(frame + 4, s_softap_mac, sizeof(s_softap_mac)) != 0 ||
+        memcmp(frame + 16, s_softap_mac, sizeof(s_softap_mac)) != 0) {
+        return TIMER_ACTION_NONE;
+    }
+
     size_t header_len = ieee80211_header_len(frame, len);
     if (header_len == 0 || len < header_len + TIMER_CONTROL_MESSAGE_LEN) {
         return TIMER_ACTION_NONE;
@@ -356,6 +442,10 @@ static timer_action_t parse_timer_message(const uint8_t *frame, uint16_t len, ui
 
     const uint8_t *body = frame + header_len;
     if (body[0] != 0xdd) {
+        return TIMER_ACTION_NONE;
+    }
+
+    if (timer_frame_is_duplicate(frame, body[1])) {
         return TIMER_ACTION_NONE;
     }
 
@@ -379,7 +469,7 @@ static timer_action_t parse_timer_message(const uint8_t *frame, uint16_t len, ui
 
 static void wifi_promiscuous_cb(void *buf, wifi_promiscuous_pkt_type_t type)
 {
-    if (type != WIFI_PKT_MGMT && type != WIFI_PKT_DATA) {
+    if (type != WIFI_PKT_MGMT) {
         return;
     }
 
@@ -397,17 +487,27 @@ static void wifi_promiscuous_cb(void *buf, wifi_promiscuous_pkt_type_t type)
 
 static esp_err_t init_buzzer_gpio(void)
 {
+    /*
+     * Preload the output latch before enabling the output driver. This avoids
+     * a high pulse while the GPIO changes from its reset state to an output.
+     */
+    ESP_RETURN_ON_ERROR(gpio_hold_dis(CONFIG_BUZZER_GPIO),
+                        TAG,
+                        "Failed to release buzzer GPIO hold during initialization");
+    ESP_RETURN_ON_ERROR(gpio_set_level(CONFIG_BUZZER_GPIO, 0),
+                        TAG,
+                        "Failed to preload buzzer GPIO low");
+
     gpio_config_t config = {
         .pin_bit_mask = 1ULL << CONFIG_BUZZER_GPIO,
         .mode = GPIO_MODE_OUTPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_ENABLE,
         .intr_type = GPIO_INTR_DISABLE,
     };
 
     ESP_RETURN_ON_ERROR(gpio_config(&config), TAG, "Failed to configure buzzer GPIO");
-    buzzer_set(false);
-    return ESP_OK;
+    return buzzer_set_level(false);
 }
 
 static esp_err_t init_status_led(void)
@@ -923,6 +1023,11 @@ static esp_err_t start_webserver(void)
 
 void app_main(void)
 {
+    /*
+     * The buzzer is safety-critical: force and hold it low before any
+     * initialization that can block, fail, or restart the device.
+     */
+    ESP_ERROR_CHECK(init_buzzer_gpio());
     ESP_ERROR_CHECK(init_status_led());
 
     esp_err_t ret = nvs_flash_init();
@@ -932,7 +1037,6 @@ void app_main(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    ESP_ERROR_CHECK(init_buzzer_gpio());
     ESP_ERROR_CHECK(init_timers());
     ESP_ERROR_CHECK(init_button0_gpio());
     ESP_ERROR_CHECK(init_wifi_softap());
