@@ -32,12 +32,13 @@
 
 #define BUZZER_DELAY_US_MAX ((int64_t)CONFIG_BUZZER_DELAY_MS * 1000LL)
 #define BUZZER_DURATION_US_DEFAULT ((int64_t)CONFIG_BUZZER_DURATION_MS * 1000LL)
+#define BUZZER_SECOND_DELAY_US_DEFAULT ((int64_t)CONFIG_BUZZER_SECOND_DELAY_MS * 1000LL)
 #define TIMER_START_MESSAGE_LEN 10
 #define TIMER_CONTROL_MESSAGE_LEN 2
 #define TIMER_COMMAND_START 0x01
 #define TIMER_COMMAND_RESET 0x02
 #define TIMER_COMMAND_STOP 0x03
-#define HTTP_POST_BUF_LEN 160
+#define HTTP_POST_BUF_LEN 256
 #define DNS_PORT 53
 #define DNS_TASK_STACK_SIZE 3072
 #define DNS_TASK_PRIORITY 4
@@ -50,12 +51,19 @@
 #define BUTTON0_TASK_PRIORITY 5
 #define BUTTON0_DEBOUNCE_US 200000
 
+#ifdef CONFIG_BUZZER_SECOND_ENABLED
+#define BUZZER_SECOND_ENABLED_DEFAULT true
+#else
+#define BUZZER_SECOND_ENABLED_DEFAULT false
+#endif
+
 static const uint8_t s_softap_mac[6] = { 0xde, 0x09, 0xdd, 0x09, 0x00, 0x01 };
 
 static const char *TAG = "buzzer_timer";
 
 static esp_timer_handle_t s_delay_timer;
 static esp_timer_handle_t s_buzz_stop_timer;
+static esp_timer_handle_t s_second_buzz_timer;
 static rmt_channel_handle_t s_status_led_rmt_channel;
 static rmt_encoder_handle_t s_status_led_encoder;
 static QueueHandle_t s_button0_queue;
@@ -63,7 +71,11 @@ static portMUX_TYPE s_config_lock = portMUX_INITIALIZER_UNLOCKED;
 static portMUX_TYPE s_buzz_state_lock = portMUX_INITIALIZER_UNLOCKED;
 static int64_t s_runtime_delay_us = BUZZER_DELAY_US_MAX;
 static int64_t s_runtime_buzz_duration_us = BUZZER_DURATION_US_DEFAULT;
+static bool s_runtime_second_buzz_enabled = BUZZER_SECOND_ENABLED_DEFAULT;
+static int64_t s_runtime_second_buzz_delay_us = BUZZER_SECOND_DELAY_US_DEFAULT;
 static bool s_buzz_fired;
+static bool s_second_buzz_pending;
+static int64_t s_second_buzz_pending_delay_us;
 static bool s_have_last_start_elapsed;
 static uint64_t s_last_start_elapsed_ns;
 
@@ -128,6 +140,22 @@ static void set_runtime_buzz_duration_ms(uint32_t duration_ms)
     portEXIT_CRITICAL(&s_config_lock);
 }
 
+static void get_runtime_second_buzz_config(bool *enabled, int64_t *delay_us)
+{
+    portENTER_CRITICAL(&s_config_lock);
+    *enabled = s_runtime_second_buzz_enabled;
+    *delay_us = s_runtime_second_buzz_delay_us;
+    portEXIT_CRITICAL(&s_config_lock);
+}
+
+static void set_runtime_second_buzz_config(bool enabled, uint32_t delay_ms)
+{
+    portENTER_CRITICAL(&s_config_lock);
+    s_runtime_second_buzz_enabled = enabled;
+    s_runtime_second_buzz_delay_us = (int64_t)delay_ms * 1000LL;
+    portEXIT_CRITICAL(&s_config_lock);
+}
+
 static void stop_timer_if_active(esp_timer_handle_t timer)
 {
     esp_err_t err = esp_timer_stop(timer);
@@ -141,6 +169,8 @@ static bool start_message_should_schedule(uint64_t elapsed_ns)
     portENTER_CRITICAL(&s_buzz_state_lock);
     if (!s_have_last_start_elapsed || elapsed_ns < s_last_start_elapsed_ns) {
         s_buzz_fired = false;
+        s_second_buzz_pending = false;
+        s_second_buzz_pending_delay_us = 0;
     }
     s_have_last_start_elapsed = true;
     s_last_start_elapsed_ns = elapsed_ns;
@@ -156,10 +186,36 @@ static void mark_buzz_fired(bool fired)
     portEXIT_CRITICAL(&s_buzz_state_lock);
 }
 
+static void arm_second_buzz(bool pending, int64_t delay_us)
+{
+    portENTER_CRITICAL(&s_buzz_state_lock);
+    s_second_buzz_pending = pending;
+    s_second_buzz_pending_delay_us = pending ? delay_us : 0;
+    portEXIT_CRITICAL(&s_buzz_state_lock);
+}
+
+static bool consume_second_buzz(int64_t *delay_us)
+{
+    portENTER_CRITICAL(&s_buzz_state_lock);
+    bool pending = s_second_buzz_pending;
+    *delay_us = s_second_buzz_pending_delay_us;
+    s_second_buzz_pending = false;
+    s_second_buzz_pending_delay_us = 0;
+    portEXIT_CRITICAL(&s_buzz_state_lock);
+    return pending;
+}
+
+static void clear_second_buzz(void)
+{
+    arm_second_buzz(false, 0);
+}
+
 static void reset_buzz_sequence(void)
 {
     portENTER_CRITICAL(&s_buzz_state_lock);
     s_buzz_fired = false;
+    s_second_buzz_pending = false;
+    s_second_buzz_pending_delay_us = 0;
     s_have_last_start_elapsed = false;
     s_last_start_elapsed_ns = 0;
     portEXIT_CRITICAL(&s_buzz_state_lock);
@@ -170,21 +226,14 @@ static void buzzer_set(bool enabled)
     gpio_set_level(CONFIG_BUZZER_GPIO, enabled ? 1 : 0);
 }
 
-static void buzz_stop_timer_cb(void *arg)
+static void start_buzz(bool allow_second_buzz)
 {
-    (void)arg;
-    buzzer_set(false);
-    esp_err_t led_err = status_led_set(STATUS_LED_READY);
-    if (led_err != ESP_OK) {
-        ESP_LOGW(TAG, "Failed to set ready LED after buzz: %s", esp_err_to_name(led_err));
-    }
-    ESP_LOGI(TAG, "Buzzer stopped");
-}
-
-static void buzz_start_timer_cb(void *arg)
-{
-    (void)arg;
     int64_t duration_us = get_runtime_buzz_duration_us();
+    bool second_buzz_enabled = false;
+    int64_t second_buzz_delay_us = 0;
+
+    get_runtime_second_buzz_config(&second_buzz_enabled, &second_buzz_delay_us);
+    arm_second_buzz(allow_second_buzz && second_buzz_enabled, second_buzz_delay_us);
 
     mark_buzz_fired(true);
     buzzer_set(true);
@@ -194,16 +243,52 @@ static void buzz_start_timer_cb(void *arg)
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start buzz stop timer: %s", esp_err_to_name(err));
         mark_buzz_fired(false);
+        clear_second_buzz();
         buzzer_set(false);
     } else {
         ESP_LOGI(TAG, "Buzzer started for %" PRId64 " us", duration_us);
     }
 }
 
+static void buzz_stop_timer_cb(void *arg)
+{
+    (void)arg;
+    buzzer_set(false);
+    esp_err_t led_err = status_led_set(STATUS_LED_READY);
+    if (led_err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to set ready LED after buzz: %s", esp_err_to_name(led_err));
+    }
+
+    int64_t second_buzz_delay_us = 0;
+    if (consume_second_buzz(&second_buzz_delay_us)) {
+        esp_err_t timer_err = esp_timer_start_once(s_second_buzz_timer, second_buzz_delay_us);
+        if (timer_err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to start second buzz timer: %s", esp_err_to_name(timer_err));
+        } else {
+            ESP_LOGI(TAG, "Second buzz scheduled in %" PRId64 " us", second_buzz_delay_us);
+        }
+    }
+
+    ESP_LOGI(TAG, "Buzzer stopped");
+}
+
+static void buzz_start_timer_cb(void *arg)
+{
+    (void)arg;
+    start_buzz(true);
+}
+
+static void second_buzz_timer_cb(void *arg)
+{
+    (void)arg;
+    start_buzz(false);
+}
+
 static void cancel_buzz_state(void)
 {
     stop_timer_if_active(s_delay_timer);
     stop_timer_if_active(s_buzz_stop_timer);
+    stop_timer_if_active(s_second_buzz_timer);
     buzzer_set(false);
 }
 
@@ -226,7 +311,7 @@ static void schedule_buzz(uint64_t elapsed_ns)
     }
 
     if (remaining_us == 0) {
-        buzz_start_timer_cb(NULL);
+        start_buzz(true);
         return;
     }
 
@@ -254,8 +339,9 @@ static void reset_buzz_timer(void)
 
 static void stop_buzz_timer(void)
 {
+    clear_second_buzz();
     cancel_buzz_state();
-    buzz_start_timer_cb(NULL);
+    start_buzz(false);
     esp_err_t led_err = status_led_set(STATUS_LED_READY);
     if (led_err != ESP_OK) {
         ESP_LOGW(TAG, "Failed to set ready LED: %s", esp_err_to_name(led_err));
@@ -459,9 +545,16 @@ static esp_err_t init_timers(void)
         .callback = buzz_stop_timer_cb,
         .name = "buzz_stop",
     };
+    const esp_timer_create_args_t second_args = {
+        .callback = second_buzz_timer_cb,
+        .name = "buzz_second",
+    };
 
     ESP_RETURN_ON_ERROR(esp_timer_create(&delay_args, &s_delay_timer), TAG, "Failed to create delay timer");
     ESP_RETURN_ON_ERROR(esp_timer_create(&stop_args, &s_buzz_stop_timer), TAG, "Failed to create stop timer");
+    ESP_RETURN_ON_ERROR(esp_timer_create(&second_args, &s_second_buzz_timer),
+                        TAG,
+                        "Failed to create second buzz timer");
     return ESP_OK;
 }
 
@@ -663,8 +756,13 @@ static esp_err_t root_get_handler(httpd_req_t *req)
     char number_buf[16];
     char delay_buf[16];
     char duration_buf[16];
+    char second_delay_buf[16];
     int delay_ms = (int)(get_runtime_delay_us() / 1000LL);
     int buzz_duration_ms = (int)(get_runtime_buzz_duration_us() / 1000LL);
+    bool second_buzz_enabled = false;
+    int64_t second_buzz_delay_us = 0;
+    get_runtime_second_buzz_config(&second_buzz_enabled, &second_buzz_delay_us);
+    int second_buzz_delay_ms = (int)(second_buzz_delay_us / 1000LL);
     int written = snprintf(delay_buf,
                            sizeof(delay_buf),
                            "%d.%03d",
@@ -679,6 +777,15 @@ static esp_err_t root_get_handler(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Duration value too large");
     }
 
+    written = snprintf(second_delay_buf,
+                       sizeof(second_delay_buf),
+                       "%d.%03d",
+                       second_buzz_delay_ms / 1000,
+                       second_buzz_delay_ms % 1000);
+    if (written < 0 || written >= (int)sizeof(second_delay_buf)) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Second delay value too large");
+    }
+
     httpd_resp_set_type(req, "text/html");
     ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(
                             req,
@@ -690,7 +797,8 @@ static esp_err_t root_get_handler(httpd_req_t *req)
         "main{max-width:520px;margin:0 auto;padding:32px 18px}"
         "section{background:#fff;border:1px solid #d9e0ea;border-radius:8px;padding:22px;box-shadow:0 8px 24px #1b2b4a14}"
         "h1{font-size:28px;margin:0 0 18px}label{display:block;font-weight:650;margin:16px 0 8px}"
-        "input{box-sizing:border-box;width:100%%;font-size:18px;padding:10px;border:1px solid #aeb8c8;border-radius:6px}"
+        "input{box-sizing:border-box;width:100%;font-size:18px;padding:10px;border:1px solid #aeb8c8;border-radius:6px}"
+        "input[type=checkbox]{width:auto}.check{display:flex;align-items:center;gap:10px}"
         "button{display:block;margin-top:24px;font-size:17px;padding:10px 14px;border:0;border-radius:6px;background:#1267d8;color:white}"
         "p{line-height:1.45}.status{min-height:24px;color:#26613f}"
         "</style></head><body><main><section>"
@@ -741,6 +849,27 @@ static esp_err_t root_get_handler(httpd_req_t *req)
 
     ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(
                             req,
+        "\" required>"
+        "<label class=\"check\"><input id=\"second-enabled\" name=\"second-enabled\" type=\"checkbox\""),
+                        TAG,
+                        "Failed to send root page");
+
+    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(req, second_buzz_enabled ? " checked" : ""),
+                        TAG,
+                        "Failed to send root page");
+
+    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(
+                            req,
+        ">Second buzz</label>"
+        "<label for=\"second-delay\">Second buzz wait after first buzz in seconds</label>"
+        "<input id=\"second-delay\" name=\"second-delay\" type=\"number\" min=\"0.001\" max=\"3600\" step=\"0.001\" value=\""),
+                        TAG,
+                        "Failed to send root page");
+
+    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(req, second_delay_buf), TAG, "Failed to send root page");
+
+    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(
+                            req,
         "\" required><button type=\"submit\">Save settings</button>"
         "</form><p class=\"status\" id=\"status\"></p></section></main><script>"
         "const form=document.getElementById('config-form');"
@@ -749,11 +878,15 @@ static esp_err_t root_get_handler(httpd_req_t *req)
         "e.preventDefault();statusEl.textContent='Saving...';"
         "const delay_seconds=Number(document.getElementById('delay').value);"
         "const buzz_duration_ms=Number(document.getElementById('duration').value);"
+        "const second_buzz_enabled=document.getElementById('second-enabled').checked;"
+        "const second_buzz_delay_seconds=Number(document.getElementById('second-delay').value);"
         "const r=await fetch('/api/config',{method:'POST',headers:{'Content-Type':'application/json'},"
-        "body:JSON.stringify({delay_seconds,buzz_duration_ms})});"
+        "body:JSON.stringify({delay_seconds,buzz_duration_ms,second_buzz_enabled,second_buzz_delay_seconds})});"
         "if(!r.ok){statusEl.textContent='Save failed';return;}"
         "const cfg=await r.json();document.getElementById('delay').value=cfg.delay_seconds;"
         "document.getElementById('duration').value=cfg.buzz_duration_ms;"
+        "document.getElementById('second-enabled').checked=cfg.second_buzz_enabled;"
+        "document.getElementById('second-delay').value=cfg.second_buzz_delay_seconds;"
         "statusEl.textContent='Saved for future triggers';"
         "});"
         "</script></body></html>"),
@@ -765,16 +898,29 @@ static esp_err_t root_get_handler(httpd_req_t *req)
 
 static esp_err_t config_get_handler(httpd_req_t *req)
 {
-    char json[160];
+    char json[256];
     int delay_ms = (int)(get_runtime_delay_us() / 1000LL);
     int buzz_duration_ms = (int)(get_runtime_buzz_duration_us() / 1000LL);
+    bool second_buzz_enabled = false;
+    int64_t second_buzz_delay_us = 0;
+    get_runtime_second_buzz_config(&second_buzz_enabled, &second_buzz_delay_us);
+    int second_buzz_delay_ms = (int)(second_buzz_delay_us / 1000LL);
     int written = snprintf(json,
                            sizeof(json),
-                           "{\"delay_seconds\":\"%d.%03d\",\"delay_ms\":%d,\"buzz_duration_ms\":%d}\n",
+                           "{\"delay_seconds\":\"%d.%03d\","
+                           "\"delay_ms\":%d,"
+                           "\"buzz_duration_ms\":%d,"
+                           "\"second_buzz_enabled\":%s,"
+                           "\"second_buzz_delay_seconds\":\"%d.%03d\","
+                           "\"second_buzz_delay_ms\":%d}\n",
                            delay_ms / 1000,
                            delay_ms % 1000,
                            delay_ms,
-                           buzz_duration_ms);
+                           buzz_duration_ms,
+                           second_buzz_enabled ? "true" : "false",
+                           second_buzz_delay_ms / 1000,
+                           second_buzz_delay_ms % 1000,
+                           second_buzz_delay_ms);
     if (written < 0 || written >= (int)sizeof(json)) {
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "JSON too large");
     }
@@ -783,17 +929,39 @@ static esp_err_t config_get_handler(httpd_req_t *req)
     return httpd_resp_send(req, json, HTTPD_RESP_USE_STRLEN);
 }
 
-static const char *find_json_number_value(const char *body, const char *key)
+static const char *find_json_value(const char *body, const char *key)
 {
-    const char *value = strstr(body, key);
+    const char *value = body;
+    size_t key_len = strlen(key);
+
+    while ((value = strstr(value, key)) != NULL) {
+        const char *key_end = value + key_len;
+        if (value > body && value[-1] == '"' && *key_end == '"') {
+            value = key_end + 1;
+            break;
+        }
+        value = key_end;
+    }
+
     if (value == NULL) {
         return NULL;
     }
 
-    while (*value != '\0' && !isdigit((unsigned char)*value)) {
+    value = strchr(value, ':');
+    if (value == NULL) {
+        return NULL;
+    }
+    value++;
+    while (*value == ' ' || *value == '\t' || *value == '"') {
         value++;
     }
     return *value == '\0' ? NULL : value;
+}
+
+static const char *find_json_number_value(const char *body, const char *key)
+{
+    const char *value = find_json_value(body, key);
+    return value != NULL && isdigit((unsigned char)*value) ? value : NULL;
 }
 
 static bool parse_uint_field(const char *body, const char *key, uint32_t max_value, uint32_t *value_out)
@@ -813,16 +981,43 @@ static bool parse_uint_field(const char *body, const char *key, uint32_t max_val
     return true;
 }
 
-static bool parse_delay_seconds_field(const char *body, uint32_t *delay_ms)
+static bool parse_bool_field(const char *body, const char *key, bool *value_out)
 {
-    const char *value = find_json_number_value(body, "delay_seconds");
+    const char *value = find_json_value(body, key);
     if (value == NULL) {
-        return parse_uint_field(body, "delay_ms", 3600000, delay_ms);
+        return false;
+    }
+
+    if (strncmp(value, "true", 4) == 0) {
+        *value_out = true;
+        return true;
+    }
+    if (strncmp(value, "false", 5) == 0) {
+        *value_out = false;
+        return true;
+    }
+    if (*value == '1' || *value == '0') {
+        *value_out = *value == '1';
+        return true;
+    }
+
+    return false;
+}
+
+static bool parse_seconds_field(const char *body,
+                                const char *seconds_key,
+                                const char *ms_key,
+                                uint32_t max_ms,
+                                uint32_t *delay_ms)
+{
+    const char *value = find_json_number_value(body, seconds_key);
+    if (value == NULL) {
+        return parse_uint_field(body, ms_key, max_ms, delay_ms);
     }
 
     char *end = NULL;
     unsigned long seconds = strtoul(value, &end, 10);
-    if (end == value || seconds > 3600UL) {
+    if (end == value || seconds > max_ms / 1000UL) {
         return false;
     }
 
@@ -838,12 +1033,31 @@ static bool parse_delay_seconds_field(const char *body, uint32_t *delay_ms)
     }
 
     uint64_t parsed_ms = (uint64_t)seconds * 1000ULL + fraction_ms;
-    if (parsed_ms > 3600000ULL) {
+    if (parsed_ms > max_ms) {
         return false;
     }
 
     *delay_ms = (uint32_t)parsed_ms;
     return true;
+}
+
+static bool parse_delay_seconds_field(const char *body, uint32_t *delay_ms)
+{
+    return parse_seconds_field(body, "delay_seconds", "delay_ms", 3600000, delay_ms);
+}
+
+static bool parse_second_buzz_delay_seconds_field(const char *body, uint32_t *delay_ms)
+{
+    return parse_seconds_field(body,
+                               "second_buzz_delay_seconds",
+                               "second_buzz_delay_ms",
+                               3600000,
+                               delay_ms);
+}
+
+static bool json_has_key(const char *body, const char *key)
+{
+    return find_json_value(body, key) != NULL;
 }
 
 static esp_err_t config_post_handler(httpd_req_t *req)
@@ -867,19 +1081,38 @@ static esp_err_t config_post_handler(httpd_req_t *req)
 
     uint32_t delay_ms = 0;
     uint32_t buzz_duration_ms = 0;
+    bool second_buzz_enabled = false;
+    int64_t current_second_buzz_delay_us = 0;
+    get_runtime_second_buzz_config(&second_buzz_enabled, &current_second_buzz_delay_us);
+    uint32_t second_buzz_delay_ms = (uint32_t)(current_second_buzz_delay_us / 1000LL);
+
     if (!parse_delay_seconds_field(body, &delay_ms)) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Expected delay_seconds between 0 and 3600");
     }
     if (!parse_uint_field(body, "buzz_duration_ms", 60000, &buzz_duration_ms) || buzz_duration_ms == 0) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Expected buzz_duration_ms between 1 and 60000");
     }
+    if (json_has_key(body, "second_buzz_enabled") &&
+        !parse_bool_field(body, "second_buzz_enabled", &second_buzz_enabled)) {
+        return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Expected second_buzz_enabled as true or false");
+    }
+    if ((json_has_key(body, "second_buzz_delay_seconds") || json_has_key(body, "second_buzz_delay_ms")) &&
+        (!parse_second_buzz_delay_seconds_field(body, &second_buzz_delay_ms) || second_buzz_delay_ms == 0)) {
+        return httpd_resp_send_err(req,
+                                   HTTPD_400_BAD_REQUEST,
+                                   "Expected second_buzz_delay_seconds between 0.001 and 3600");
+    }
 
     set_runtime_delay_ms(delay_ms);
     set_runtime_buzz_duration_ms(buzz_duration_ms);
+    set_runtime_second_buzz_config(second_buzz_enabled, second_buzz_delay_ms);
     ESP_LOGI(TAG,
-             "Runtime delay updated to %" PRIu32 " ms, buzz duration to %" PRIu32 " ms",
+             "Runtime delay updated to %" PRIu32 " ms, buzz duration to %" PRIu32
+             " ms, second buzz %s after %" PRIu32 " ms",
              delay_ms,
-             buzz_duration_ms);
+             buzz_duration_ms,
+             second_buzz_enabled ? "enabled" : "disabled",
+             second_buzz_delay_ms);
     return config_get_handler(req);
 }
 
@@ -941,9 +1174,12 @@ void app_main(void)
     ESP_ERROR_CHECK(status_led_set(STATUS_LED_READY));
 
     ESP_LOGI(TAG,
-             "Ready. GPIO %d, status LED GPIO %d, default delay %d ms, buzz duration %d ms",
+             "Ready. GPIO %d, status LED GPIO %d, default delay %d ms, buzz duration %d ms, "
+             "second buzz %s after %d ms",
              CONFIG_BUZZER_GPIO,
              CONFIG_STATUS_LED_GPIO,
              CONFIG_BUZZER_DELAY_MS,
-             CONFIG_BUZZER_DURATION_MS);
+             CONFIG_BUZZER_DURATION_MS,
+             BUZZER_SECOND_ENABLED_DEFAULT ? "enabled" : "disabled",
+             CONFIG_BUZZER_SECOND_DELAY_MS);
 }

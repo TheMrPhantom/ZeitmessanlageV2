@@ -29,6 +29,22 @@ menu "Buzzer Timer"
         help
             How long the buzzer output stays high once it starts buzzing.
 
+    config BUZZER_SECOND_ENABLED
+        bool "Enable a second buzz by default"
+        default n
+        help
+            Enables a second buzz after the first one. The web interface can
+            change this at runtime until the next reboot.
+
+    config BUZZER_SECOND_DELAY_MS
+        int "Default delay before second buzz in milliseconds"
+        default 10000
+        range 1 3600000
+        help
+            Default delay after the first buzz ends before the second buzz
+            starts. The web interface can change this at runtime until the next
+            reboot.
+
     config BUZZER_SOFTAP_SSID
         string "SoftAP SSID"
         default "buzzer-timer"
