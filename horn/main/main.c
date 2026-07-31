@@ -15,6 +15,7 @@
 
 #include "driver/gpio.h"
 #include "driver/rmt_tx.h"
+#include "esp_app_desc.h"
 #include "esp_check.h"
 #include "esp_err.h"
 #include "esp_event.h"
@@ -40,6 +41,7 @@
 #define TIMER_COMMAND_STOP 0x03
 
 #define HTTP_POST_BUF_LEN 256
+#define HTTP_ROOT_BUF_LEN 4096
 
 #define TIMER_FRAME_HEADER_LEN 24
 #define TIMER_DUPLICATE_CACHE_SIZE 16
@@ -854,9 +856,24 @@ static esp_err_t start_captive_dns(void)
     return created == pdPASS ? ESP_OK : ESP_ERR_NO_MEM;
 }
 
+static esp_err_t set_no_store_headers(httpd_req_t *req)
+{
+    ESP_RETURN_ON_ERROR(httpd_resp_set_hdr(req,
+                                           "Cache-Control",
+                                           "no-store, no-cache, must-revalidate, max-age=0"),
+                        TAG,
+                        "Failed to set Cache-Control header");
+    ESP_RETURN_ON_ERROR(httpd_resp_set_hdr(req, "Pragma", "no-cache"),
+                        TAG,
+                        "Failed to set Pragma header");
+    ESP_RETURN_ON_ERROR(httpd_resp_set_hdr(req, "Expires", "0"),
+                        TAG,
+                        "Failed to set Expires header");
+    return ESP_OK;
+}
+
 static esp_err_t root_get_handler(httpd_req_t *req)
 {
-    char number_buf[16];
     char delay_buf[16];
     char duration_buf[16];
     char second_delay_buf[16];
@@ -889,92 +906,44 @@ static esp_err_t root_get_handler(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Second delay value too large");
     }
 
+    ESP_RETURN_ON_ERROR(set_no_store_headers(req), TAG, "Failed to set no-store headers");
     httpd_resp_set_type(req, "text/html");
-    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(
-                            req,
+
+    char *html = malloc(HTTP_ROOT_BUF_LEN);
+    if (html == NULL) {
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
+    }
+
+    written = snprintf(
+        html,
+        HTTP_ROOT_BUF_LEN,
         "<!doctype html><html><head><meta charset=\"utf-8\">"
         "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+        "<meta http-equiv=\"Cache-Control\" content=\"no-store\">"
+        "<meta http-equiv=\"Pragma\" content=\"no-cache\">"
+        "<meta http-equiv=\"Expires\" content=\"0\">"
         "<title>Buzzer Timer</title>"
         "<style>"
         "body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:0;background:#f5f7fb;color:#172033}"
         "main{max-width:520px;margin:0 auto;padding:32px 18px}"
         "section{background:#fff;border:1px solid #d9e0ea;border-radius:8px;padding:22px;box-shadow:0 8px 24px #1b2b4a14}"
         "h1{font-size:28px;margin:0 0 18px}label{display:block;font-weight:650;margin:16px 0 8px}"
-        "input{box-sizing:border-box;width:100%;font-size:18px;padding:10px;border:1px solid #aeb8c8;border-radius:6px}"
+        "input{box-sizing:border-box;width:100%%;font-size:18px;padding:10px;border:1px solid #aeb8c8;border-radius:6px}"
         "input[type=checkbox]{width:auto}.check{display:flex;align-items:center;gap:10px}"
         "button{display:block;margin-top:24px;font-size:17px;padding:10px 14px;border:0;border-radius:6px;background:#1267d8;color:white}"
-        "p{line-height:1.45}.status{min-height:24px;color:#26613f}"
+        "p{line-height:1.45}.status{min-height:24px;color:#26613f}.meta{font-size:12px;color:#647083;margin-top:18px}"
         "</style></head><body><main><section>"
-        "<h1>Buzzer Timer</h1><p>SoftAP channel "),
-                        TAG,
-                        "Failed to send root page");
-
-    written = snprintf(number_buf, sizeof(number_buf), "%d", CONFIG_BUZZER_SOFTAP_CHANNEL);
-    if (written < 0 || written >= (int)sizeof(number_buf)) {
-        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Channel value too large");
-    }
-    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(req, number_buf), TAG, "Failed to send root page");
-
-    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(req, ". Current buzz delay is "),
-                        TAG,
-                        "Failed to send root page");
-
-    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(req, delay_buf), TAG, "Failed to send root page");
-
-    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(
-                            req,
-        " s. Buzz time is "),
-                        TAG,
-                        "Failed to send root page");
-
-    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(req, duration_buf), TAG, "Failed to send root page");
-
-    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(
-                            req,
-        " ms.</p>"
+        "<h1>Buzzer Timer</h1><p>SoftAP channel %d. Current buzz delay is %s s. Buzz time is %s ms.</p>"
         "<form id=\"config-form\">"
         "<label for=\"delay\">Buzz delay in seconds</label>"
-        "<input id=\"delay\" name=\"delay\" type=\"number\" min=\"0\" max=\"3600\" step=\"0.001\" value=\""),
-                        TAG,
-                        "Failed to send root page");
-
-    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(req, delay_buf), TAG, "Failed to send root page");
-
-    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(
-                            req,
-        "\" required>"
+        "<input id=\"delay\" name=\"delay\" type=\"number\" min=\"0\" max=\"3600\" step=\"0.001\" value=\"%s\" required>"
         "<label for=\"duration\">Buzz time in milliseconds</label>"
-        "<input id=\"duration\" name=\"duration\" type=\"number\" min=\"1\" max=\"60000\" step=\"1\" value=\""),
-                        TAG,
-                        "Failed to send root page");
-
-    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(req, duration_buf), TAG, "Failed to send root page");
-
-    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(
-                            req,
-        "\" required>"
-        "<label class=\"check\"><input id=\"second-enabled\" name=\"second-enabled\" type=\"checkbox\""),
-                        TAG,
-                        "Failed to send root page");
-
-    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(req, second_buzz_enabled ? " checked" : ""),
-                        TAG,
-                        "Failed to send root page");
-
-    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(
-                            req,
-        ">Second buzz</label>"
+        "<input id=\"duration\" name=\"duration\" type=\"number\" min=\"1\" max=\"60000\" step=\"1\" value=\"%s\" required>"
+        "<label class=\"check\"><input id=\"second-enabled\" name=\"second-enabled\" type=\"checkbox\"%s>Second buzz</label>"
         "<label for=\"second-delay\">Second buzz wait after first buzz in seconds</label>"
-        "<input id=\"second-delay\" name=\"second-delay\" type=\"number\" min=\"0.001\" max=\"3600\" step=\"0.001\" value=\""),
-                        TAG,
-                        "Failed to send root page");
-
-    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(req, second_delay_buf), TAG, "Failed to send root page");
-
-    ESP_RETURN_ON_ERROR(httpd_resp_sendstr_chunk(
-                            req,
-        "\" required><button type=\"submit\">Save settings</button>"
-        "</form><p class=\"status\" id=\"status\"></p></section></main><script>"
+        "<input id=\"second-delay\" name=\"second-delay\" type=\"number\" min=\"0.001\" max=\"3600\" step=\"0.001\" value=\"%s\" required>"
+        "<button type=\"submit\">Save settings</button>"
+        "</form><p class=\"status\" id=\"status\"></p><p class=\"meta\">Firmware %s</p></section></main><script>"
         "const form=document.getElementById('config-form');"
         "const statusEl=document.getElementById('status');"
         "form.addEventListener('submit',async(e)=>{"
@@ -992,11 +961,23 @@ static esp_err_t root_get_handler(httpd_req_t *req)
         "document.getElementById('second-delay').value=cfg.second_buzz_delay_seconds;"
         "statusEl.textContent='Saved for future triggers';"
         "});"
-        "</script></body></html>"),
-                        TAG,
-                        "Failed to send root page");
+        "</script></body></html>",
+        CONFIG_BUZZER_SOFTAP_CHANNEL,
+        delay_buf,
+        duration_buf,
+        delay_buf,
+        duration_buf,
+        second_buzz_enabled ? " checked" : "",
+        second_delay_buf,
+        esp_app_get_description()->version);
+    if (written < 0 || written >= HTTP_ROOT_BUF_LEN) {
+        free(html);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "HTML too large");
+    }
 
-    return httpd_resp_sendstr_chunk(req, NULL);
+    esp_err_t err = httpd_resp_send(req, html, written);
+    free(html);
+    return err;
 }
 
 static esp_err_t config_get_handler(httpd_req_t *req)
@@ -1028,6 +1009,7 @@ static esp_err_t config_get_handler(httpd_req_t *req)
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "JSON too large");
     }
 
+    ESP_RETURN_ON_ERROR(set_no_store_headers(req), TAG, "Failed to set no-store headers");
     httpd_resp_set_type(req, "application/json");
     return httpd_resp_send(req, json, HTTPD_RESP_USE_STRLEN);
 }
