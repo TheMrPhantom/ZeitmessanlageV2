@@ -1,3 +1,6 @@
+#ifndef GPIO_PINS_H
+#define GPIO_PINS_H
+
 #include <driver/spi_master.h>
 
 #define LORA_SPI_HOST (SPI2_HOST)
@@ -29,3 +32,5 @@
 #define BUZZER_GPIO (GPIO_NUM_42)
 #define TRIGGER_PIN_1 (GPIO_NUM_47)
 #define TRIGGER_PIN_2 (GPIO_NUM_14) //44 is RX pin of ESP
+
+#endif

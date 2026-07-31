@@ -1,10 +1,13 @@
 #include "LoraNetwork.h"
+#include <stddef.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include "esp_err.h"
 #include "esp_log.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include "freertos/semphr.h"
 #include "ra01s.h" // For LoRaSend/LoRaReceive
 #include "driver/gpio.h"
 
@@ -25,15 +28,24 @@ QueueHandle_t loraSendQueue;
 QueueHandle_t localReceiveTimestampQueue;
 QueueHandle_t ackQueue;
 QueueHandle_t loraInterruptQueue;
+static SemaphoreHandle_t radio_operation_mutex;
 
 #define MAX_PENDING_ACKS 40
+#define LORA_PACKET_HEADER_LEN 10U
+#define LORA_MAX_FRAME_LEN 255U
+#define SENSOR_STATE_WIRE_LEN (sizeof(uint8_t) + sizeof(uint64_t))
+#define TRIGGER_WIRE_LEN (sizeof(int64_t) + sizeof(PacketTypeSensorState))
+#define ACK_TIMEOUT_MS 2000
+#define ACK_SCAN_INTERVAL_MS 50
+#define MAX_SEND_ATTEMPTS 6
 
 typedef struct PendingAck
 {
     bool active;
     uint8_t station_id;
     uint8_t packet_id;
-    TaskHandle_t task;
+    TickType_t waiting_since;
+    DogDogPacket *packet;
 } PendingAck;
 
 static PendingAck pending_acks[MAX_PENDING_ACKS];
@@ -44,19 +56,40 @@ extern int start_id;
 extern int stop_id;
 extern int station_id;
 
-static bool register_pending_ack(uint8_t ack_station_id, uint8_t ack_packet_id, TaskHandle_t task)
+static void free_dogdog_packet(DogDogPacket *packet)
+{
+    if (packet != NULL)
+    {
+        free(packet->payload);
+        free(packet);
+    }
+}
+
+static bool register_pending_ack(DogDogPacket *packet)
 {
     bool registered = false;
+    TickType_t waiting_since = xTaskGetTickCount();
 
     portENTER_CRITICAL(&pending_ack_spinlock);
+    for (int i = 0; i < MAX_PENDING_ACKS; i++)
+    {
+        if (pending_acks[i].active &&
+            pending_acks[i].station_id == packet->station_id &&
+            pending_acks[i].packet_id == packet->packet_id)
+        {
+            portEXIT_CRITICAL(&pending_ack_spinlock);
+            return false;
+        }
+    }
     for (int i = 0; i < MAX_PENDING_ACKS; i++)
     {
         if (!pending_acks[i].active)
         {
             pending_acks[i].active = true;
-            pending_acks[i].station_id = ack_station_id;
-            pending_acks[i].packet_id = ack_packet_id;
-            pending_acks[i].task = task;
+            pending_acks[i].station_id = packet->station_id;
+            pending_acks[i].packet_id = packet->packet_id;
+            pending_acks[i].waiting_since = waiting_since;
+            pending_acks[i].packet = packet;
             registered = true;
             break;
         }
@@ -66,27 +99,9 @@ static bool register_pending_ack(uint8_t ack_station_id, uint8_t ack_packet_id, 
     return registered;
 }
 
-static void unregister_pending_ack(uint8_t ack_station_id, uint8_t ack_packet_id, TaskHandle_t task)
+static DogDogPacket *take_pending_ack_packet(uint8_t ack_station_id, uint8_t ack_packet_id)
 {
-    portENTER_CRITICAL(&pending_ack_spinlock);
-    for (int i = 0; i < MAX_PENDING_ACKS; i++)
-    {
-        if (pending_acks[i].active &&
-            pending_acks[i].station_id == ack_station_id &&
-            pending_acks[i].packet_id == ack_packet_id &&
-            pending_acks[i].task == task)
-        {
-            pending_acks[i].active = false;
-            break;
-        }
-    }
-    portEXIT_CRITICAL(&pending_ack_spinlock);
-}
-
-static TaskHandle_t take_pending_ack_task(uint8_t ack_station_id, uint8_t ack_packet_id)
-{
-    TaskHandle_t task = NULL;
-
+    DogDogPacket *packet = NULL;
     portENTER_CRITICAL(&pending_ack_spinlock);
     for (int i = 0; i < MAX_PENDING_ACKS; i++)
     {
@@ -94,18 +109,64 @@ static TaskHandle_t take_pending_ack_task(uint8_t ack_station_id, uint8_t ack_pa
             pending_acks[i].station_id == ack_station_id &&
             pending_acks[i].packet_id == ack_packet_id)
         {
-            task = pending_acks[i].task;
+            packet = pending_acks[i].packet;
             pending_acks[i].active = false;
+            pending_acks[i].packet = NULL;
             break;
         }
     }
     portEXIT_CRITICAL(&pending_ack_spinlock);
-
-    return task;
+    return packet;
 }
 
-DogDogPacket *create_dogdog_packet_from_bytes(uint8_t *data, uint16_t length)
+static size_t take_expired_ack_packets(DogDogPacket **packets, size_t capacity)
 {
+    const TickType_t timeout_ticks = pdMS_TO_TICKS(ACK_TIMEOUT_MS);
+    const TickType_t now = xTaskGetTickCount();
+    size_t count = 0;
+
+    portENTER_CRITICAL(&pending_ack_spinlock);
+    for (int i = 0; i < MAX_PENDING_ACKS && count < capacity; i++)
+    {
+        if (pending_acks[i].active &&
+            (TickType_t)(now - pending_acks[i].waiting_since) >= timeout_ticks)
+        {
+            packets[count++] = pending_acks[i].packet;
+            pending_acks[i].active = false;
+            pending_acks[i].packet = NULL;
+        }
+    }
+    portEXIT_CRITICAL(&pending_ack_spinlock);
+
+    return count;
+}
+
+DogDogPacket *create_dogdog_packet_from_bytes(const uint8_t *data, size_t length)
+{
+    if (data == NULL || length < LORA_PACKET_HEADER_LEN || length > LORA_MAX_FRAME_LEN)
+    {
+        ESP_LOGW(TAG_LORA, "Invalid LoRa frame length: %u", (unsigned int)length);
+        return NULL;
+    }
+
+    uint32_t magic = 0;
+    memcpy(&magic, data, sizeof(magic));
+    if (magic != LORA_MAGIC)
+    {
+        ESP_LOGW(TAG_LORA, "Received packet with invalid magic: 0x%08lx", (unsigned long)magic);
+        return NULL;
+    }
+
+    uint16_t payload_length = ((uint16_t)data[8] << 8) | data[9];
+    if ((size_t)payload_length != length - LORA_PACKET_HEADER_LEN)
+    {
+        ESP_LOGW(TAG_LORA,
+                 "Invalid payload length: declared=%u received=%u",
+                 (unsigned int)payload_length,
+                 (unsigned int)(length - LORA_PACKET_HEADER_LEN));
+        return NULL;
+    }
+
     DogDogPacket *packet = calloc(1, sizeof(DogDogPacket));
     if (!packet)
     {
@@ -113,8 +174,7 @@ DogDogPacket *create_dogdog_packet_from_bytes(uint8_t *data, uint16_t length)
         return NULL;
     }
 
-    // First four bytes of data is magic
-    packet->magic = *((uint32_t *)data);
+    packet->magic = magic;
     packet->protocol_version = data[4];
 
     if (packet->protocol_version != LORA_PROTOCOL_VERSION)
@@ -135,82 +195,142 @@ DogDogPacket *create_dogdog_packet_from_bytes(uint8_t *data, uint16_t length)
 
     packet->packet_id = data[6];
     packet->type = data[7];
-    packet->payload_length = (data[8] << 8) | data[9];
+    packet->payload_length = payload_length;
 
-    packet->payload = calloc(1, packet->payload_length);
-    if (!packet->payload)
+    if (packet->payload_length > 0)
     {
-        ESP_LOGE(TAG_LORA, "Failed to allocate memory for packet payload");
-        free(packet);
-        return NULL;
+        packet->payload = malloc(packet->payload_length);
+        if (!packet->payload)
+        {
+            ESP_LOGE(TAG_LORA, "Failed to allocate memory for packet payload");
+            free(packet);
+            return NULL;
+        }
+        memcpy(packet->payload, data + LORA_PACKET_HEADER_LEN, packet->payload_length);
     }
-    memcpy(packet->payload, data + 10, packet->payload_length);
 
     return packet;
 }
 
-bool is_packet_from_dogdog(uint8_t *data)
+bool is_packet_from_dogdog(const uint8_t *data, size_t length)
 {
-    return *((uint32_t *)data) == LORA_MAGIC;
+    uint32_t magic = 0;
+    if (data == NULL || length < sizeof(magic))
+    {
+        return false;
+    }
+    memcpy(&magic, data, sizeof(magic));
+    return magic == LORA_MAGIC;
+}
+
+static bool packet_has_payload(const DogDogPacket *packet, uint8_t type, size_t expected_length)
+{
+    if (packet == NULL || packet->type != type || packet->payload == NULL ||
+        packet->payload_length != expected_length)
+    {
+        ESP_LOGW(TAG_LORA,
+                 "Invalid payload for packet type %u (expected %u bytes)",
+                 (unsigned int)type,
+                 (unsigned int)expected_length);
+        return false;
+    }
+    return true;
 }
 
 PacketTypeTimeSync *create_time_sync_information(DogDogPacket *packet)
 {
+    if (!packet_has_payload(packet, LORA_TIME_SYNC, sizeof(int64_t)))
+    {
+        return NULL;
+    }
+
     PacketTypeTimeSync *packet_type = calloc(1, sizeof(PacketTypeTimeSync));
     if (!packet_type)
     {
         ESP_LOGE(TAG_LORA, "Failed to allocate memory for PacketTypeTimeSync");
         return NULL;
     }
-    // four bytes of the packet payload are int64 time stamp
-    packet_type->timestamp = *((int64_t *)packet->payload);
+    memcpy(&packet_type->timestamp, packet->payload, sizeof(packet_type->timestamp));
     return packet_type;
 }
 
 PacketTypeTrigger *create_trigger_information(DogDogPacket *packet)
 {
+    if (!packet_has_payload(packet, LORA_TRIGGER, TRIGGER_WIRE_LEN))
+    {
+        return NULL;
+    }
+
     PacketTypeTrigger *packet_type = calloc(1, sizeof(PacketTypeTrigger));
     if (!packet_type)
     {
         ESP_LOGE(TAG_LORA, "Failed to allocate memory for PacketTypeTrigger");
         return NULL;
     }
-    // four bytes of the packet payload are int64 time stamp
-    packet_type->timestamp = *((int64_t *)packet->payload);
-    memcpy(&packet_type->sensor_state, packet->payload + sizeof(int64_t), sizeof(PacketTypeSensorState));
+    memcpy(&packet_type->timestamp, packet->payload, sizeof(packet_type->timestamp));
+    packet_type->sensor_state.num_sensors =
+        packet->payload[sizeof(int64_t) + offsetof(PacketTypeSensorState, num_sensors)];
+    memcpy(&packet_type->sensor_state.sensor_states,
+           packet->payload + sizeof(int64_t) + offsetof(PacketTypeSensorState, sensor_states),
+           sizeof(packet_type->sensor_state.sensor_states));
+    if (packet_type->sensor_state.num_sensors > 64)
+    {
+        ESP_LOGW(TAG_LORA,
+                 "Invalid sensor count: %u",
+                 (unsigned int)packet_type->sensor_state.num_sensors);
+        free(packet_type);
+        return NULL;
+    }
     return packet_type;
 }
 
 PacketTypeFinalTime *create_final_time_information(DogDogPacket *packet)
 {
+    if (!packet_has_payload(packet, LORA_FINAL_TIME, sizeof(int64_t)))
+    {
+        return NULL;
+    }
+
     PacketTypeFinalTime *packet_type = calloc(1, sizeof(PacketTypeFinalTime));
     if (!packet_type)
     {
         ESP_LOGE(TAG_LORA, "Failed to allocate memory for PacketTypeFinalTime");
         return NULL;
     }
-    // four bytes of the packet payload are int64 time stamp
-    packet_type->timestamp = *((int64_t *)packet->payload);
+    memcpy(&packet_type->timestamp, packet->payload, sizeof(packet_type->timestamp));
     return packet_type;
 }
 
 PacketTypeSensorState *create_sensor_state_information(DogDogPacket *packet)
 {
+    if (!packet_has_payload(packet, LORA_SENSOR_STATE, SENSOR_STATE_WIRE_LEN))
+    {
+        return NULL;
+    }
+
     PacketTypeSensorState *packet_type = calloc(1, sizeof(PacketTypeSensorState));
     if (!packet_type)
     {
         ESP_LOGE(TAG_LORA, "Failed to allocate memory for PacketTypeSensorState");
         return NULL;
     }
-    // first byte of the packet payload is the number of sensors
     packet_type->num_sensors = packet->payload[0];
-    // remaining bytes are the sensor states
-    packet_type->sensor_states = *((uint64_t *)(packet->payload + 1));
+    memcpy(&packet_type->sensor_states, packet->payload + 1, sizeof(packet_type->sensor_states));
+    if (packet_type->num_sensors > 64)
+    {
+        ESP_LOGW(TAG_LORA, "Invalid sensor count: %u", (unsigned int)packet_type->num_sensors);
+        free(packet_type);
+        return NULL;
+    }
     return packet_type;
 }
 
 PacketTypeAck *create_ack_information(DogDogPacket *packet)
 {
+    if (!packet_has_payload(packet, LORA_ACK, sizeof(PacketTypeAck)))
+    {
+        return NULL;
+    }
 
     PacketTypeAck *packet_type = calloc(1, sizeof(PacketTypeAck));
     if (!packet_type)
@@ -225,6 +345,11 @@ PacketTypeAck *create_ack_information(DogDogPacket *packet)
 
 DogDogPacket *create_dogdog_packet_from_time_sync_information(PacketTypeTimeSync *time_sync)
 {
+    if (time_sync == NULL)
+    {
+        return NULL;
+    }
+
     DogDogPacket *packet = calloc(1, sizeof(DogDogPacket));
     if (!packet)
     {
@@ -252,6 +377,12 @@ DogDogPacket *create_dogdog_packet_from_time_sync_information(PacketTypeTimeSync
 
 DogDogPacket *create_dogdog_packet_from_trigger_information(PacketTypeTrigger *trigger)
 {
+    if (trigger == NULL || trigger->sensor_state.num_sensors > 64)
+    {
+        ESP_LOGE(TAG_LORA, "Invalid trigger information");
+        return NULL;
+    }
+
     DogDogPacket *packet = calloc(1, sizeof(DogDogPacket));
     if (!packet)
     {
@@ -272,14 +403,23 @@ DogDogPacket *create_dogdog_packet_from_trigger_information(PacketTypeTrigger *t
         free(packet);
         return NULL;
     }
-    memcpy(packet->payload, &trigger->timestamp, sizeof(int64_t));
-    memcpy(packet->payload + sizeof(int64_t), &trigger->sensor_state, sizeof(PacketTypeSensorState));
+    memcpy(packet->payload, &trigger->timestamp, sizeof(trigger->timestamp));
+    packet->payload[sizeof(int64_t) + offsetof(PacketTypeSensorState, num_sensors)] =
+        trigger->sensor_state.num_sensors;
+    memcpy(packet->payload + sizeof(int64_t) + offsetof(PacketTypeSensorState, sensor_states),
+           &trigger->sensor_state.sensor_states,
+           sizeof(trigger->sensor_state.sensor_states));
 
     return packet;
 }
 
 DogDogPacket *create_dogdog_packet_from_final_time_information(PacketTypeFinalTime *final_time)
 {
+    if (final_time == NULL)
+    {
+        return NULL;
+    }
+
     DogDogPacket *packet = calloc(1, sizeof(DogDogPacket));
     if (!packet)
     {
@@ -307,6 +447,12 @@ DogDogPacket *create_dogdog_packet_from_final_time_information(PacketTypeFinalTi
 
 DogDogPacket *create_dogdog_packet_from_sensor_state_information(PacketTypeSensorState *sensor_state)
 {
+    if (sensor_state == NULL || sensor_state->num_sensors > 64)
+    {
+        ESP_LOGE(TAG_LORA, "Invalid sensor state information");
+        return NULL;
+    }
+
     DogDogPacket *packet = calloc(1, sizeof(DogDogPacket));
     if (!packet)
     {
@@ -336,6 +482,11 @@ DogDogPacket *create_dogdog_packet_from_sensor_state_information(PacketTypeSenso
 
 DogDogPacket *create_dogdog_packet_from_ack_information(PacketTypeAck *ack)
 {
+    if (ack == NULL)
+    {
+        return NULL;
+    }
+
     DogDogPacket *packet = calloc(1, sizeof(DogDogPacket));
     if (!packet)
     {
@@ -393,6 +544,11 @@ DogDogPacket *create_dogdog_packet_from_request_final_time_information(uint8_t r
 
 void log_dogdog_packet(DogDogPacket *packet)
 {
+    if (packet == NULL)
+    {
+        return;
+    }
+
     char *packet_type_str;
     switch (packet->type)
     {
@@ -433,7 +589,7 @@ void log_dogdog_packet(DogDogPacket *packet)
         }
     }
     ESP_LOGD(pcTaskGetName(NULL), "Payload: ");
-    for (int i = 0; i < packet->payload_length; i++)
+    for (int i = 0; packet->payload != NULL && i < packet->payload_length; i++)
     {
         ESP_LOGD(pcTaskGetName(NULL), "  [%d]: 0x%02X", i, packet->payload[i]);
     }
@@ -441,7 +597,7 @@ void log_dogdog_packet(DogDogPacket *packet)
 
 BaseType_t send_dogdog_packet(DogDogPacket *packet)
 {
-    if (packet != NULL)
+    if (packet != NULL && loraSendQueue != NULL)
     {
         return xQueueSend(loraSendQueue, &packet, 0);
     }
@@ -450,6 +606,7 @@ BaseType_t send_dogdog_packet(DogDogPacket *packet)
 
 void LoraInterruptTask(void *pvParameters)
 {
+    (void)pvParameters;
     while (true)
     {
         int i = 0;
@@ -458,7 +615,11 @@ void LoraInterruptTask(void *pvParameters)
             timeval_t timestamp;
             gettimeofday(&timestamp, NULL);
             int64_t local_time_received = TIME_US(timestamp);
-            BaseType_t sent = xQueueSend(localReceiveTimestampQueue, &local_time_received, 0);
+            /* RX_DONE is a level which remains asserted until the radio IRQ is
+               cleared.  Keep the newest notification instead of dropping it:
+               dropping the only queued notification would leave DIO1 high and
+               prevent a future positive edge from ever waking the receiver. */
+            BaseType_t sent = xQueueOverwrite(localReceiveTimestampQueue, &local_time_received);
             if (sent != pdTRUE)
             {
                 ESP_LOGW(pcTaskGetName(NULL), "Warning: localReceiveTimestampQueue full, timestamp lost");
@@ -469,17 +630,21 @@ void LoraInterruptTask(void *pvParameters)
 
 void AckDispatchTask(void *pvParameters)
 {
+    (void)pvParameters;
     PacketTypeAck ack;
 
     while (true)
     {
         if (xQueueReceive(ackQueue, &ack, portMAX_DELAY))
         {
-            TaskHandle_t task = take_pending_ack_task(ack.station_id, ack.packet_id);
-            if (task != NULL)
+            DogDogPacket *packet = take_pending_ack_packet(ack.station_id, ack.packet_id);
+            if (packet != NULL)
             {
-                ESP_LOGI(pcTaskGetName(NULL), "Dispatching ACK for station: %d packet: %d", ack.station_id, ack.packet_id);
-                xTaskNotifyGive(task);
+                ESP_LOGI(pcTaskGetName(NULL),
+                         "ACK received for station: %d packet: %d",
+                         ack.station_id,
+                         ack.packet_id);
+                free_dogdog_packet(packet);
             }
             else
             {
@@ -490,13 +655,16 @@ void AckDispatchTask(void *pvParameters)
     }
 }
 
-void init_lora(void)
+esp_err_t init_lora(void)
 {
     ESP_LOGI("LORA", "Initializing LoRa");
-    loraSendQueue = xQueueCreate(40, sizeof(DogDogPacket *));
-    loraInterruptQueue = xQueueCreate(10, sizeof(int));
-    xTaskCreate(LoraInterruptTask, "LoraInterruptTask", 8192, NULL, 24, NULL);
-    LoRaInit();
+    esp_err_t err = LoRaInit();
+    if (err != ESP_OK)
+    {
+        ESP_LOGE("LORA", "Failed to initialize LoRa SPI: %s", esp_err_to_name(err));
+        return err;
+    }
+
     int8_t txPowerInDbm = 22;
     uint32_t frequencyInHz = 868000000;
     ESP_LOGI("LORA", "Frequency is 868MHz");
@@ -507,10 +675,8 @@ void init_lora(void)
     if (LoRaBegin(frequencyInHz, txPowerInDbm, tcxoVoltage, useRegulatorLDO) != 0)
     {
         ESP_LOGE("LORA", "Does not recognize the module");
-        while (1)
-        {
-            vTaskDelay(1);
-        }
+        LoRaDeinit();
+        return ESP_FAIL;
     }
 
     uint8_t spreadingFactor = 9;
@@ -522,15 +688,86 @@ void init_lora(void)
     bool invertIrq = false;
 
     LoRaConfig(spreadingFactor, bandwidth, codingRate, preambleLength, payloadLen, crcOn, invertIrq);
+    if (LoRaGetLastError() != ERR_NONE)
+    {
+        ESP_LOGE("LORA", "LoRa configuration failed with error %d", LoRaGetLastError());
+        LoRaDeinit();
+        return ESP_FAIL;
+    }
+
+    loraSendQueue = xQueueCreate(40, sizeof(DogDogPacket *));
+    /* These are coalescing event signals, not packet FIFOs.  The SX126x has a
+       single RX buffer and keeps DIO1 asserted until RX_DONE is cleared. */
+    loraInterruptQueue = xQueueCreate(1, sizeof(int));
+    localReceiveTimestampQueue = xQueueCreate(1, sizeof(int64_t));
     ackQueue = xQueueCreate(40, sizeof(PacketTypeAck));
-    xTaskCreate(AckDispatchTask, "AckDispatchTask", 4048, NULL, 24, NULL);
+    radio_operation_mutex = xSemaphoreCreateMutex();
+    if (loraSendQueue == NULL || loraInterruptQueue == NULL ||
+        localReceiveTimestampQueue == NULL || ackQueue == NULL ||
+        radio_operation_mutex == NULL)
+    {
+        ESP_LOGE("LORA", "Failed to allocate LoRa queues");
+        goto queue_init_failed;
+    }
+
+    TaskHandle_t interrupt_task = NULL;
+    TaskHandle_t ack_task = NULL;
+    if (xTaskCreate(LoraInterruptTask, "LoraInterruptTask", 2048, NULL, 24, &interrupt_task) != pdPASS ||
+        xTaskCreate(AckDispatchTask, "AckDispatchTask", 3072, NULL, 24, &ack_task) != pdPASS ||
+        xTaskCreate(ResendTask, "LoraResendTask", 3072, NULL, 5, NULL) != pdPASS)
+    {
+        ESP_LOGE("LORA", "Failed to create LoRa support tasks");
+        if (interrupt_task != NULL)
+        {
+            vTaskDelete(interrupt_task);
+        }
+        if (ack_task != NULL)
+        {
+            vTaskDelete(ack_task);
+        }
+        goto queue_init_failed;
+    }
+
+    return ESP_OK;
+
+queue_init_failed:
+    if (loraSendQueue != NULL)
+    {
+        vQueueDelete(loraSendQueue);
+        loraSendQueue = NULL;
+    }
+    if (loraInterruptQueue != NULL)
+    {
+        vQueueDelete(loraInterruptQueue);
+        loraInterruptQueue = NULL;
+    }
+    if (localReceiveTimestampQueue != NULL)
+    {
+        vQueueDelete(localReceiveTimestampQueue);
+        localReceiveTimestampQueue = NULL;
+    }
+    if (ackQueue != NULL)
+    {
+        vQueueDelete(ackQueue);
+        ackQueue = NULL;
+    }
+    if (radio_operation_mutex != NULL)
+    {
+        vSemaphoreDelete(radio_operation_mutex);
+        radio_operation_mutex = NULL;
+    }
+    LoRaDeinit();
+    return ESP_ERR_NO_MEM;
 }
 
 int create_bytes_from_dogdog_packet(DogDogPacket *packet, uint8_t *buf, size_t buf_len)
 {
-    if (buf_len < packet->payload_length + 10)
+    if (packet == NULL || buf == NULL ||
+        (packet->payload_length > 0 && packet->payload == NULL) ||
+        packet->payload_length > LORA_MAX_FRAME_LEN - LORA_PACKET_HEADER_LEN ||
+        buf_len < (size_t)packet->payload_length + LORA_PACKET_HEADER_LEN)
     {
-        ESP_LOGE(TAG_LORA, "Buffer too small to hold the packet");
+        ESP_LOGE(TAG_LORA, "Invalid packet or output buffer");
         return -1;
     }
 
@@ -542,24 +779,69 @@ int create_bytes_from_dogdog_packet(DogDogPacket *packet, uint8_t *buf, size_t b
     buf[8] = (packet->payload_length >> 8) & 0xFF; // High byte
     buf[9] = packet->payload_length & 0xFF;        // Low byte
 
-    memcpy(buf + 10, packet->payload, packet->payload_length);
-    return packet->payload_length + 10; // Return total length of the buffer
+    if (packet->payload_length > 0)
+    {
+        memcpy(buf + LORA_PACKET_HEADER_LEN, packet->payload, packet->payload_length);
+    }
+    return packet->payload_length + LORA_PACKET_HEADER_LEN;
 }
 
 static void IRAM_ATTR lora_module_rx_isr(void *arg)
 {
+    (void)arg;
     int i = 0;
-    xQueueSendFromISR(loraInterruptQueue, &i, NULL);
+    BaseType_t higher_priority_task_woken = pdFALSE;
+    if (loraInterruptQueue != NULL)
+    {
+        xQueueOverwriteFromISR(loraInterruptQueue, &i, &higher_priority_task_woken);
+        if (higher_priority_task_woken == pdTRUE)
+        {
+            portYIELD_FROM_ISR();
+        }
+    }
 }
 
 void LoraReceiveTask(void *pvParameters)
 {
-    gpio_reset_pin(CONFIG_LORA_GPIO_DIO1);
-    gpio_set_direction(CONFIG_LORA_GPIO_DIO1, GPIO_MODE_INPUT);
-    gpio_set_intr_type(CONFIG_LORA_GPIO_DIO1, GPIO_INTR_POSEDGE);
-    gpio_isr_handler_add(CONFIG_LORA_GPIO_DIO1, lora_module_rx_isr, (void *)CONFIG_LORA_GPIO_DIO1);
+    (void)pvParameters;
+    esp_err_t err = gpio_reset_pin(CONFIG_LORA_GPIO_DIO1);
+    if (err == ESP_OK)
+    {
+        err = gpio_set_direction(CONFIG_LORA_GPIO_DIO1, GPIO_MODE_INPUT);
+    }
+    if (err == ESP_OK)
+    {
+        err = gpio_set_intr_type(CONFIG_LORA_GPIO_DIO1, GPIO_INTR_POSEDGE);
+    }
+    if (err == ESP_OK)
+    {
+        err = gpio_isr_handler_add(CONFIG_LORA_GPIO_DIO1,
+                                   lora_module_rx_isr,
+                                   (void *)(intptr_t)CONFIG_LORA_GPIO_DIO1);
+    }
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG_LORA, "Failed to configure LoRa receive interrupt: %s", esp_err_to_name(err));
+        vTaskDelete(NULL);
+        return;
+    }
 
-    localReceiveTimestampQueue = xQueueCreate(40, sizeof(int64_t));
+    if (localReceiveTimestampQueue == NULL)
+    {
+        ESP_LOGE(TAG_LORA, "LoRa receive timestamp queue is not initialized");
+        vTaskDelete(NULL);
+        return;
+    }
+
+    /* DIO1 may already be high if a packet arrived before this task installed the ISR. */
+    if (gpio_get_level(CONFIG_LORA_GPIO_DIO1) != 0)
+    {
+        int pending_interrupt = 0;
+        if (xQueueOverwrite(loraInterruptQueue, &pending_interrupt) != pdTRUE)
+        {
+            ESP_LOGW(TAG_LORA, "Could not queue the pending LoRa interrupt");
+        }
+    }
 
     ESP_LOGI(pcTaskGetName(NULL), "Starting");
     uint8_t buf[255]; // Maximum Payload size of SX1261/62/68 is 255
@@ -568,10 +850,45 @@ void LoraReceiveTask(void *pvParameters)
         int64_t local_time_received;
         if (xQueueReceive(localReceiveTimestampQueue, &local_time_received, portMAX_DELAY))
         {
+            if (radio_operation_mutex == NULL ||
+                xSemaphoreTake(radio_operation_mutex, pdMS_TO_TICKS(1000)) != pdTRUE)
+            {
+                ESP_LOGE(TAG_LORA, "Timed out waiting for exclusive LoRa access while receiving");
+                if (xQueueOverwrite(localReceiveTimestampQueue, &local_time_received) != pdTRUE)
+                {
+                    ESP_LOGE(TAG_LORA, "Could not retain pending LoRa receive event");
+                }
+                vTaskDelay(pdMS_TO_TICKS(10));
+                continue;
+            }
+
             uint8_t rxLen = LoRaReceive(buf, sizeof(buf));
+            int8_t packet_rssi = 0;
+            int8_t packet_snr = 0;
             if (rxLen > 0)
             {
-                if (is_packet_from_dogdog(buf) == false)
+                GetPacketStatus(&packet_rssi, &packet_snr);
+            }
+            xSemaphoreGive(radio_operation_mutex);
+
+            /* If clearing RX_DONE failed (or a new packet arrived while this
+               one was read), DIO1 is still asserted and no new positive edge
+               will occur.  Re-arm the coalesced software event explicitly. */
+            if (gpio_get_level(CONFIG_LORA_GPIO_DIO1) != 0)
+            {
+                timeval_t retry_timestamp;
+                gettimeofday(&retry_timestamp, NULL);
+                int64_t retry_received = TIME_US(retry_timestamp);
+                if (xQueueOverwrite(localReceiveTimestampQueue, &retry_received) != pdTRUE)
+                {
+                    ESP_LOGE(TAG_LORA, "Could not retain asserted LoRa receive event");
+                }
+                vTaskDelay(pdMS_TO_TICKS(10));
+            }
+
+            if (rxLen > 0)
+            {
+                if (!is_packet_from_dogdog(buf, rxLen))
                 {
                     ESP_LOGW(pcTaskGetName(NULL), "Received packet is not from DogDog");
                     continue;
@@ -584,7 +901,8 @@ void LoraReceiveTask(void *pvParameters)
                     continue;
                 }
                 packet->local_time_received = local_time_received;
-                GetPacketStatus(&packet->rssi, &packet->snr);
+                packet->rssi = packet_rssi;
+                packet->snr = packet_snr;
 
                 if (packet->station_id != controller_id && packet->station_id != start_id && packet->station_id != stop_id)
                 {
@@ -614,11 +932,20 @@ void LoraReceiveTask(void *pvParameters)
 
 bool requires_ack(DogDogPacket *packet)
 {
-    return packet->type == LORA_TRIGGER || packet->type == LORA_FINAL_TIME || packet->type == LORA_REQUEST_FINAL_TIME;
+    return packet != NULL &&
+           (packet->type == LORA_TRIGGER || packet->type == LORA_FINAL_TIME ||
+            packet->type == LORA_REQUEST_FINAL_TIME);
 }
 
 void LoraSendTask(void *pvParameters)
 {
+    (void)pvParameters;
+    if (loraSendQueue == NULL)
+    {
+        ESP_LOGE(TAG_LORA, "LoRa send queue is not initialized");
+        vTaskDelete(NULL);
+        return;
+    }
 
     ESP_LOGI(pcTaskGetName(NULL), "Starting");
     uint8_t buf[255]; // Maximum Payload size of SX1261/62/68 is 255
@@ -629,6 +956,12 @@ void LoraSendTask(void *pvParameters)
         DogDogPacket *packet = NULL;
         if (xQueueReceive(loraSendQueue, &packet, portMAX_DELAY) == pdTRUE)
         {
+            if (packet == NULL)
+            {
+                ESP_LOGW(TAG_LORA, "Ignoring null packet from LoRa send queue");
+                continue;
+            }
+
             if (packet->retries == 0)
             {
                 packet->packet_id = packet_id++;
@@ -637,55 +970,75 @@ void LoraSendTask(void *pvParameters)
             // Prepare the buffer for transmission
             if (packet->type == LORA_TIME_SYNC)
             {
+                if (packet->payload == NULL || packet->payload_length != sizeof(int64_t))
+                {
+                    ESP_LOGE(pcTaskGetName(NULL), "Invalid time-sync packet payload");
+                    free_dogdog_packet(packet);
+                    continue;
+                }
                 struct timeval tv;
                 gettimeofday(&tv, NULL);
                 int64_t timestamp = TIME_US(tv);
                 memcpy(packet->payload, &timestamp, sizeof(int64_t));
             }
 
-            log_dogdog_packet(packet);
-
             int txLen = create_bytes_from_dogdog_packet(packet, buf, sizeof(buf));
-            // clean up packet
-            if (!requires_ack(packet) || packet->retries >= 6)
-            {
-                free(packet->payload);
-                free(packet);
-            }
-            else
-            {
-                if (packet->retries >= 6)
-                {
-                    ESP_LOGW(pcTaskGetName(NULL), "Packet of type LORA_TRIGGER has been retried too many times, deleting packet");
-                    free(packet->payload);
-                    free(packet);
-                    continue;
-                }
-                packet->retries++;
-                TaskHandle_t resend_task = NULL;
-                BaseType_t resend_task_created = xTaskCreate(ResendTask, "ResendTask", 4048, packet, 5, &resend_task);
-                if (resend_task_created != pdPASS || resend_task == NULL)
-                {
-                    ESP_LOGE(pcTaskGetName(NULL), "Failed to create resend task for station: %d packet: %d", packet->station_id, packet->packet_id);
-                    free(packet->payload);
-                    free(packet);
-                }
-                else if (!register_pending_ack(packet->station_id, packet->packet_id, resend_task))
-                {
-                    ESP_LOGE(pcTaskGetName(NULL), "No pending ACK slot available for station: %d packet: %d", packet->station_id, packet->packet_id);
-                }
-            }
-
             if (txLen < 0)
             {
                 ESP_LOGE(pcTaskGetName(NULL), "Failed to create packet");
+                free_dogdog_packet(packet);
                 continue;
             }
 
-            // Wait for transmission to complete
-            if (LoRaSend(buf, txLen, SX126x_TXMODE_SYNC) == false)
+            log_dogdog_packet(packet);
+
+            bool retained_for_ack = false;
+            if (requires_ack(packet))
+            {
+                uint8_t attempt = (uint8_t)(packet->retries + 1U);
+                packet->retries = attempt;
+                if (attempt < MAX_SEND_ATTEMPTS)
+                {
+                    retained_for_ack = register_pending_ack(packet);
+                    if (!retained_for_ack)
+                    {
+                        ESP_LOGE(pcTaskGetName(NULL),
+                                 "No unique pending ACK slot available for station: %d packet: %d",
+                                 packet->station_id,
+                                 packet->packet_id);
+                    }
+                }
+                else
+                {
+                    ESP_LOGW(pcTaskGetName(NULL),
+                             "No ACK after %u send attempts for station: %d packet: %d",
+                             (unsigned int)attempt,
+                             packet->station_id,
+                             packet->packet_id);
+                }
+            }
+
+            // A transmit and a receive are multi-command radio operations. Keep
+            // their command sequences from interleaving across the two tasks.
+            bool sent = false;
+            if (radio_operation_mutex != NULL &&
+                xSemaphoreTake(radio_operation_mutex, pdMS_TO_TICKS(1000)) == pdTRUE)
+            {
+                sent = LoRaSend(buf, txLen, SX126x_TXMODE_SYNC);
+                xSemaphoreGive(radio_operation_mutex);
+            }
+            else
+            {
+                ESP_LOGE(pcTaskGetName(NULL), "Timed out waiting for exclusive LoRa access while sending");
+            }
+            if (!sent)
             {
                 ESP_LOGE(pcTaskGetName(NULL), "LoRaSend fail");
+            }
+
+            if (!retained_for_ack)
+            {
+                free_dogdog_packet(packet);
             }
 
             int lost = GetPacketLost();
@@ -699,10 +1052,33 @@ void LoraSendTask(void *pvParameters)
 
 void populate_sensor_status(SensorStatus *sensorStatus, PacketTypeSensorState *sensor_state, uint8_t station_id, bool is_trigger)
 {
+    if (sensorStatus == NULL)
+    {
+        return;
+    }
+
     sensorStatus->sensor = station_id == start_id ? SENSOR_START : SENSOR_STOP;
-    sensorStatus->num_sensors = sensor_state->num_sensors;
-    sensorStatus->status = calloc(sensorStatus->num_sensors, sizeof(bool));
+    sensorStatus->num_sensors = 0;
+    sensorStatus->status = NULL;
     sensorStatus->is_trigger = is_trigger;
+
+    if (sensor_state == NULL || sensor_state->num_sensors > 64)
+    {
+        ESP_LOGE(TAG_LORA, "Invalid sensor state");
+        return;
+    }
+
+    sensorStatus->num_sensors = sensor_state->num_sensors;
+    if (sensorStatus->num_sensors > 0)
+    {
+        sensorStatus->status = calloc(sensorStatus->num_sensors, sizeof(bool));
+        if (sensorStatus->status == NULL)
+        {
+            ESP_LOGE(TAG_LORA, "Failed to allocate sensor status");
+            sensorStatus->num_sensors = 0;
+            return;
+        }
+    }
 
     ESP_LOGI(pcTaskGetName(NULL), "Connected sensors amount: %d, is_trigger: %d", sensorStatus->num_sensors, sensorStatus->is_trigger);
     for (int i = 0; i < sensorStatus->num_sensors; i++)
@@ -713,24 +1089,27 @@ void populate_sensor_status(SensorStatus *sensorStatus, PacketTypeSensorState *s
 
 void ResendTask(void *pvParameters)
 {
-    DogDogPacket *waiting_for_ack = (DogDogPacket *)pvParameters;
+    (void)pvParameters;
+    DogDogPacket *expired[MAX_PENDING_ACKS];
 
-    if (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(2000)) > 0)
+    while (true)
     {
-        ESP_LOGI(pcTaskGetName(NULL), "ACK received for station: %d packet: %d, deleting task",
-                 waiting_for_ack->station_id, waiting_for_ack->packet_id);
-        free(waiting_for_ack->payload);
-        free(waiting_for_ack);
-        vTaskDelete(NULL);
+        size_t count = take_expired_ack_packets(expired, MAX_PENDING_ACKS);
+        for (size_t i = 0; i < count; i++)
+        {
+            DogDogPacket *packet = expired[i];
+            ESP_LOGW(pcTaskGetName(NULL),
+                     "No ACK received for station: %d packet: %d, resending",
+                     packet->station_id,
+                     packet->packet_id);
+            if (xQueueSend(loraSendQueue, &packet, 0) != pdTRUE)
+            {
+                ESP_LOGE(pcTaskGetName(NULL), "LoRa send queue full; dropping expired packet");
+                free_dogdog_packet(packet);
+            }
+        }
+        vTaskDelay(pdMS_TO_TICKS(ACK_SCAN_INTERVAL_MS));
     }
-
-    unregister_pending_ack(waiting_for_ack->station_id, waiting_for_ack->packet_id, xTaskGetCurrentTaskHandle());
-    ESP_LOGW(pcTaskGetName(NULL), "No ACK received for station: %d packet: %d, resending",
-             waiting_for_ack->station_id, waiting_for_ack->packet_id);
-
-    xQueueSend(loraSendQueue, &waiting_for_ack, portMAX_DELAY);
-
-    vTaskDelete(NULL);
 }
 
 void InitLoraHandlers(void (*function)(DogDogPacket *packet))

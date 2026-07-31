@@ -1,408 +1,556 @@
-#include <stdio.h>
-#include <inttypes.h>
-#include "sdkconfig.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "esp_chip_info.h"
-#include "esp_flash.h"
-#include "esp_system.h"
-#include "esp_log.h"
-#include "driver/gpio.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
-
-#include <stdio.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
-#include "driver/gpio.h"
 #include "Sensor.h"
+
+#include <inttypes.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <sys/time.h>
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
+
+#include "driver/gpio.h"
+#include "esp_log.h"
+#include "esp_random.h"
+#include "esp_timer.h"
+
 #include "Buzzer.h"
 #include "LED.h"
 #include "LoraNetwork.h"
-#include "sdkconfig.h"
-#include "esp_random.h"
 
-#if CONFIG_START
-#define STATION_TYPE 0
-#elif CONFIG_STOP
-#define STATION_TYPE 1
-#endif
+static const char *TAG = "SENSOR";
+static const uint32_t SENSOR_COOLDOWN_MS = 1500;
+static const uint32_t FAULT_COOLDOWN_MS = 3000;
+static const uint32_t FAULT_CHECK_START_DELAY_MS = 4000;
 
-extern QueueHandle_t sensorInterputQueue;
-extern QueueHandle_t triggerQueue;
+extern QueueHandle_t sensorInterruptQueue;
 extern QueueHandle_t buzzerQueue;
-extern QueueHandle_t faultQueue;
-extern QueueHandle_t loraSendQueue;
-QueueHandle_t sensorStatusQueue;
-
-char *TAG = "SENSOR";
 
 extern int is_xrl;
 extern int num_fake_sensors;
 extern int num_sensors_required_for_trigger;
 extern int num_sensors;
 extern int triggerLevel;
-extern int *sensorPins;
+extern const int *sensorPins;
 
-// #ifndef CONFIG_IS_XLR
-// const int triggerLevel = 0;
-// const int sensorPins[] = {GPIO_NUM_15, GPIO_NUM_16, GPIO_NUM_17, GPIO_NUM_18, GPIO_NUM_8, GPIO_NUM_19, GPIO_NUM_20, GPIO_NUM_39, GPIO_NUM_38, GPIO_NUM_37}; // GPIO pins for the sensors
-// #else
-// // Do not modify: Pins are of DogDogController V1 ----
-// int triggerLevel = 1;
-// int sensorPins[] = {GPIO_NUM_47};
-// // ---------------------------------------------------
-// #endif
-
-const int sensorCooldown = 1500;
-
-const int faultCooldown = 3000;
 extern int64_t time_offset_to_controller;
 extern portMUX_TYPE timesync_spinlock;
-timeval_t last_time_sent;
 
-uint64_t faultTime = 0;
-bool faultWarning = false;
-bool fault = false;
+static QueueHandle_t sensorStatusQueue;
+static volatile uint32_t dropped_sensor_interrupts;
 
-uint32_t cpu_hz = 1;
-int64_t last_release_timestamp = 0;
+static bool fault_warning;
+static bool sensor_fault;
+static TickType_t fault_started_at;
+
+static portMUX_TYPE release_time_spinlock = portMUX_INITIALIZER_UNLOCKED;
+static int64_t last_release_timestamp;
+static int64_t last_release_event_time_us;
+static int64_t last_trigger_event_time_us;
+static bool last_release_event_recorded;
+static bool last_trigger_event_valid;
+static bool last_release_timestamp_valid;
+
+static portMUX_TYPE last_send_spinlock = portMUX_INITIALIZER_UNLOCKED;
+static int64_t last_send_time_us;
+
+static void free_dogdog_packet(DogDogPacket *packet)
+{
+    if (packet != NULL)
+    {
+        free(packet->payload);
+        free(packet);
+    }
+}
+
+// On success ownership transfers to lora-network. On failure it remains ours.
+static bool queue_dogdog_packet(DogDogPacket *packet)
+{
+    if (packet == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate LoRa packet");
+        return false;
+    }
+
+    if (send_dogdog_packet(packet) != pdPASS)
+    {
+        ESP_LOGW(TAG, "LoRa send queue full; dropping packet type %u", packet->type);
+        free_dogdog_packet(packet);
+        return false;
+    }
+    return true;
+}
+
+static void mark_packet_sent(int64_t now_us)
+{
+    taskENTER_CRITICAL(&last_send_spinlock);
+    last_send_time_us = now_us;
+    taskEXIT_CRITICAL(&last_send_spinlock);
+}
+
+static int64_t get_last_send_time(void)
+{
+    taskENTER_CRITICAL(&last_send_spinlock);
+    const int64_t result = last_send_time_us;
+    taskEXIT_CRITICAL(&last_send_spinlock);
+    return result;
+}
+
+static void set_last_release_timestamp(int64_t timestamp, int64_t event_time_us)
+{
+    taskENTER_CRITICAL(&release_time_spinlock);
+    if (!last_release_event_recorded || event_time_us >= last_release_event_time_us)
+    {
+        last_release_timestamp = timestamp;
+        last_release_event_time_us = event_time_us;
+        last_release_event_recorded = true;
+        last_release_timestamp_valid =
+            last_trigger_event_valid && event_time_us > last_trigger_event_time_us;
+    }
+    taskEXIT_CRITICAL(&release_time_spinlock);
+}
+
+static void mark_trigger_event(int64_t event_time_us)
+{
+    taskENTER_CRITICAL(&release_time_spinlock);
+    if (event_time_us >= last_trigger_event_time_us)
+    {
+        last_trigger_event_time_us = event_time_us;
+        last_trigger_event_valid = true;
+        // A release may already have been observed by the status task running on
+        // the other core. Keep it if it is strictly newer than this trigger;
+        // otherwise invalidate stale state from an earlier measurement.
+        last_release_timestamp_valid =
+            last_release_event_recorded && last_release_event_time_us > event_time_us;
+    }
+    taskEXIT_CRITICAL(&release_time_spinlock);
+}
+
+bool get_last_release_timestamp(int64_t *timestamp)
+{
+    if (timestamp == NULL)
+    {
+        return false;
+    }
+
+    taskENTER_CRITICAL(&release_time_spinlock);
+    const bool valid = last_release_timestamp_valid;
+    *timestamp = last_release_timestamp;
+    taskEXIT_CRITICAL(&release_time_spinlock);
+
+    if (!valid || sensorPins == NULL)
+    {
+        return false;
+    }
+    for (int i = 0; i < num_sensors; i++)
+    {
+        if (gpio_get_level(sensorPins[i]) == triggerLevel)
+        {
+            // At least one input is still active, so this cannot yet be the
+            // final release for the current measurement.
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool get_event_timestamp(int64_t event_time_us, int64_t *timestamp)
+{
+    if (timestamp == NULL)
+    {
+        return false;
+    }
+
+    struct timeval current_time;
+    gettimeofday(&current_time, NULL);
+
+    int64_t offset;
+    taskENTER_CRITICAL(&timesync_spinlock);
+    offset = time_offset_to_controller;
+    taskEXIT_CRITICAL(&timesync_spinlock);
+
+    const int64_t monotonic_now_us = esp_timer_get_time();
+    int64_t latency_us;
+    int64_t adjusted_now_us;
+    if (__builtin_sub_overflow(monotonic_now_us, event_time_us, &latency_us) || latency_us < 0 ||
+        __builtin_add_overflow(TIME_US(current_time), offset, &adjusted_now_us) ||
+        __builtin_sub_overflow(adjusted_now_us, latency_us, timestamp))
+    {
+        return false;
+    }
+    return true;
+}
+
+static void send_buzzer_event(int event)
+{
+    if (xQueueSend(buzzerQueue, &event, pdMS_TO_TICKS(100)) != pdPASS)
+    {
+        ESP_LOGW(TAG, "Buzzer queue full; event %d was dropped", event);
+    }
+}
 
 static void IRAM_ATTR gpio_interrupt_handler(void *args)
 {
-    esp_cpu_cycle_count_t triggered_at = esp_cpu_get_cycle_count();
-    int pinNumber = (int)args;
-    // read pin state
-    int pinState = gpio_get_level(pinNumber);
+    const int pin_number = (int)(intptr_t)args;
+    PinTrigger trigger = {
+        .pin = pin_number,
+        .state = gpio_get_level(pin_number),
+        .triggered_at_us = esp_timer_get_time(),
+    };
 
-    PinTrigger trigger;
-    trigger.pin = pinNumber;
-    trigger.state = pinState;
-    trigger.triggered_at = triggered_at;
+    BaseType_t higher_priority_task_woken = pdFALSE;
+    if (xQueueSendFromISR(sensorInterruptQueue, &trigger, &higher_priority_task_woken) != pdPASS)
+    {
+        __atomic_fetch_add(&dropped_sensor_interrupts, 1, __ATOMIC_RELAXED);
+    }
 
-    xQueueSendFromISR(sensorInterputQueue, &trigger, NULL);
-    xQueueSendFromISR(sensorStatusQueue, &pinNumber, NULL);
+    // This queue is deliberately length one: status work is coalesced while the
+    // latest GPIO levels are read by the consumer.
+    xQueueOverwriteFromISR(sensorStatusQueue, &trigger, &higher_priority_task_woken);
+
+    if (higher_priority_task_woken == pdTRUE)
+    {
+        portYIELD_FROM_ISR();
+    }
 }
 
-void init_Pins()
+esp_err_t init_Pins(void)
 {
-    cpu_hz = (uint32_t)esp_clk_cpu_freq();
+    if (sensorPins == NULL || num_sensors <= 0)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    uint64_t pin_mask = 0;
+    for (int i = 0; i < num_sensors; i++)
+    {
+        if (!GPIO_IS_VALID_GPIO(sensorPins[i]))
+        {
+            ESP_LOGE(TAG, "Invalid sensor GPIO %d", sensorPins[i]);
+            return ESP_ERR_INVALID_ARG;
+        }
+        pin_mask |= BIT64(sensorPins[i]);
+    }
+
+    const gpio_config_t config = {
+        .pin_bit_mask = pin_mask,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_ENABLE,
+        .intr_type = GPIO_INTR_ANYEDGE,
+    };
+
+    esp_err_t err = gpio_config(&config);
+    if (err != ESP_OK)
+    {
+        return err;
+    }
 
     for (int i = 0; i < num_sensors; i++)
     {
-        ESP_LOGI(TAG, "Configuring IO Pin %i", sensorPins[i]);
-        esp_rom_gpio_pad_select_gpio(sensorPins[i]);
-        gpio_set_direction(sensorPins[i], GPIO_MODE_INPUT);
-        gpio_pulldown_en(sensorPins[i]);
-        gpio_pullup_dis(sensorPins[i]);
-        gpio_set_intr_type(sensorPins[i], GPIO_INTR_ANYEDGE);
+        err = gpio_isr_handler_add(sensorPins[i], gpio_interrupt_handler, (void *)(intptr_t)sensorPins[i]);
+        if (err != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Failed to add ISR for GPIO %d: %s", sensorPins[i], esp_err_to_name(err));
+            for (int added = 0; added < i; added++)
+            {
+                gpio_isr_handler_remove(sensorPins[added]);
+            }
+            return err;
+        }
     }
 
-    ESP_LOGI(TAG, "Done configuring IO");
-
-    for (int i = 0; i < num_sensors; i++)
-    {
-        ESP_LOGI(TAG, "Configuring ISR for Pin %i", sensorPins[i]);
-        gpio_isr_handler_add(sensorPins[i], gpio_interrupt_handler, (void *)sensorPins[i]);
-    }
-
-    ESP_LOGI(TAG, "Done configuring ISR");
+    return ESP_OK;
 }
 
 void Sensor_Interrupt_Task(void *params)
 {
-    ESP_LOGI(TAG, "Setting up Sensors");
+    (void)params;
+    ESP_LOGI(TAG, "Setting up sensors");
 
-    init_Pins();
+    // The queue must exist before handlers are registered: an edge can arrive
+    // immediately after gpio_isr_handler_add().
+    sensorStatusQueue = xQueueCreate(1, sizeof(PinTrigger));
+    if (sensorStatusQueue == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate sensor status queue");
+        ESP_ERROR_CHECK(ESP_ERR_NO_MEM);
+    }
 
-    sensorStatusQueue = xQueueCreate(1, sizeof(char *));
+    ESP_ERROR_CHECK(init_Pins());
+    PinTrigger pin_trigger = {0};
 
     ESP_LOGI(TAG, "Waiting for time sync...");
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-    ESP_LOGI(TAG, "Time synced!");
+    ESP_LOGI(TAG, "Time synced");
 
-    xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 2048 * 2, NULL, 1, NULL);
-    // Wait for led
+    // Edges queued before time synchronization have no trustworthy controller
+    // timestamp and may be arbitrarily old. Start measurement from a clean queue.
+    while (xQueueReceive(sensorInterruptQueue, &pin_trigger, 0) == pdPASS)
+    {
+    }
+    xQueueReset(sensorStatusQueue);
+    __atomic_store_n(&dropped_sensor_interrupts, 0, __ATOMIC_RELAXED);
 
-    PinTrigger trigger;
-    uint64_t lastTriggerTime = 0;
+    if (xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 4096, NULL, 1, NULL) != pdPASS)
+    {
+        ESP_LOGE(TAG, "Failed to create sensor status task");
+        ESP_ERROR_CHECK(ESP_ERR_NO_MEM);
+    }
+
+    const TickType_t cooldown_ticks = pdMS_TO_TICKS(SENSOR_COOLDOWN_MS);
+    TickType_t last_trigger_tick = xTaskGetTickCount() - cooldown_ticks;
+    const TickType_t task_started_at = xTaskGetTickCount();
+    uint64_t observed_active_states = 0;
+    for (int i = 0; i < num_sensors; i++)
+    {
+        if (gpio_get_level(sensorPins[i]) == triggerLevel)
+        {
+            observed_active_states |= 1ULL << i;
+        }
+    }
 
     while (true)
     {
+        const BaseType_t received = xQueueReceive(sensorInterruptQueue, &pin_trigger, pdMS_TO_TICKS(500));
 
-        if (xQueueReceive(sensorInterputQueue, &trigger, pdMS_TO_TICKS(500)))
+        const uint32_t dropped = __atomic_exchange_n(&dropped_sensor_interrupts, 0, __ATOMIC_RELAXED);
+        if (dropped > 0)
         {
-            ESP_LOGI(TAG, "Checking interrupt of Pin: %i", trigger.pin);
-
-            // vTaskDelay(pdMS_TO_TICKS(3));
-
-            if (gpio_get_level(trigger.pin) == triggerLevel)
+            ESP_LOGW(TAG, "Dropped %" PRIu32 " sensor interrupts because the queue was full", dropped);
+            // The queued edge order is no longer complete, so it cannot safely
+            // establish which edge crossed the trigger threshold. Discard the
+            // backlog and rebuild the observed state from the GPIOs.
+            xQueueReset(sensorInterruptQueue);
+            observed_active_states = 0;
+            for (int i = 0; i < num_sensors; i++)
             {
-                ESP_LOGI(TAG, "Confirmed interrupt of Pin: %i", trigger.pin);
-                uint64_t currentTickMs = pdTICKS_TO_MS(xTaskGetTickCount());
-                if (lastTriggerTime < currentTickMs - sensorCooldown)
+                if (gpio_get_level(sensorPins[i]) == triggerLevel)
                 {
-                    if (!fault)
+                    observed_active_states |= 1ULL << i;
+                }
+            }
+        }
+
+        if (received == pdPASS)
+        {
+            int sensor_index = -1;
+            for (int i = 0; i < num_sensors; i++)
+            {
+                if (sensorPins[i] == pin_trigger.pin)
+                {
+                    sensor_index = i;
+                    break;
+                }
+            }
+
+            int64_t event_timestamp;
+            const bool timestamp_valid = get_event_timestamp(pin_trigger.triggered_at_us, &event_timestamp);
+
+            if (timestamp_valid && pin_trigger.state != triggerLevel)
+            {
+                set_last_release_timestamp(event_timestamp, pin_trigger.triggered_at_us);
+            }
+
+            if (dropped == 0 && sensor_index >= 0)
+            {
+                if (pin_trigger.state == triggerLevel)
+                {
+                    observed_active_states |= 1ULL << sensor_index;
+                }
+                else
+                {
+                    observed_active_states &= ~(1ULL << sensor_index);
+                }
+            }
+
+            // Confirm that a short bounce did not disappear while queued.
+            if (!timestamp_valid)
+            {
+                ESP_LOGW(TAG, "Discarding sensor edge with invalid timestamp");
+            }
+            else if (sensor_index < 0)
+            {
+                ESP_LOGW(TAG, "Ignoring edge from unknown sensor GPIO %d", pin_trigger.pin);
+            }
+            else if (dropped == 0 && pin_trigger.state == triggerLevel &&
+                     gpio_get_level(pin_trigger.pin) == triggerLevel)
+            {
+                const TickType_t now_tick = xTaskGetTickCount();
+                if ((TickType_t)(now_tick - last_trigger_tick) >= cooldown_ticks && !sensor_fault)
+                {
+                    const int num_triggered_sensors = __builtin_popcountll(observed_active_states);
+
+                    if (is_xrl || num_triggered_sensors >= num_sensors_required_for_trigger)
                     {
-                        int cause = 0;
-
-                        ESP_LOGI(TAG, "Interrupt of Pin: %i", trigger.pin);
-
-                        int num_triggered_sensors = 0;
-                        // Check how many sensors are currently triggered
-                        for (int i = 0; i < num_sensors; i++)
-                        {
-                            if (gpio_get_level(sensorPins[i]) == triggerLevel)
-                            {
-                                num_triggered_sensors++;
-                            }
-                        }
-
-                        if (!is_xrl && num_triggered_sensors < num_sensors_required_for_trigger)
-                        {
-                            ESP_LOGW(TAG, "Not enough sensors triggered");
-                            continue;
-                        }
-
-                        lastTriggerTime = pdTICKS_TO_MS(xTaskGetTickCount());
-
-                        timeval_t current_time;
-                        gettimeofday(&current_time, NULL);
-
-                        int64_t offset;
-                        taskENTER_CRITICAL(&timesync_spinlock);
-                        offset = time_offset_to_controller;
-                        taskEXIT_CRITICAL(&timesync_spinlock);
-
-                        esp_cpu_cycle_count_t current_cpu_cycle = esp_cpu_get_cycle_count();
-                        esp_cpu_cycle_count_t diff_cycles = current_cpu_cycle - trigger.triggered_at;
-
-                        uint32_t latency_us = (uint32_t)((uint64_t)diff_cycles * 1000000ULL / cpu_hz);
-
-                        int64_t timestamp = TIME_US(current_time) + offset - (int64_t)latency_us;
-
-                        PacketTypeTrigger trigger;
-                        trigger.timestamp = timestamp;
-
-                        PacketTypeSensorState sensors_state;
-                        sensors_state.num_sensors = num_sensors;
-                        sensors_state.sensor_states = 0;
+                        PacketTypeTrigger trigger_packet = {
+                            .timestamp = event_timestamp,
+                            .sensor_state = {
+                                .num_sensors = (uint8_t)num_sensors,
+                                .sensor_states = 0,
+                            },
+                        };
 
                         for (int i = 0; i < num_sensors; i++)
                         {
-                            int level = gpio_get_level(sensorPins[i]);
-                            level = level == triggerLevel ? 1 : 0; // Invert the level so that 1 means triggered
-                            sensors_state.sensor_states |= ((uint64_t)level << i);
+                            const uint64_t level = gpio_get_level(sensorPins[i]) == triggerLevel ? 1ULL : 0ULL;
+                            trigger_packet.sensor_state.sensor_states |= level << i;
                         }
 
                         if (is_xrl)
                         {
-                            sensors_state.num_sensors = num_fake_sensors;
-
-                            // copy the first sensor info to CONFIG_NUM_FAKE_SENSORS sensors so that the controller can see them as well
+                            trigger_packet.sensor_state.num_sensors = (uint8_t)num_fake_sensors;
                             for (int i = 1; i < num_fake_sensors; i++)
                             {
-                                sensors_state.sensor_states |= ((sensors_state.sensor_states & 1) << i);
+                                trigger_packet.sensor_state.sensor_states |=
+                                    (trigger_packet.sensor_state.sensor_states & 1ULL) << i;
                             }
                         }
 
-                        sensors_state.sensor_states = ~sensors_state.sensor_states;
+                        trigger_packet.sensor_state.sensor_states = ~trigger_packet.sensor_state.sensor_states;
 
-                        trigger.sensor_state = sensors_state;
-
-                        gettimeofday(&last_time_sent, NULL);
-
-                        DogDogPacket *packet = create_dogdog_packet_from_trigger_information(&trigger);
-                        send_dogdog_packet(packet);
-
-                        cause = Buzzer_TRIGGER;
-                        xQueueSend(buzzerQueue, &cause, 0);
+                        DogDogPacket *packet = create_dogdog_packet_from_trigger_information(&trigger_packet);
+                        if (queue_dogdog_packet(packet))
+                        {
+                            last_trigger_tick = now_tick;
+                            mark_trigger_event(pin_trigger.triggered_at_us);
+                            struct timeval now;
+                            gettimeofday(&now, NULL);
+                            mark_packet_sent(TIME_US(now));
+                        }
+                        send_buzzer_event(Buzzer_TRIGGER);
                     }
                     else
                     {
-                        ESP_LOGI(TAG, "Triggered but fault was detected so no signal will be sent");
+                        ESP_LOGW(TAG, "Not enough sensors triggered (%d/%d)", num_triggered_sensors,
+                                 num_sensors_required_for_trigger);
                     }
                 }
             }
         }
-        else
+
+        const TickType_t now_tick = xTaskGetTickCount();
+        if ((TickType_t)(now_tick - task_started_at) < pdMS_TO_TICKS(FAULT_CHECK_START_DELAY_MS))
         {
-            timeval_t current_time;
-            gettimeofday(&current_time, NULL);
-
-            int64_t offset;
-            taskENTER_CRITICAL(&timesync_spinlock);
-            offset = time_offset_to_controller;
-            taskEXIT_CRITICAL(&timesync_spinlock);
-
-            esp_cpu_cycle_count_t current_cpu_cycle = esp_cpu_get_cycle_count();
-            esp_cpu_cycle_count_t diff_cycles = current_cpu_cycle - trigger.triggered_at;
-
-            uint32_t latency_us = (uint32_t)((uint64_t)diff_cycles * 1000000ULL / cpu_hz);
-
-            last_release_timestamp = TIME_US(current_time) + offset - (int64_t)latency_us;
-
-            
+            continue;
         }
 
-        // Check for faults only 4 seconds after startup
-        if (pdTICKS_TO_MS(xTaskGetTickCount()) > 4000)
+        int current_faults = 0;
+        for (int i = 0; i < num_sensors; i++)
         {
-            bool isCurrentlyGood = true;
-            int currentFaults = 0;
-            for (int i = 0; i < num_sensors; i++)
+            current_faults += gpio_get_level(sensorPins[i]) == triggerLevel ? 1 : 0;
+        }
+        const bool sensors_good = current_faults == 0;
+
+        if (!fault_warning && !sensors_good)
+        {
+            ESP_LOGW(TAG, "Sensor connection warning started (%d active fault inputs)", current_faults);
+            fault_started_at = now_tick;
+            fault_warning = true;
+        }
+
+        if (fault_warning && !sensor_fault &&
+            (TickType_t)(now_tick - fault_started_at) >= pdMS_TO_TICKS(FAULT_COOLDOWN_MS))
+        {
+            sensor_fault = true;
+            send_buzzer_event(Buzzer_ERROR_START);
+            ESP_LOGE(TAG, "Sensor connection is lost");
+        }
+
+        if (sensors_good)
+        {
+            if (sensor_fault)
             {
-                int level = gpio_get_level(sensorPins[i]);
-                level = level == triggerLevel ? 1 : 0; // Invert the level so that 1 means triggered
-                currentFaults += level;
+                send_buzzer_event(Buzzer_ERROR_STOP);
+                ESP_LOGI(TAG, "Sensor connection restored");
             }
-            ESP_LOGI(TAG, "Current Faults: %i", currentFaults);
-
-            if (currentFaults > 0)
-            {
-                ESP_LOGI(TAG, "Fault detected on sensor %i", currentFaults);
-                isCurrentlyGood = false;
-            }
-
-            if (!faultWarning && !isCurrentlyGood)
-            {
-                ESP_LOGI(TAG, "Sensor connection is lost, entering warning state");
-                // Currently disconnected but not in warning state -> aktivate warning state
-                faultTime = pdTICKS_TO_MS(xTaskGetTickCount());
-                faultWarning = true;
-            }
-
-            if (faultWarning)
-            {
-                ESP_LOGI(TAG, "Currently in warning state, checking if timeout reached");
-                if (pdTICKS_TO_MS(xTaskGetTickCount()) - faultTime > faultCooldown && !fault)
-                {
-                    // Currently in warning state, timout reached but no fault activated yet -> go into fault state
-                    fault = true;
-
-                    int cause = Buzzer_INDICATE_ERROR;
-                    xQueueSend(buzzerQueue, &cause, 0);
-                    xQueueSend(faultQueue, &cause, 0);
-
-                    ESP_LOGI(TAG, "Sensor connection is lost");
-                }else{
-                    ESP_LOGI(TAG, "Warning state timeout not reached yet");
-                }
-            }
-
-            if (isCurrentlyGood)
-            {
-                if (fault)
-                {
-                    // No more fault
-                    int cause = Buzzer_INDICATE_ERROR;
-                    xQueueSend(buzzerQueue, &cause, 0);
-                    xQueueSend(faultQueue, &cause, 0);
-                    ESP_LOGI(TAG, "Sensor connection restored");
-                }
-                faultWarning = false;
-                fault = false;
-            }
+            fault_warning = false;
+            sensor_fault = false;
         }
     }
 }
 
-/*
- * Reads every second if the sensor has contact and sends it to the controller as one message
- */
 void Sensor_Status_Task(void *params)
 {
+    (void)params;
 
-    timeval_t last_time_clean[num_sensors];
-    timeval_t current_time;
-    gettimeofday(&last_time_sent, NULL);
-    bool last_state[num_sensors];
+    int64_t last_clean_time_us[num_sensors];
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    const int64_t initial_time_us = TIME_US(now);
+    mark_packet_sent(initial_time_us);
+
     for (int i = 0; i < num_sensors; i++)
     {
-        gettimeofday(&last_time_clean[i], NULL);
-        int level = gpio_get_level(sensorPins[i]);
-        level = level == triggerLevel ? 1 : 0; // Invert the level so that 1 means triggered
-        last_state[i] = level;
+        last_clean_time_us[i] = initial_time_us;
     }
-    xQueueSend(sensorStatusQueue, &(int){0}, 0); // Send initial message to trigger status update
+
+    const PinTrigger initial_notification = {.pin = -1};
+    xQueueOverwrite(sensorStatusQueue, &initial_notification);
 
     while (true)
     {
-        int pinNumber;
-        BaseType_t newDataReceived = xQueueReceive(sensorStatusQueue, &pinNumber, pdMS_TO_TICKS(5000 - (esp_random() % 500)));
-        gettimeofday(&current_time, NULL);
-        // check if any of the gpio pins are high with bit mask call
-        bool any_tiggered = 0;
-        for (int i = 0; i < num_sensors; i++)
+        PinTrigger status_trigger;
+        const TickType_t wait_ticks = pdMS_TO_TICKS(5000 - (esp_random() % 500));
+        const BaseType_t new_data_received = xQueueReceive(sensorStatusQueue, &status_trigger, wait_ticks);
+
+        // The overwrite queue preserves the newest edge even when the primary
+        // interrupt queue overflows during a burst. This keeps final release
+        // time accurate for the controller's later request.
+        if (new_data_received == pdPASS && status_trigger.pin >= 0 && status_trigger.state != triggerLevel)
         {
-            int level = gpio_get_level(sensorPins[i]);
-            level = level == triggerLevel ? 1 : 0; // Invert the level so that 1 means triggered
-            any_tiggered |= level;
+            int64_t release_timestamp;
+            if (get_event_timestamp(status_trigger.triggered_at_us, &release_timestamp))
+            {
+                set_last_release_timestamp(release_timestamp, status_trigger.triggered_at_us);
+            }
         }
 
-        PacketTypeSensorState sensors_state;
-        sensors_state.num_sensors = num_sensors;
-        sensors_state.sensor_states = 0;
+        gettimeofday(&now, NULL);
+        const int64_t now_us = TIME_US(now);
+
+        PacketTypeSensorState sensor_state = {
+            .num_sensors = (uint8_t)num_sensors,
+            .sensor_states = 0,
+        };
 
         for (int i = 0; i < num_sensors; i++)
         {
+            const bool active = gpio_get_level(sensorPins[i]) == triggerLevel;
+            sensor_state.sensor_states |= (uint64_t)active << i;
 
-            int level = gpio_get_level(sensorPins[i]);
-            level = level == triggerLevel ? 1 : 0; // Invert the level so that 1 means triggered
-            sensors_state.sensor_states |= ((uint64_t)level << i);
-
-            if (level == 1)
+            if (active)
             {
-                gettimeofday(&last_time_clean[i], NULL);
+                last_clean_time_us[i] = now_us;
+                set_led(i, 255, 0, 0);
             }
-
-            gettimeofday(&current_time, NULL);
-            // If no sensor is triggered, turn off the LED if it was previously on for 8 seconds
-
-            if (level == 0)
+            else if (now_us - last_clean_time_us[i] > (is_xrl ? 300000000LL : 8000000LL))
             {
-                if (TIME_US(current_time) - TIME_US(last_time_clean[i]) > (is_xrl ? 300000000 : 8000000))
-                {
-                    set_led(i, 0, 0, 0); // Turn off LED
-                }
-                else
-                {
-                    set_led(i, 0, 255, 0); // Set LED to green
-                }
+                set_led(i, 0, 0, 0);
             }
             else
             {
-                set_led(i, 255, 0, 0); // Set LED to red
+                set_led(i, 0, 255, 0);
             }
-
-            last_state[i] = level;
         }
 
-        if (!newDataReceived || TIME_US(current_time) - TIME_US(last_time_sent) > 4500000 - (esp_random() % 500000)) // Send update at least every 4.5 seconds with some randomization to avoid collisions
+        const int64_t randomized_send_interval_us = 4500000LL - (esp_random() % 500000);
+        if (new_data_received != pdPASS || now_us - get_last_send_time() > randomized_send_interval_us)
         {
-            // Send the packet
-
             if (is_xrl)
             {
-                sensors_state.num_sensors = num_fake_sensors;
-
-                // copy the first sensor info to CONFIG_NUM_FAKE_SENSORS sensors so that the controller can see them as well
+                sensor_state.num_sensors = (uint8_t)num_fake_sensors;
                 for (int i = 1; i < num_fake_sensors; i++)
                 {
-                    sensors_state.sensor_states |= ((sensors_state.sensor_states & 1) << i);
+                    sensor_state.sensor_states |= (sensor_state.sensor_states & 1ULL) << i;
                 }
             }
 
-            // invert the result
-            sensors_state.sensor_states = ~sensors_state.sensor_states;
-
-            DogDogPacket *packet = create_dogdog_packet_from_sensor_state_information(&sensors_state);
-            if (packet)
+            sensor_state.sensor_states = ~sensor_state.sensor_states;
+            DogDogPacket *packet = create_dogdog_packet_from_sensor_state_information(&sensor_state);
+            if (queue_dogdog_packet(packet))
             {
-                gettimeofday(&last_time_sent, NULL);
-
-                send_dogdog_packet(packet);
+                mark_packet_sent(now_us);
             }
         }
     }

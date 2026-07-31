@@ -1,4 +1,6 @@
 #include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
 #include <inttypes.h>
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
@@ -34,7 +36,7 @@ const int sensorPins[] = {TRIGGER_PIN_1, TRIGGER_PIN_2};
 const int sensorCooldown = 2000;
 const int faultCooldown = 3000;
 
-int faultTime = 0;
+TickType_t faultTime = 0;
 bool faultWarning = false;
 bool fault = false;
 
@@ -42,35 +44,52 @@ timeval_t last_start_trigger_time;
 timeval_t last_sensor_stop_time;
 
 uint32_t cpu_hz = 1;
-esp_cpu_cycle_count_t last_trigger_cpu_cycles;
-
 static void IRAM_ATTR gpio_interrupt_handler(void *args)
 {
-    esp_cpu_cycle_count_t triggered_at = esp_cpu_get_cycle_count();
-    int pinNumber = (int)args;
+    SensorTriggerEvent event = {
+        .pin_number = (int)(intptr_t)args,
+        .cpu_cycles = esp_cpu_get_cycle_count(),
+    };
+    BaseType_t higher_priority_task_woken = pdFALSE;
+
     // read pin state
-    int pinState = gpio_get_level(pinNumber);
+    int pinState = gpio_get_level(event.pin_number);
     if (pinState == 1)
     {
-        xQueueSendFromISR(sensorInterruptQueue, &pinNumber, NULL);
-
-        last_trigger_cpu_cycles = triggered_at;
+        xQueueSendFromISR(sensorInterruptQueue, &event, &higher_priority_task_woken);
     }
-    xQueueSendFromISR(sensorStatusQueue, &pinNumber, NULL);
+    /* Only the latest changed pin is useful to the status task.  Overwrite the
+       one-slot queue so contact bounce cannot leave a stale notification. */
+    xQueueOverwriteFromISR(sensorStatusQueue, &event.pin_number, &higher_priority_task_woken);
+    portYIELD_FROM_ISR(higher_priority_task_woken);
 }
 
-void init_Sensor_Pins()
+esp_err_t init_Sensor_Pins(void)
 {
     cpu_hz = (uint32_t)esp_clk_cpu_freq();
+    if (cpu_hz == 0)
+    {
+        ESP_LOGE(TAG, "CPU frequency unavailable; latency correction disabled");
+    }
 
     for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
     {
         ESP_LOGI(TAG, "Configuring IO Pin %i", sensorPins[i]);
-        esp_rom_gpio_pad_select_gpio(sensorPins[i]);
-        gpio_set_direction(sensorPins[i], GPIO_MODE_INPUT);
-        gpio_pulldown_dis(sensorPins[i]);
-        gpio_pullup_dis(sensorPins[i]);
-        gpio_set_intr_type(sensorPins[i], GPIO_INTR_ANYEDGE);
+        esp_err_t err = gpio_reset_pin(sensorPins[i]);
+        if (err == ESP_OK)
+            err = gpio_set_direction(sensorPins[i], GPIO_MODE_INPUT);
+        if (err == ESP_OK)
+            err = gpio_pulldown_dis(sensorPins[i]);
+        if (err == ESP_OK)
+            err = gpio_pullup_dis(sensorPins[i]);
+        if (err == ESP_OK)
+            err = gpio_set_intr_type(sensorPins[i], GPIO_INTR_ANYEDGE);
+        if (err != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Failed to configure sensor pin %d: %s",
+                     sensorPins[i], esp_err_to_name(err));
+            return err;
+        }
     }
 
     ESP_LOGI(TAG, "Done configuring IO");
@@ -78,10 +97,26 @@ void init_Sensor_Pins()
     for (int i = 0; i < sizeof(sensorPins) / sizeof(int); i++)
     {
         ESP_LOGI(TAG, "Configuring ISR for Pin %i", sensorPins[i]);
-        gpio_isr_handler_add(sensorPins[i], gpio_interrupt_handler, (void *)sensorPins[i]);
+        esp_err_t err = gpio_isr_handler_add(sensorPins[i], gpio_interrupt_handler,
+                                             (void *)(intptr_t)sensorPins[i]);
+        if (err != ESP_OK)
+        {
+            ESP_LOGE(TAG, "Failed to install sensor ISR for pin %d: %s",
+                     sensorPins[i], esp_err_to_name(err));
+            for (int installed = 0; installed < i; installed++)
+            {
+                ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_isr_handler_remove(sensorPins[installed]));
+            }
+            for (int pin = 0; pin < sizeof(sensorPins) / sizeof(int); pin++)
+            {
+                ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_set_intr_type(sensorPins[pin], GPIO_INTR_DISABLE));
+            }
+            return err;
+        }
     }
 
     ESP_LOGI(TAG, "Done configuring ISR");
+    return ESP_OK;
 }
 
 void Sensor_Interrupt_Task(void *params)
@@ -90,42 +125,55 @@ void Sensor_Interrupt_Task(void *params)
     ESP_LOGI(TAG, "Setting up Sensors");
     gettimeofday(&last_start_trigger_time, NULL);
     gettimeofday(&last_sensor_stop_time, NULL);
-    init_Sensor_Pins();
-    sensorStatusQueue = xQueueCreate(1, sizeof(char *));
 
-    int is_lora_controller = getValue("is_lora_controller");
-    if (is_lora_controller == 0)
+    /* app_main creates this task only for a compile-time cable-controller
+       build.  Do not let a stale NVS role value disable its sensors. */
+    ESP_LOGI(TAG, "Controller is cable based: Starting Sensor Interrupt Task");
+
+    /* This queue must exist before the GPIO ISR is installed. */
+    sensorStatusQueue = xQueueCreate(1, sizeof(int));
+    if (!sensorStatusQueue)
     {
-        ESP_LOGI(TAG, "Controller is cable based: Starting Sensor Interrupt Task");
-        xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 4048, NULL, 1, NULL);
-    }
-    else
-    {
+        ESP_LOGE(TAG, "Failed to create sensor status queue");
         vTaskDelete(NULL);
+        return;
     }
 
-    int numPins = sizeof(sensorPins) / sizeof(int);
-    // xTaskCreate(LED_Task, "LED_Task", 4048, &numPins, 1, NULL);
-    //  Wait for led
+    esp_err_t sensor_init_err = init_Sensor_Pins();
+    if (sensor_init_err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Sensor initialization failed: %s", esp_err_to_name(sensor_init_err));
+        vQueueDelete(sensorStatusQueue);
+        sensorStatusQueue = NULL;
+        vTaskDelete(NULL);
+        return;
+    }
+    if (xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 4048, NULL, 1, NULL) != pdPASS)
+    {
+        ESP_LOGE(TAG, "Failed to create sensor status task");
+    }
 
-    int pinNumber = 0;
-    int lastTriggerTime = 0;
+    SensorTriggerEvent trigger_event = {0};
+    TickType_t sensor_started_tick = xTaskGetTickCount();
+    TickType_t last_trigger_tick = sensor_started_tick - pdMS_TO_TICKS(sensorCooldown);
 
     while (true)
     {
-        if (xQueueReceive(sensorInterruptQueue, &pinNumber, pdMS_TO_TICKS(500)))
+        if (xQueueReceive(sensorInterruptQueue, &trigger_event, pdMS_TO_TICKS(500)))
         {
+            int pinNumber = trigger_event.pin_number;
             ESP_LOGI(TAG, "Checking interrupt of Pin: %i", pinNumber);
 
             if (gpio_get_level(pinNumber) == 1)
             {
                 ESP_LOGI(TAG, "Confirmed interrupt of Pin: %i", pinNumber);
-                if (lastTriggerTime < (int)pdTICKS_TO_MS(xTaskGetTickCount()) - sensorCooldown)
+                TickType_t now_tick = xTaskGetTickCount();
+                if ((now_tick - last_trigger_tick) >= pdMS_TO_TICKS(sensorCooldown))
                 {
                     if (!fault)
                     {
 
-                        lastTriggerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
+                        last_trigger_tick = now_tick;
                         ESP_LOGI(TAG, "Interrupt of Pin: %i", pinNumber);
                         TimerTrigger timerTriggerCause;
 
@@ -133,16 +181,23 @@ void Sensor_Interrupt_Task(void *params)
                         gettimeofday(&current_time, NULL);
 
                         esp_cpu_cycle_count_t current_cpu_cycle = esp_cpu_get_cycle_count();
-                        esp_cpu_cycle_count_t diff_cycles = current_cpu_cycle - last_trigger_cpu_cycles;
+                        esp_cpu_cycle_count_t diff_cycles = current_cpu_cycle - trigger_event.cpu_cycles;
 
-                        uint32_t latency_us = (uint32_t)((uint64_t)diff_cycles * 1000000ULL / cpu_hz);
+                        uint32_t latency_us = cpu_hz == 0
+                                                  ? 0
+                                                  : (uint32_t)((uint64_t)diff_cycles * 1000000ULL / cpu_hz);
                         int64_t adjusted_time_us = TIME_US(current_time) - (int64_t)latency_us;
 
-                        ESP_LOGI(TAG, "Latency for Pin %i: %uus", pinNumber, latency_us);
+                        ESP_LOGI(TAG, "Latency for Pin %i: %" PRIu32 "us", pinNumber, latency_us);
 
                         timerTriggerCause.timestamp = adjusted_time_us;
                         timerTriggerCause.is_start = pinNumber == TRIGGER_PIN_1 ? true : false;
-                        xQueueSend(triggerQueue, &timerTriggerCause, 0);
+                        timerTriggerCause.is_final_time = false;
+                        timerTriggerCause.force_restart = false;
+                        if (xQueueSend(triggerQueue, &timerTriggerCause, 0) != pdTRUE)
+                        {
+                            ESP_LOGW(TAG, "Timer trigger queue full; dropping trigger on pin %i", pinNumber);
+                        }
 
                         if (pinNumber == TRIGGER_PIN_1)
                         {
@@ -164,7 +219,7 @@ void Sensor_Interrupt_Task(void *params)
         }
 
         // Check for faults only 4 seconds after startup
-        if (pdTICKS_TO_MS(xTaskGetTickCount()) > 4000)
+        if ((xTaskGetTickCount() - sensor_started_tick) > pdMS_TO_TICKS(4000))
         {
             bool isCurrentlyGood = true;
             int currentFaults = 0;
@@ -188,7 +243,7 @@ void Sensor_Interrupt_Task(void *params)
 
             if (faultWarning)
             {
-                if (pdTICKS_TO_MS(xTaskGetTickCount()) - pdTICKS_TO_MS(faultTime) > faultCooldown && !fault)
+                if ((xTaskGetTickCount() - faultTime) > pdMS_TO_TICKS(faultCooldown) && !fault)
                 {
                     // Currently in warning state, timout reached but no fault activated yet -> go into fault state
                     fault = true;
@@ -225,9 +280,6 @@ void Sensor_Status_Task(void *params)
 
     while (true)
     {
-        timeval_t now;
-        gettimeofday(&now, NULL);
-
         sendSensorStatus(pinNumber, TRIGGER_PIN_1);
         sendSensorStatus(pinNumber, TRIGGER_PIN_2);
 
@@ -242,36 +294,36 @@ void sendSensorStatus(int triggeredPin, int pinToCheck)
 #ifdef CONFIG_SENSOR_AMOUNT
     sensor_amount = CONFIG_SENSOR_AMOUNT;
 #endif
+    if (sensor_amount < 0)
+    {
+        sensor_amount = 0;
+    }
+    if (sensor_amount > DISPLAY_MAX_SENSOR_COUNT)
+    {
+        ESP_LOGW(TAG, "Capping configured sensor count %d to display limit %d",
+                 sensor_amount, DISPLAY_MAX_SENSOR_COUNT);
+        sensor_amount = DISPLAY_MAX_SENSOR_COUNT;
+    }
     int pinState = gpio_get_level(pinToCheck);
-    SevenSegmentDisplay toDisplay;
+    SevenSegmentDisplay toDisplay = {0};
     toDisplay.type = SEVEN_SEGMENT_SENSOR_STATUS;
     toDisplay.sensorStatus.sensor = pinToCheck == TRIGGER_PIN_1 ? SENSOR_START : SENSOR_STOP;
     toDisplay.sensorStatus.num_sensors = sensor_amount;
     toDisplay.sensorStatus.is_trigger = triggeredPin == pinToCheck ? true : false;
-    toDisplay.sensorStatus.status = malloc(sizeof(bool) * toDisplay.sensorStatus.num_sensors);
-    // check malloc result
-    if (toDisplay.sensorStatus.status == NULL)
-    {
-        ESP_LOGE(TAG, "Failed to allocate memory for sensor status");
-
-        return;
-    }
     for (int i = 0; i < toDisplay.sensorStatus.num_sensors; i++)
     {
         toDisplay.sensorStatus.status[i] = pinState == 1 || toDisplay.sensorStatus.is_trigger ? false : true;
     }
-    xQueueSend(sevenSegmentQueue, &toDisplay, 0);
-
-    int is_start = pinToCheck == TRIGGER_PIN_1 ? SENSOR_START : SENSOR_STOP;
-    is_start = is_start == 0 ? START_ALIVE : STOP_ALIVE;
+    if (xQueueSend(sevenSegmentQueue, &toDisplay, 0) != pdTRUE)
+    {
+        ESP_LOGW(TAG, "Display queue full; dropping sensor status");
+    }
 
     StationConnectivityStatus status;
-
-    status.station = START_ALIVE;
+    status.station = pinToCheck == TRIGGER_PIN_1 ? START_ALIVE : STOP_ALIVE;
     status.signal = 0;
-    xQueueSend(networkFaultQueue, &status, portMAX_DELAY);
-
-    status.station = STOP_ALIVE;
-    status.signal = 0;
-    xQueueSend(networkFaultQueue, &status, portMAX_DELAY);
+    if (xQueueSend(networkFaultQueue, &status, pdMS_TO_TICKS(50)) != pdTRUE)
+    {
+        ESP_LOGW(TAG, "Network status queue full; dropping cable status");
+    }
 }

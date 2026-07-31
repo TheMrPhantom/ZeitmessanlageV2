@@ -1,6 +1,11 @@
 #ifndef __LORA_NETWORK_H
 #define __LORA_NETWORK_H
 
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include <sys/time.h>
 #include "sdkconfig.h"
@@ -80,10 +85,10 @@ typedef struct timeval timeval_t;
 
 #define TIME_US(t) ((int64_t)t.tv_sec * 1000000L + (int64_t)t.tv_usec)
 
-DogDogPacket *create_dogdog_packet_from_bytes(uint8_t *data, uint16_t length);
+DogDogPacket *create_dogdog_packet_from_bytes(const uint8_t *data, size_t length);
 int create_bytes_from_dogdog_packet(DogDogPacket *packet, uint8_t *buf, size_t buf_len);
 
-bool is_packet_from_dogdog(uint8_t *data);
+bool is_packet_from_dogdog(const uint8_t *data, size_t length);
 
 PacketTypeTimeSync *create_time_sync_information(DogDogPacket *packet);
 PacketTypeTrigger *create_trigger_information(DogDogPacket *packet);
@@ -103,10 +108,8 @@ void confirm_station_alive(DogDogPacket *packet);
 void populate_sensor_status(SensorStatus *sensorStatus, PacketTypeSensorState *sensor_state, uint8_t station_id, bool is_trigger);
 void log_dogdog_packet(DogDogPacket *packet);
 
-static void IRAM_ATTR lora_module_rx_isr(void *arg);
-
 BaseType_t send_dogdog_packet(DogDogPacket *packet);
-void init_lora(void);
+esp_err_t init_lora(void);
 void LoraReceiveTask(void *pvParameters);
 void LoraSendTask(void *pvParameters);
 void LoraSyncTask(void *pvParameters);

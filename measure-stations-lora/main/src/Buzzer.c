@@ -1,151 +1,170 @@
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
-#include <sys/time.h>
-
-#include "esp_system.h"
-#include "esp_log.h"
-
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/event_groups.h"
-
-#include "driver/gpio.h"
-#include "driver/ledc.h"
-#include "driver/gpio.h"
 #include "Buzzer.h"
 
-#define sound_c 261
-#define sound_d 294
-#define sound_e 329
-#define sound_f 349
-#define sound_g 391
-#define sound_gS 415
-#define sound_a 440
-#define sound_aS 455
-#define sound_b 466
-#define sound_cH 523
-#define sound_cSH 554
-#define sound_dH 587
-#define sound_dSH 622
-#define sound_eH 659
-#define sound_fH 698
-#define sound_fSH 740
-#define sound_gH 784
-#define sound_gSH 830
-#define sound_aH 880
+#include <stdbool.h>
+#include <inttypes.h>
+#include <stdint.h>
 
-#include <stdio.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
+
 #include "driver/ledc.h"
 #include "esp_err.h"
+#include "esp_log.h"
+
 #include "GPIOPins.h"
+
+#define SOUND_A 440
+#define SOUND_D_HIGH 587
+#define SOUND_E 329
 
 #define LEDC_TIMER LEDC_TIMER_0
 #define LEDC_MODE LEDC_LOW_SPEED_MODE
-#define LEDC_OUTPUT_IO (BUZZER_GPIO) // Define the output GPIO
 #define LEDC_CHANNEL LEDC_CHANNEL_0
-#define LEDC_DUTY_RES LEDC_TIMER_13_BIT // Set duty resolution to 13 bits
-#define LEDC_DUTY (4095)                // Set duty to 50%. ((2 ** 13) - 1) * 50% = 4095
-#define LEDC_FREQUENCY (2700)           // Frequency in Hertz. Set frequency at 2.7 kHz
+#define LEDC_DUTY_RES LEDC_TIMER_13_BIT
+#define LEDC_DUTY 4095
+#define LEDC_INITIAL_FREQUENCY 2700
 
-#define TAG "BUZZER"
+static const char *TAG = "BUZZER";
 
 extern QueueHandle_t buzzerQueue;
 
-void init_buzzer()
+static esp_err_t init_buzzer(void)
 {
-    // Prepare and then apply the LEDC PWM timer configuration
-    ledc_timer_config_t ledc_timer = {
+    const ledc_timer_config_t timer_config = {
         .speed_mode = LEDC_MODE,
         .timer_num = LEDC_TIMER,
         .duty_resolution = LEDC_DUTY_RES,
-        .freq_hz = LEDC_FREQUENCY, // Set output frequency at 5 kHz
-        .clk_cfg = LEDC_AUTO_CLK};
-    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
+        .freq_hz = LEDC_INITIAL_FREQUENCY,
+        .clk_cfg = LEDC_AUTO_CLK,
+    };
+    esp_err_t err = ledc_timer_config(&timer_config);
+    if (err != ESP_OK)
+    {
+        return err;
+    }
 
-    // Prepare and then apply the LEDC PWM channel configuration
-    ledc_channel_config_t ledc_channel = {
+    const ledc_channel_config_t channel_config = {
         .speed_mode = LEDC_MODE,
         .channel = LEDC_CHANNEL,
         .timer_sel = LEDC_TIMER,
         .intr_type = LEDC_INTR_DISABLE,
-        .gpio_num = LEDC_OUTPUT_IO,
-        .duty = 0, // Set duty to 0%
-        .hpoint = 0};
-    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
+        .gpio_num = BUZZER_GPIO,
+        .duty = 0,
+        .hpoint = 0,
+    };
+    return ledc_channel_config(&channel_config);
 }
 
-void sound(uint32_t freq, uint32_t duration)
+static bool set_buzzer(uint32_t frequency, uint32_t duty)
 {
-    // start
-    ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_0, LEDC_DUTY); // 12% duty - play here for your speaker or buzzer
-    ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_0);
-    ESP_LOGI(TAG, "Buzzing start");
-    vTaskDelay(pdMS_TO_TICKS(duration));
-    // stop
-    ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_0, 0);
-    ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_0);
-    ESP_LOGI(TAG, "Buzzing end");
+    if (frequency > 0 && ledc_set_freq(LEDC_MODE, LEDC_TIMER, frequency) == 0)
+    {
+        ESP_LOGE(TAG, "Could not set buzzer frequency to %" PRIu32 " Hz", frequency);
+        return false;
+    }
+
+    esp_err_t err = ledc_set_duty(LEDC_MODE, LEDC_CHANNEL, duty);
+    if (err == ESP_OK)
+    {
+        err = ledc_update_duty(LEDC_MODE, LEDC_CHANNEL);
+    }
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Could not update buzzer output: %s", esp_err_to_name(err));
+        return false;
+    }
+    return true;
 }
 
-void startSound(uint32_t freq)
+static void sound(uint32_t frequency, uint32_t duration_ms)
 {
-    // start
-    ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_0, LEDC_DUTY); // 12% duty - play here for your speaker or buzzer
-    ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_0);
-    ESP_LOGI(TAG, "Buzzing start");
-}
-
-void stopSound()
-{
-    // stop
-    ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_0, 0);
-    ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_0);
-    ESP_LOGI(TAG, "Buzzing end");
+    if (!set_buzzer(frequency, LEDC_DUTY))
+    {
+        return;
+    }
+    vTaskDelay(pdMS_TO_TICKS(duration_ms));
+    set_buzzer(0, 0);
 }
 
 void Buzzer_Task(void *params)
 {
-    init_buzzer();
+    (void)params;
+
+    const esp_err_t init_err = init_buzzer();
+    const bool buzzer_available = init_err == ESP_OK;
+    if (!buzzer_available)
+    {
+        // The buzzer is non-critical; do not reboot the measurement station if
+        // its peripheral cannot initialize. Keep draining its queue so producers
+        // never stall behind an unavailable diagnostic device.
+        ESP_LOGE(TAG, "Buzzer initialization failed: %s", esp_err_to_name(init_err));
+    }
+
+    bool error_active = false;
+
     while (true)
     {
-        int input = 0;
-        if (xQueueReceive(buzzerQueue, &input, portMAX_DELAY))
+        int input;
+        if (xQueueReceive(buzzerQueue, &input, portMAX_DELAY) != pdPASS)
         {
-            if (input == BUZZER_STARTUP)
+            continue;
+        }
+        if (!buzzer_available)
+        {
+            continue;
+        }
+
+        if (input == BUZZER_STARTUP)
+        {
+            if (error_active)
             {
-                sound(sound_a, 100);
-                vTaskDelay(pdMS_TO_TICKS(100));
-                sound(sound_a, 100);
-                vTaskDelay(pdMS_TO_TICKS(100));
-                sound(sound_a, 100);
+                continue;
             }
-            else if (input == Buzzer_TRIGGER)
+            for (int i = 0; i < 3; i++)
             {
-                sound(sound_dH, 300);
-            }
-            else if (input == Buzzer_INDICATE_ERROR)
-            {
-                input = 0;
-                startSound(sound_e);
-                while (input != Buzzer_INDICATE_ERROR)
+                sound(SOUND_A, 100);
+                if (i != 2)
                 {
-                    xQueueReceive(buzzerQueue, &input, portMAX_DELAY);
+                    vTaskDelay(pdMS_TO_TICKS(100));
                 }
-                stopSound();
             }
-            else if (input == Buzzer_INDICATE_OTA)
+        }
+        else if (input == Buzzer_TRIGGER)
+        {
+            if (!error_active)
             {
-                sound(sound_a, 1000);
-                vTaskDelay(pdMS_TO_TICKS(500));
-                sound(sound_a, 1000);
-                vTaskDelay(pdMS_TO_TICKS(500));
-                sound(sound_a, 1000);
-                vTaskDelay(pdMS_TO_TICKS(500));
-                sound(sound_a, 1000);
-                vTaskDelay(pdMS_TO_TICKS(500));
-                sound(sound_a, 1000);
+                sound(SOUND_D_HIGH, 300);
             }
+        }
+        else if (input == Buzzer_ERROR_START)
+        {
+            error_active = true;
+            set_buzzer(SOUND_E, LEDC_DUTY);
+        }
+        else if (input == Buzzer_ERROR_STOP)
+        {
+            error_active = false;
+            set_buzzer(0, 0);
+        }
+        else if (input == Buzzer_INDICATE_OTA)
+        {
+            for (int i = 0; i < 5; i++)
+            {
+                sound(SOUND_A, 1000);
+                if (i != 4)
+                {
+                    vTaskDelay(pdMS_TO_TICKS(500));
+                }
+            }
+            if (error_active)
+            {
+                set_buzzer(SOUND_E, LEDC_DUTY);
+            }
+        }
+        else
+        {
+            ESP_LOGW(TAG, "Ignoring unknown buzzer event %d", input);
         }
     }
 }

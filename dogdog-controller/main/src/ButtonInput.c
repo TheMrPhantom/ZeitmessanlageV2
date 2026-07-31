@@ -1,5 +1,8 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <inttypes.h>
+#include <stdint.h>
+#include <string.h>
 #include "sdkconfig.h"
 #include "esp_chip_info.h"
 #include "esp_flash.h"
@@ -17,6 +20,7 @@
 #include "SevenSegment.h"
 #include "Buzzer.h"
 #include "Timer.h"
+#include "esp_timer.h"
 
 #if CONFIG_START
 #define STATION_TYPE 0
@@ -31,7 +35,6 @@ extern QueueHandle_t sevenSegmentQueue;
 extern QueueHandle_t buzzerQueue;
 extern TaskHandle_t sevenSegmentTask;
 extern QueueHandle_t loraSendQueue;
-extern QueueHandle_t timeQueue;
 
 extern int stop_id;
 static const char *TAG = "BUTTON_INPUT";
@@ -41,8 +44,17 @@ const int sensorButtonPins[] = {BUTTON_INPUT_GPIO_TYPE_ACTIVATE,
                                 BUTTON_INPUT_GPIO_TYPE_REFUSAL,
                                 BUTTON_INPUT_GPIO_TYPE_RESET};
 
-bool sensors_active = false;
+volatile bool sensors_active = false;
 extern char *pc_programm;
+
+static void free_dogdog_packet(DogDogPacket *packet)
+{
+    if (packet)
+    {
+        free(packet->payload);
+        free(packet);
+    }
+}
 
 static void show_dis_press_feedback()
 {
@@ -88,12 +100,14 @@ static void send_dis_key_to_pc()
 
 static void IRAM_ATTR gpio_interrupt_handler(void *args)
 {
-    int pinNumber = (int)args;
+    int pinNumber = (int)(intptr_t)args;
     int edge = gpio_get_level(pinNumber) == 0 ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE;
     sensor_interrupt_t sensor_interrupt;
     sensor_interrupt.pinNumber = pinNumber;
     sensor_interrupt.edge = edge;
-    xQueueSendFromISR(buttonInterruptQueue, &sensor_interrupt, NULL);
+    BaseType_t higher_priority_task_woken = pdFALSE;
+    xQueueSendFromISR(buttonInterruptQueue, &sensor_interrupt, &higher_priority_task_woken);
+    portYIELD_FROM_ISR(higher_priority_task_woken);
 }
 
 void init_button_pins()
@@ -102,13 +116,13 @@ void init_button_pins()
     for (int i = 0; i < sizeof(sensorButtonPins) / sizeof(int); i++)
     {
 
-        gpio_config_t io_conf;
+        gpio_config_t io_conf = {0};
         io_conf.intr_type = GPIO_INTR_ANYEDGE;              // any edge
         io_conf.pin_bit_mask = 1ULL << sensorButtonPins[i]; // select pin
         io_conf.mode = GPIO_MODE_INPUT;                     // input mode
         io_conf.pull_up_en = GPIO_PULLUP_ENABLE;            // enable pull-up mode
         io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;       // disable pull-down mode (was not possible only with PULLUP_ENABLE.)
-        gpio_config(&io_conf);
+        ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_config(&io_conf));
     }
 
     ESP_LOGI(TAG, "Done configuring IO");
@@ -116,7 +130,8 @@ void init_button_pins()
     for (int i = 0; i < sizeof(sensorButtonPins) / sizeof(int); i++)
     {
         ESP_LOGI(TAG, "Configuring ISR for Pin %i", sensorButtonPins[i]);
-        gpio_isr_handler_add(sensorButtonPins[i], gpio_interrupt_handler, (void *)sensorButtonPins[i]);
+        ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_isr_handler_add(sensorButtonPins[i], gpio_interrupt_handler,
+                                                           (void *)(intptr_t)sensorButtonPins[i]));
     }
 
     ESP_LOGI(TAG, "Done configuring ISR");
@@ -129,12 +144,9 @@ void Button_Input_Task(void *params)
 
     sensor_interrupt_t sensor_interrupt;
 
-    timeval_t last_button_interrupt;
-    timeval_t reset_pressed;
-    timeval_t dis_pressed;
-    gettimeofday(&last_button_interrupt, NULL);
-    gettimeofday(&reset_pressed, NULL);
-    gettimeofday(&dis_pressed, NULL);
+    int64_t last_button_interrupt_us = esp_timer_get_time();
+    int64_t reset_pressed_us = last_button_interrupt_us;
+    int64_t dis_pressed_us = last_button_interrupt_us;
     int countdown_sent = 1;
     bool reset_ignore_until_release = false;
     bool dis_press_pending = false;
@@ -176,13 +188,12 @@ void Button_Input_Task(void *params)
             ESP_LOGI(TAG, "Checking interrupt of Pin: %i with state %i", sensor_interrupt.pinNumber, sensor_interrupt.edge);
 
             vTaskDelay(pdMS_TO_TICKS(3));
-            timeval_t now;
-            gettimeofday(&now, NULL);
+            int64_t now_us = esp_timer_get_time();
 
             if (gpio_get_level(sensor_interrupt.pinNumber) == 1 && sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_RESET && reset_ignore_until_release)
             {
                 reset_ignore_until_release = false;
-                gettimeofday(&last_button_interrupt, NULL);
+                last_button_interrupt_us = now_us;
                 ESP_LOGI(TAG, "Reset release after countdown");
             }
             else if (gpio_get_level(sensor_interrupt.pinNumber) == 1 && sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_DIS && dis_press_pending)
@@ -198,9 +209,10 @@ void Button_Input_Task(void *params)
                 dis_press_pending = false;
                 dis_feedback_shown = false;
             }
-            else if (gpio_get_level(sensor_interrupt.pinNumber) == 0 && (TIME_US(now) - TIME_US(last_button_interrupt) > 300000))
+            else if (gpio_get_level(sensor_interrupt.pinNumber) == 0 &&
+                     (now_us - last_button_interrupt_us > 300000))
             {
-                gettimeofday(&last_button_interrupt, NULL);
+                last_button_interrupt_us = now_us;
 
                 ESP_LOGI(TAG, "Confirmed interrupt of Pin: %i", sensor_interrupt.pinNumber);
 
@@ -209,7 +221,16 @@ void Button_Input_Task(void *params)
                     if (IS_THS_MODE && sensors_active)
                     {
                         DogDogPacket *request_final_time = create_dogdog_packet_from_request_final_time_information(stop_id);
-                        xQueueSend(loraSendQueue, &request_final_time, portMAX_DELAY);
+                        if (!request_final_time)
+                        {
+                            ESP_LOGE(TAG, "Failed to allocate final-time request");
+                        }
+                        else if (!loraSendQueue ||
+                                 xQueueSend(loraSendQueue, &request_final_time, pdMS_TO_TICKS(100)) != pdTRUE)
+                        {
+                            ESP_LOGW(TAG, "LoRa send queue unavailable; dropping final-time request");
+                            free_dogdog_packet(request_final_time);
+                        }
 
                         glow_state_t glow_state;
                         glow_state.state = 1;
@@ -263,7 +284,7 @@ void Button_Input_Task(void *params)
                     glow_state.state = 0;
                     glow_state.pinNumber = BUTTON_GLOW_GPIO_TYPE_RESET;
 
-                    gettimeofday(&reset_pressed, NULL);
+                    reset_pressed_us = now_us;
                     countdown_sent = 0;
 
                     xQueueSend(buttonQueue, &glow_state, pdMS_TO_TICKS(50));
@@ -319,7 +340,7 @@ void Button_Input_Task(void *params)
                         }
                         else if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_DIS)
                         {
-                            gettimeofday(&dis_pressed, NULL);
+                            dis_pressed_us = now_us;
                             dis_press_pending = true;
                             dis_long_press_sent = false;
                             show_dis_press_feedback();
@@ -330,7 +351,7 @@ void Button_Input_Task(void *params)
                     {
                         if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_DIS)
                         {
-                            gettimeofday(&dis_pressed, NULL);
+                            dis_pressed_us = now_us;
                             dis_press_pending = true;
                             dis_long_press_sent = false;
                             dis_feedback_shown = false;
@@ -344,10 +365,10 @@ void Button_Input_Task(void *params)
             }
         }
 
-        timeval_t now;
-        gettimeofday(&now, NULL);
+        int64_t now_us = esp_timer_get_time();
 
-        if (gpio_get_level(BUTTON_INPUT_GPIO_TYPE_RESET) == 0 && (TIME_US(now) - TIME_US(reset_pressed) > 1000000) && countdown_sent == 0)
+        if (gpio_get_level(BUTTON_INPUT_GPIO_TYPE_RESET) == 0 &&
+            (now_us - reset_pressed_us > 1000000) && countdown_sent == 0)
         {
             countdown_sent = 1;
             reset_ignore_until_release = true;
@@ -355,11 +376,12 @@ void Button_Input_Task(void *params)
             toSend.type = SEVEN_SEGMENT_COUNTDOWN;
             toSend.time = 60 * 7 * 1000;
             xQueueSend(sevenSegmentQueue, &toSend, 0);
-            gettimeofday(&reset_pressed, NULL);
+            reset_pressed_us = now_us;
             ESP_LOGI(TAG, "Countdown started");
         }
 
-        if (gpio_get_level(BUTTON_INPUT_GPIO_TYPE_DIS) == 0 && dis_press_pending && !dis_long_press_sent && (TIME_US(now) - TIME_US(dis_pressed) > 1500000))
+        if (gpio_get_level(BUTTON_INPUT_GPIO_TYPE_DIS) == 0 && dis_press_pending &&
+            !dis_long_press_sent && (now_us - dis_pressed_us > 1500000))
         {
             dis_long_press_sent = true;
             if (dis_feedback_shown)
@@ -368,16 +390,13 @@ void Button_Input_Task(void *params)
                 dis_feedback_shown = false;
             }
 
-            if (lastTriggerTime != 0)
+            if (restartTimerFromLastTrigger())
             {
-                startTimer(lastTriggerTime);
-                int64_t x = -1;
-                xQueueSend(timeQueue, &x, 0);
-                ESP_LOGI(TAG, "Restarted timer from last trigger timestamp: %" PRId64, lastTriggerTime);
+                ESP_LOGI(TAG, "Queued timer restart from last trigger timestamp");
             }
             else
             {
-                ESP_LOGW(TAG, "DIS long press ignored because no trigger timestamp is available");
+                ESP_LOGW(TAG, "DIS long press ignored because no trigger timestamp or queue slot is available");
             }
         }
     }

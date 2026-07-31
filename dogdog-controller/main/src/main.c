@@ -14,7 +14,6 @@
 #include "esp_lcd_panel_vendor.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lvgl_port.h"
-#include "lv_conf.h"
 #include "esp_lcd_touch_cst816s.h"
 #include <esp_system.h>
 #include "soc/soc.h"
@@ -52,6 +51,7 @@
 #include "Sensor.h"
 #include "HornTimer.h"
 #include "sdkconfig.h"
+#include <inttypes.h>
 
 QueueHandle_t sensorInterruptQueue;
 QueueHandle_t buttonInterruptQueue;
@@ -60,8 +60,8 @@ QueueHandle_t triggerQueue;
 QueueHandle_t sevenSegmentQueue;
 QueueHandle_t networkFaultQueue;
 QueueHandle_t timeQueue;
-QueueHandle_t sendQueue;
 QueueHandle_t buzzerQueue;
+QueueHandle_t buttonQueue;
 QueueSetHandle_t triggerAndResetQueue;
 TaskHandle_t buttonTask;
 TaskHandle_t sevenSegmentTask;
@@ -75,106 +75,184 @@ int controller_id = 0;
 int start_id = 0;
 int stop_id = 0;
 
+static int load_lora_id(const char *key, int configured_value)
+{
+    int32_t stored_value = 0;
+    esp_err_t err = getValueChecked(key, &stored_value);
+    if (err == ESP_OK && stored_value >= 0 && stored_value <= UINT8_MAX)
+    {
+        return (int)stored_value;
+    }
+
+    if (err == ESP_OK)
+    {
+        ESP_LOGW(TAG, "Ignoring out-of-range LoRa ID '%s': %" PRId32, key, stored_value);
+    }
+    else if (err != ESP_ERR_NVS_NOT_FOUND)
+    {
+        ESP_LOGW(TAG, "Could not read LoRa ID '%s': %s", key, esp_err_to_name(err));
+    }
+    ESP_ERROR_CHECK_WITHOUT_ABORT(storeValue(key, configured_value));
+    return configured_value;
+}
+
+static bool configure_lora_ids(void)
+{
+    controller_id = load_lora_id("controller_id", CONFIG_LORA_CONTROLLER_ID);
+    start_id = load_lora_id("start_id", CONFIG_START_LORA_ID);
+    stop_id = load_lora_id("stop_id", CONFIG_STOP_LORA_ID);
+
+    if (controller_id == start_id || controller_id == stop_id || start_id == stop_id)
+    {
+        ESP_LOGW(TAG, "Stored LoRa IDs are ambiguous; restoring configured IDs");
+        controller_id = CONFIG_LORA_CONTROLLER_ID;
+        start_id = CONFIG_START_LORA_ID;
+        stop_id = CONFIG_STOP_LORA_ID;
+        ESP_ERROR_CHECK_WITHOUT_ABORT(storeValue("controller_id", controller_id));
+        ESP_ERROR_CHECK_WITHOUT_ABORT(storeValue("start_id", start_id));
+        ESP_ERROR_CHECK_WITHOUT_ABORT(storeValue("stop_id", stop_id));
+    }
+
+    if (controller_id == start_id || controller_id == stop_id || start_id == stop_id)
+    {
+        ESP_LOGE(TAG,
+                 "LoRa controller/start/stop IDs must be distinct (controller=%d start=%d stop=%d)",
+                 controller_id, start_id, stop_id);
+        return false;
+    }
+
+    station_id = load_lora_id("station_id", CONFIG_LORA_STATION_ID);
+    if (station_id != controller_id)
+    {
+        /* On the controller, the packet sender ID is the controller ID.  A
+           separate/stale station ID makes peers reject packets or mistake the
+           controller for a measurement station. */
+        ESP_LOGW(TAG, "Correcting controller sender ID from %d to %d", station_id, controller_id);
+        station_id = controller_id;
+        ESP_ERROR_CHECK_WITHOUT_ABORT(storeValue("station_id", station_id));
+    }
+    return true;
+}
+
 void app_main(void)
 {
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        ESP_LOGW(TAG, "NVS partition needs reinitialization: %s", esp_err_to_name(err));
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
 
-    // Initialize LoRa
-    nvs_flash_init();
-    gpio_install_isr_service(0);
+    err = gpio_install_isr_service(0);
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
+    {
+        ESP_LOGE(TAG, "Failed to install GPIO ISR service: %s", esp_err_to_name(err));
+        return;
+    }
+
     InitLoraHandlers(HandleReceivedPacket);
 
     ESP_LOGI(TAG, "Starting...");
 
-    sensorInterruptQueue = xQueueCreate(1, sizeof(int));
-    buttonInterruptQueue = xQueueCreate(1, sizeof(int));
+    sensorInterruptQueue = xQueueCreate(4, sizeof(SensorTriggerEvent));
+    buttonInterruptQueue = xQueueCreate(10, sizeof(sensor_interrupt_t));
     resetQueue = xQueueCreate(1, sizeof(int));
     triggerQueue = xQueueCreate(1, sizeof(TimerTrigger));
-    networkFaultQueue = xQueueCreate(2, sizeof(StationConnectivityStatus));
+    networkFaultQueue = xQueueCreate(8, sizeof(StationConnectivityStatus));
     sevenSegmentQueue = xQueueCreate(10, sizeof(SevenSegmentDisplay));
     timeQueue = xQueueCreate(1, sizeof(int64_t));
-    sendQueue = xQueueCreate(50, sizeof(char *));
     buzzerQueue = xQueueCreate(10, sizeof(int));
+    buttonQueue = xQueueCreate(15, sizeof(glow_state_t));
     triggerAndResetQueue = xQueueCreateSet(2);
-    xQueueAddToSet(triggerQueue, triggerAndResetQueue);
-    xQueueAddToSet(resetQueue, triggerAndResetQueue);
 
-    increaseKey("startups");
+    if (!sensorInterruptQueue || !buttonInterruptQueue || !resetQueue || !triggerQueue ||
+        !networkFaultQueue || !sevenSegmentQueue || !timeQueue || !buzzerQueue ||
+        !buttonQueue || !triggerAndResetQueue)
+    {
+        ESP_LOGE(TAG, "Failed to allocate one or more application queues");
+        return;
+    }
 
-    // Configure device as cable or radio controller permamently -------
-    int is_lora_controller = getValue("is_lora_c");
+    if (xQueueAddToSet(triggerQueue, triggerAndResetQueue) != pdPASS ||
+        xQueueAddToSet(resetQueue, triggerAndResetQueue) != pdPASS)
+    {
+        ESP_LOGE(TAG, "Failed to initialize timer queue set");
+        return;
+    }
+
+    ESP_ERROR_CHECK_WITHOUT_ABORT(increaseKey("startups"));
+
+    // The built firmware selects the hardware role; stale NVS must not override it.
     bool config_is_lora_controller = false;
 
 #ifdef CONFIG_IS_LORA_CONTROLLER
     config_is_lora_controller = true;
 #endif
 
-    if (config_is_lora_controller && is_lora_controller != 1)
+    const int is_lora_controller = config_is_lora_controller ? 1 : 0;
+    int32_t stored_controller_mode = -1;
+    if (getValueChecked("is_lora_c", &stored_controller_mode) != ESP_OK ||
+        stored_controller_mode != is_lora_controller)
     {
-        storeValue("is_lora_c", 1);
+        ESP_ERROR_CHECK_WITHOUT_ABORT(storeValue("is_lora_c", is_lora_controller));
     }
-    is_lora_controller = getValue("is_lora_c");
     // ---------------------------------------------------------------------
 
     // Configure IDs
-
-    controller_id = getValue("controller_id");
-
-    if (controller_id == 0)
+    if (!configure_lora_ids())
     {
-        controller_id = CONFIG_LORA_CONTROLLER_ID;
-        storeValue("controller_id", CONFIG_LORA_CONTROLLER_ID);
-    }
-
-    start_id = getValue("start_id");
-
-    if (start_id == 0)
-    {
-        start_id = CONFIG_START_LORA_ID;
-        storeValue("start_id", CONFIG_START_LORA_ID);
-    }
-
-    stop_id = getValue("stop_id");
-
-    if (stop_id == 0)
-    {
-        stop_id = CONFIG_STOP_LORA_ID;
-        storeValue("stop_id", CONFIG_STOP_LORA_ID);
-    }
-
-    station_id = getValue("station_id");
-    if (station_id == 0)
-    {
-        station_id = CONFIG_LORA_STATION_ID;
-        storeValue("station_id", CONFIG_LORA_STATION_ID);
+        return;
     }
 
     //-------
 
     BaseType_t clock_initialized = init_external_clock();
     ESP_LOGI(TAG, "Clock initialized: %d", clock_initialized);
+    if (clock_initialized == pdTRUE &&
+        xTaskCreate(ClockTask, "ClockTask", 4048, NULL, 24, NULL) != pdPASS)
+    {
+        ESP_LOGE(TAG, "Failed to create external clock task");
+        deinit_external_clock();
+    }
     ESP_ERROR_CHECK_WITHOUT_ABORT(init_horn_timer_broadcast());
     init_keyboard();
     init_glow_pins();
 
-    xTaskCreate(Timer_Task, "Timer_Task", 4048, NULL, 12, NULL);
-    xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 4048, NULL, 9, NULL);
-    xTaskCreatePinnedToCore(Seven_Segment_Task, "Seven_Segment_Task", 16096, NULL, 8, &sevenSegmentTask, 1);
-    xTaskCreate(Buzzer_Task, "Buzzer_Task", 4048, NULL, 7, NULL);
-
-    if (!config_is_lora_controller)
+    if (xTaskCreate(Timer_Task, "Timer_Task", 4048, NULL, 12, NULL) != pdPASS ||
+        xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 4048, NULL, 9, NULL) != pdPASS ||
+        xTaskCreate(Buzzer_Task, "Buzzer_Task", 4048, NULL, 7, NULL) != pdPASS)
     {
-        xTaskCreatePinnedToCore(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 4048, NULL, 23, NULL, 0);
+        ESP_LOGE(TAG, "Failed to create a core application task");
+        return;
+    }
+
+    /* The display and button tasks notify each other during startup. Create the
+       button task first so the display can never notify a null task handle. */
+    if (xTaskCreate(Button_Task, "Button_Task", 8192, NULL, 3, &buttonTask) != pdPASS ||
+        xTaskCreatePinnedToCore(Seven_Segment_Task, "Seven_Segment_Task", 16096, NULL, 8, &sevenSegmentTask, 1) != pdPASS)
+    {
+        ESP_LOGE(TAG, "Failed to create display/button task");
+        return;
+    }
+    if (is_lora_controller != 1)
+    {
+        if (xTaskCreatePinnedToCore(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 4048, NULL, 23, NULL, 0) != pdPASS)
+        {
+            ESP_LOGE(TAG, "Failed to create sensor task");
+        }
     }
     else
     {
-        xTaskCreate(LoraStartupTask, "LoraStartupTask", 4048, NULL, 10, NULL);
+        if (xTaskCreate(LoraStartupTask, "LoraStartupTask", 4048, NULL, 10, NULL) != pdPASS)
+        {
+            ESP_LOGE(TAG, "Failed to create LoRa startup task");
+        }
     }
 
-    xTaskCreate(Button_Input_Task, "Button_Input_Task", 8192, NULL, 8, NULL);
-    xTaskCreate(Button_Task, "Button_Task", 8192, NULL, 3, &buttonTask);
-
-    if (clock_initialized == pdTRUE)
+    if (xTaskCreate(Button_Input_Task, "Button_Input_Task", 8192, NULL, 8, NULL) != pdPASS)
     {
-        xTaskCreate(ClockTask, "ClockTask", 4048, NULL, 24, NULL);
+        ESP_LOGE(TAG, "Failed to create button input task");
     }
 }

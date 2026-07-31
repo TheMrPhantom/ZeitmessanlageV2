@@ -1,46 +1,30 @@
-/*
- * SPDX-FileCopyrightText: 2010-2022 Espressif Systems (Shanghai) CO LTD
- *
- * SPDX-License-Identifier: CC0-1.0
- */
-
-#include <stdio.h>
 #include <inttypes.h>
-#include "sdkconfig.h"
+#include <stdbool.h>
+#include <stdint.h>
+
 #include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 #include "freertos/task.h"
-#include "esp_chip_info.h"
-#include "esp_flash.h"
-#include "esp_system.h"
+
+#include "driver/gpio.h"
+#include "esp_err.h"
 #include "esp_log.h"
-#include "driver/gpio.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
-#include "Lora.h"
-#include <stdio.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
-#include "driver/gpio.h"
-#include "Sensor.h"
-#include "Buzzer.h"
-#include "LED.h"
-#include "LoraNetwork.h"
-#include "sdkconfig.h"
 #include "nvs_flash.h"
+
+#include "Buzzer.h"
 #include "KeyValue.h"
+#include "LED.h"
+#include "Lora.h"
+#include "LoraNetwork.h"
 #include "OTA.h"
+#include "Sensor.h"
+#include "sdkconfig.h"
 
-QueueHandle_t sensorInterputQueue;
-QueueHandle_t networkQueue;
-QueueHandle_t resetQueue;
-QueueHandle_t triggerQueue;
+static const char *TAG = "MAIN";
+
+QueueHandle_t sensorInterruptQueue;
 QueueHandle_t buzzerQueue;
-QueueHandle_t faultQueue;
-QueueSetHandle_t networkAndResetQueue;
-QueueHandle_t sendQueue;
 
-TaskHandle_t networkTask;
 TaskHandle_t sensorInterruptTaskHandle;
 
 int station_id = 0;
@@ -50,46 +34,129 @@ int stop_id = 0;
 int is_xrl = 0;
 int num_fake_sensors = 0;
 int num_sensors_required_for_trigger = 0;
-int num_sensors;
-int triggerLevel;
-int *sensorPins;
+int num_sensors = 0;
+int triggerLevel = 0;
+const int *sensorPins = NULL;
 
-void start_isr_service_tast(void *params)
+#ifdef CONFIG_IS_XLR
+static const int xlr_sensor_pins[] = {GPIO_NUM_47};
+#else
+static const int standard_sensor_pins[] = {
+    GPIO_NUM_15,
+    GPIO_NUM_16,
+    GPIO_NUM_17,
+    GPIO_NUM_18,
+    GPIO_NUM_8,
+    GPIO_NUM_19,
+    GPIO_NUM_20,
+    GPIO_NUM_39,
+    GPIO_NUM_38,
+    GPIO_NUM_37,
+};
+#endif
+
+static void initialize_nvs(void)
 {
-    TaskHandle_t mainTask = (TaskHandle_t)params;
-    gpio_install_isr_service(0);
-    // Notify main task that isr service is installed
-    xTaskNotifyGive(mainTask);
-    vTaskDelete(NULL);
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    {
+        ESP_LOGW(TAG, "NVS needs recovery; erasing the NVS partition");
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(err);
 }
 
-// Task that checks for 10 seconds if boot button was pressed to trigger OTA mode
-void ota_check_task(void *params)
+static int load_station_id(const char *key, int default_value)
 {
-    const int boot_button_gpio = GPIO_NUM_0;
-    gpio_set_direction(boot_button_gpio, GPIO_MODE_INPUT);
-    gpio_pullup_en(boot_button_gpio);
-    gpio_pulldown_dis(boot_button_gpio);
+    int32_t stored_value = 0;
+    esp_err_t err = getValue(key, &stored_value);
+    if (err == ESP_OK && stored_value >= 0 && stored_value <= UINT8_MAX)
+    {
+        return (int)stored_value;
+    }
+
+    if (err == ESP_OK)
+    {
+        ESP_LOGW(TAG, "Ignoring out-of-range value %" PRId32 " for NVS key '%s'", stored_value, key);
+    }
+    else if (err != ESP_ERR_NVS_NOT_FOUND)
+    {
+        ESP_LOGW(TAG, "Could not read NVS key '%s': %s", key, esp_err_to_name(err));
+    }
+
+    err = storeValue(key, default_value);
+    if (err != ESP_OK)
+    {
+        ESP_LOGW(TAG, "Could not persist default for NVS key '%s': %s", key, esp_err_to_name(err));
+    }
+    return default_value;
+}
+
+static bool station_ids_are_valid(int controller, int start, int stop, int station)
+{
+    return controller != start && controller != stop && start != stop &&
+           (station == start || station == stop);
+}
+
+static void require_task_created(BaseType_t result, const char *task_name)
+{
+    if (result != pdPASS)
+    {
+        ESP_LOGE(TAG, "Failed to create critical task '%s'", task_name);
+        ESP_ERROR_CHECK(ESP_ERR_NO_MEM);
+    }
+}
+
+// Checks during the first ten seconds whether the boot button is held long
+// enough to request OTA mode.
+static void ota_check_task(void *params)
+{
+    (void)params;
+
+    const gpio_config_t button_config = {
+        .pin_bit_mask = BIT64(GPIO_NUM_0),
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+
+    esp_err_t err = gpio_config(&button_config);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE("OTA_CHECK", "Failed to configure boot button: %s", esp_err_to_name(err));
+        vTaskDelete(NULL);
+        return;
+    }
 
     int pressed_count = 0;
     for (int i = 0; i < 100; i++)
     {
-        if (gpio_get_level(boot_button_gpio) == 0) // Assuming active low button
+        if (gpio_get_level(GPIO_NUM_0) == 0)
         {
             pressed_count++;
         }
         else
         {
-            pressed_count = 0; // reset count if button is released
+            pressed_count = 0;
         }
-        vTaskDelay(pdMS_TO_TICKS(100)); // Check every 100ms
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 
-    if (pressed_count >= 50) // Button was pressed for at least 5 seconds
+    if (pressed_count >= 50)
     {
         ESP_LOGI("OTA_CHECK", "Boot button held for 5 seconds, entering OTA mode");
-        xQueueSend(buzzerQueue, &(int){Buzzer_INDICATE_OTA}, 0); // Indicate OTA mode with buzzer
-        xTaskCreate(ota_task, "ota_task", 16384, NULL, 5, NULL);
+        const int indication = Buzzer_INDICATE_OTA;
+        if (xQueueSend(buzzerQueue, &indication, pdMS_TO_TICKS(100)) != pdPASS)
+        {
+            ESP_LOGW("OTA_CHECK", "Buzzer queue full; OTA indication was skipped");
+        }
+
+        if (xTaskCreate(ota_task, "ota_task", 16384, NULL, 5, NULL) != pdPASS)
+        {
+            ESP_LOGE("OTA_CHECK", "Failed to create OTA task");
+        }
     }
     else
     {
@@ -101,115 +168,94 @@ void ota_check_task(void *params)
 
 void app_main(void)
 {
-    const char *TAG = "MAIN";
     ESP_LOGI(TAG, "Starting...");
-    nvs_flash_init();
+    initialize_nvs();
 
-    xTaskCreate(ota_check_task, "ota_check_task", 4096, NULL, 5, NULL);
+    controller_id = load_station_id("controller_id", CONFIG_LORA_CONTROLLER_ID);
+    start_id = load_station_id("start_id", CONFIG_START_LORA_ID);
+    stop_id = load_station_id("stop_id", CONFIG_STOP_LORA_ID);
+    station_id = load_station_id("station_id", CONFIG_LORA_STATION_ID);
 
-    // Configure IDs
-
-    controller_id = getValue("controller_id");
-
-    
-    if (controller_id == 0)
+    if (!station_ids_are_valid(controller_id, start_id, stop_id, station_id))
     {
+        ESP_LOGW(TAG, "Stored LoRa IDs are inconsistent; restoring build defaults");
         controller_id = CONFIG_LORA_CONTROLLER_ID;
-        storeValue("controller_id", CONFIG_LORA_CONTROLLER_ID);
-    }
-
-    start_id = getValue("start_id");
-
-    if (start_id == 0)
-    {
         start_id = CONFIG_START_LORA_ID;
-        storeValue("start_id", CONFIG_START_LORA_ID);
-    }
-
-    stop_id = getValue("stop_id");
-
-    if (stop_id == 0)
-    {
         stop_id = CONFIG_STOP_LORA_ID;
-        storeValue("stop_id", CONFIG_STOP_LORA_ID);
-    }
-
-    station_id = getValue("station_id");
-    if (station_id == 0)
-    {
         station_id = CONFIG_LORA_STATION_ID;
-        storeValue("station_id", CONFIG_LORA_STATION_ID);
+
+        if (!station_ids_are_valid(controller_id, start_id, stop_id, station_id))
+        {
+            ESP_LOGE(TAG, "Build-time LoRa IDs must be distinct and the station ID must identify start or stop");
+            ESP_ERROR_CHECK(ESP_ERR_INVALID_ARG);
+        }
+
+        storeValue("controller_id", controller_id);
+        storeValue("start_id", start_id);
+        storeValue("stop_id", stop_id);
+        storeValue("station_id", station_id);
     }
 
 #ifdef CONFIG_IS_XLR
     is_xrl = 1;
     num_fake_sensors = CONFIG_NUM_FAKE_SENSORS;
-    storeValue("is_xrl", 1);
-    storeValue("num_fake_s", CONFIG_NUM_FAKE_SENSORS);
     num_sensors_required_for_trigger = 1;
+    triggerLevel = 1;
+    num_sensors = 1;
+    sensorPins = xlr_sensor_pins;
 #else
-    num_sensors_required_for_trigger = getValue("num_s_req");
-    if (num_sensors_required_for_trigger == 0)
-    {
-        num_sensors_required_for_trigger = 2;
-    }
-#ifdef NUM_SENSORS_REQUIRED_FOR_TRIGGER
+    is_xrl = 0;
+    num_fake_sensors = 0;
     num_sensors_required_for_trigger = CONFIG_NUM_SENSORS_REQUIRED_FOR_TRIGGER;
-    storeValue("num_sensors_required_for_trigger", num_sensors_required_for_trigger);
-#endif
+    triggerLevel = 0;
+    num_sensors = sizeof(standard_sensor_pins) / sizeof(standard_sensor_pins[0]);
+    sensorPins = standard_sensor_pins;
 #endif
 
-    is_xrl = getValue("is_xrl");
-    num_fake_sensors = getValue("num_fake_s");
-    //-------
+    // Keep diagnostic values in NVS, but make the hardware build configuration
+    // authoritative so stale NVS from another board type cannot select bad pins.
+    const esp_err_t store_xlr_err = storeValue("is_xrl", is_xrl);
+    const esp_err_t store_fake_err = storeValue("num_fake_s", num_fake_sensors);
+    const esp_err_t store_required_err = storeValue("num_s_req", num_sensors_required_for_trigger);
+    if (store_xlr_err != ESP_OK || store_fake_err != ESP_OK || store_required_err != ESP_OK)
+    {
+        ESP_LOGW(TAG, "One or more sensor configuration values could not be persisted");
+    }
 
-    xTaskCreate(start_isr_service_tast, "StartISRServiceTask", 4048, xTaskGetCurrentTaskHandle(), 5, NULL);
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-    // mainTask = xTaskGetCurrentTaskHandle();
+    sensorInterruptQueue = xQueueCreate(32, sizeof(PinTrigger));
+    buzzerQueue = xQueueCreate(8, sizeof(int));
+    if (sensorInterruptQueue == NULL || buzzerQueue == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate application queues");
+        ESP_ERROR_CHECK(ESP_ERR_NO_MEM);
+    }
+
+    init_led(num_sensors);
+
+    esp_err_t err = gpio_install_isr_service(0);
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE)
+    {
+        ESP_ERROR_CHECK(err);
+    }
+
+    require_task_created(xTaskCreate(Buzzer_Task, "Buzzer_Task", 8192, NULL, 12, NULL), "Buzzer_Task");
+    require_task_created(xTaskCreate(ota_check_task, "ota_check_task", 4096, NULL, 5, NULL), "ota_check_task");
+
     InitLoraHandlers(HandleReceivedPacket);
+    ESP_ERROR_CHECK(init_lora());
 
-    sensorInterputQueue = xQueueCreate(5, sizeof(PinTrigger));
-    triggerQueue = xQueueCreate(1, sizeof(int));
-    buzzerQueue = xQueueCreate(5, sizeof(int));
-    faultQueue = xQueueCreate(5, sizeof(int));
-    sendQueue = xQueueCreate(50, sizeof(char *));
+    set_all_leds(255, 0, 255);
 
-    // gpio_install_isr_service(0);
+    require_task_created(
+        xTaskCreatePinnedToCore(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 8192 * 2, NULL, 3,
+                                &sensorInterruptTaskHandle, 0),
+        "Sensor_Interrupt_Task");
+    require_task_created(xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 24, NULL), "LoraSendTask");
+    require_task_created(xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 12, NULL), "LoraReceiveTask");
 
-    if (is_xrl)
+    const int buzzer_type = BUZZER_STARTUP;
+    if (xQueueSend(buzzerQueue, &buzzer_type, pdMS_TO_TICKS(100)) != pdPASS)
     {
-        triggerLevel = 1;
-        num_sensors = 1;
-        sensorPins = malloc(sizeof(int) * num_sensors);
-        sensorPins[0] = GPIO_NUM_47;
+        ESP_LOGW(TAG, "Buzzer queue full; startup indication was skipped");
     }
-    else
-    {
-        triggerLevel = 0;
-        num_sensors = 10;
-        sensorPins = malloc(sizeof(int) * num_sensors);
-        sensorPins[0] = GPIO_NUM_15;
-        sensorPins[1] = GPIO_NUM_16;
-        sensorPins[2] = GPIO_NUM_17;
-        sensorPins[3] = GPIO_NUM_18;
-        sensorPins[4] = GPIO_NUM_8;
-        sensorPins[5] = GPIO_NUM_19;
-        sensorPins[6] = GPIO_NUM_20;
-        sensorPins[7] = GPIO_NUM_39;
-        sensorPins[8] = GPIO_NUM_38;
-        sensorPins[9] = GPIO_NUM_37;
-    }
-
-    init_led(num_sensors); // Pass the number of sensors as argument
-    init_lora();
-
-    set_all_leds(255, 0, 255); // Set all leds to purple while waiting for time sync
-    xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 24, NULL);
-    xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 12, NULL);
-
-    xTaskCreate(Buzzer_Task, "Buzzer_Task", 8192, NULL, 12, NULL);
-    xTaskCreatePinnedToCore(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 8192 * 2, NULL, 3, &sensorInterruptTaskHandle, 0);
-
-    int buzzerType = BUZZER_STARTUP;
-    xQueueSend(buzzerQueue, &buzzerType, 0);
 }

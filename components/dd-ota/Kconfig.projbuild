@@ -9,8 +9,9 @@ menu "OTA Settings"
         config RECV_TIMEOUT
             int "OTA Receive Timeout"
             default 5000
+            range 1000 120000
             help
-                Maximum time for reception
+                Maximum time in milliseconds for an OTA HTTP receive operation.
 
         config ENABLE_PARTIAL_HTTP_DOWNLOAD
             bool "Enable partial HTTP download"
@@ -60,6 +61,21 @@ menu "OTA Settings"
             default ""
             help
                 Password identifier for SAE H2E mode.
+
+        config OTA_WIFI_MAXIMUM_RETRY
+            int "Maximum WiFi connection retries"
+            default 5
+            range 0 100
+            help
+                Number of reconnection attempts before the OTA request is abandoned.
+
+        config OTA_WIFI_CONNECT_TIMEOUT_MS
+            int "WiFi connection timeout (ms)"
+            default 30000
+            range 1000 300000
+            help
+                Maximum total time to wait for an IP address before abandoning the
+                OTA request.
 
     endmenu
 endmenu

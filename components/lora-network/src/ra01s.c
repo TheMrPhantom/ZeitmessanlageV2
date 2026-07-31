@@ -16,12 +16,14 @@
 
 static spi_device_handle_t SpiHandle;
 static SemaphoreHandle_t spi_mutex = NULL;
+static bool spi_bus_initialized;
 
 // Global Stuff
 static uint8_t PacketParams[6];
 static bool txActive;
 static int txLost = 0;
 static bool debugPrint;
+static volatile int lastError = ERR_NONE;
 static int SX126x_SPI_SELECT;
 static int SX126x_RESET;
 static int SX126x_BUSY;
@@ -34,20 +36,25 @@ static int SX126x_RXEN;
 
 void LoRaErrorDefault(int error)
 {
-	if (debugPrint)
-	{
-		ESP_LOGE(TAG, "LoRaErrorDefault=%d", error);
-	}
-	while (true)
-	{
-		vTaskDelay(1);
-	}
+	lastError = error;
+	ESP_LOGE(TAG, "LoRa error=%d", error);
 }
 
 __attribute__((weak, alias("LoRaErrorDefault"))) void LoRaError(int error);
 
-void LoRaInit(void)
+int LoRaGetLastError(void)
 {
+	return lastError;
+}
+
+esp_err_t LoRaInit(void)
+{
+	lastError = ERR_NONE;
+	if (SpiHandle != NULL || spi_bus_initialized)
+	{
+		ESP_LOGE(TAG, "LoRa SPI is already initialized");
+		return ESP_ERR_INVALID_STATE;
+	}
 	ESP_LOGI(TAG, "CONFIG_MISO_GPIO=%d", CONFIG_LORA_GPIO_MISO);
 	ESP_LOGI(TAG, "CONFIG_MOSI_GPIO=%d", CONFIG_LORA_GPIO_MOSI);
 	ESP_LOGI(TAG, "CONFIG_SCLK_GPIO=%d", CONFIG_LORA_GPIO_SCLK);
@@ -98,7 +105,12 @@ void LoRaInit(void)
 	esp_err_t ret;
 	ret = spi_bus_initialize(SPI2_HOST, &spi_bus_config, SPI_DMA_CH_AUTO);
 	ESP_LOGI(TAG, "spi_bus_initialize=%d", ret);
-	assert(ret == ESP_OK);
+	if (ret != ESP_OK)
+	{
+		ESP_LOGE(TAG, "Failed to initialize SPI bus: %s", esp_err_to_name(ret));
+		return ret;
+	}
+	spi_bus_initialized = true;
 
 	spi_device_interface_config_t devcfg = {
 		.clock_speed_hz = 9000000,
@@ -110,7 +122,14 @@ void LoRaInit(void)
 	// spi_device_handle_t handle;
 	ret = spi_bus_add_device(SPI2_HOST, &devcfg, &SpiHandle);
 	ESP_LOGI(TAG, "spi_bus_add_device=%d", ret);
-	assert(ret == ESP_OK);
+	if (ret != ESP_OK)
+	{
+		ESP_LOGE(TAG, "Failed to add LoRa SPI device: %s", esp_err_to_name(ret));
+		spi_bus_free(SPI2_HOST);
+		spi_bus_initialized = false;
+		SpiHandle = NULL;
+		return ret;
+	}
 
 	// Create a mutex to protect spi_device_transmit from concurrent access
 	if (spi_mutex == NULL)
@@ -119,80 +138,104 @@ void LoRaInit(void)
 		if (spi_mutex == NULL)
 		{
 			ESP_LOGE(TAG, "Failed to create SPI mutex");
-			assert(false);
+			spi_bus_remove_device(SpiHandle);
+			SpiHandle = NULL;
+			spi_bus_free(SPI2_HOST);
+			spi_bus_initialized = false;
+			return ESP_ERR_NO_MEM;
 		}
 	}
+
+	return ESP_OK;
 }
 
-void spi_write_byte(uint8_t *Dataout, size_t DataLength)
+void LoRaDeinit(void)
 {
-	spi_transaction_t SPITransaction;
-
-	if (DataLength > 0)
+	if (SpiHandle != NULL)
 	{
-		memset(&SPITransaction, 0, sizeof(spi_transaction_t));
-		SPITransaction.length = DataLength * 8;
-		SPITransaction.tx_buffer = Dataout;
-		SPITransaction.rx_buffer = NULL;
-		if (spi_mutex)
+		esp_err_t err = spi_bus_remove_device(SpiHandle);
+		if (err != ESP_OK)
 		{
-			if (xSemaphoreTake(spi_mutex, pdMS_TO_TICKS(2000)) == pdTRUE)
-			{
-				spi_device_transmit(SpiHandle, &SPITransaction);
-				xSemaphoreGive(spi_mutex);
-			}
-			else
-			{
-				ESP_LOGE(TAG, "Timeout taking SPI mutex in spi_write_byte");
-			}
+			ESP_LOGE(TAG, "Failed to remove LoRa SPI device: %s", esp_err_to_name(err));
+			return;
 		}
-		else
-		{
-			spi_device_transmit(SpiHandle, &SPITransaction);
-		}
+		SpiHandle = NULL;
 	}
 
-	return;
+	if (spi_bus_initialized)
+	{
+		esp_err_t err = spi_bus_free(SPI2_HOST);
+		if (err != ESP_OK)
+		{
+			ESP_LOGE(TAG, "Failed to release LoRa SPI bus: %s", esp_err_to_name(err));
+			return;
+		}
+		spi_bus_initialized = false;
+	}
+
+	if (spi_mutex != NULL)
+	{
+		vSemaphoreDelete(spi_mutex);
+		spi_mutex = NULL;
+	}
+	txActive = false;
 }
 
-void spi_read_byte(uint8_t *Datain, uint8_t *Dataout, size_t DataLength)
+static esp_err_t spi_transmit(uint8_t *data_in, const uint8_t *data_out, size_t data_length)
 {
-	spi_transaction_t SPITransaction;
-
-	if (DataLength > 0)
+	if (data_length == 0)
 	{
-		memset(&SPITransaction, 0, sizeof(spi_transaction_t));
-		SPITransaction.length = DataLength * 8;
-		SPITransaction.tx_buffer = Dataout;
-		SPITransaction.rx_buffer = Datain;
-		if (spi_mutex)
-		{
-			if (xSemaphoreTake(spi_mutex, pdMS_TO_TICKS(2000)) == pdTRUE)
-			{
-				spi_device_transmit(SpiHandle, &SPITransaction);
-				xSemaphoreGive(spi_mutex);
-			}
-			else
-			{
-				ESP_LOGE(TAG, "Timeout taking SPI mutex in spi_read_byte");
-			}
-		}
-		else
-		{
-			spi_device_transmit(SpiHandle, &SPITransaction);
-		}
+		return ESP_OK;
+	}
+	if (SpiHandle == NULL || spi_mutex == NULL || data_out == NULL ||
+		(data_in == NULL && data_out == NULL))
+	{
+		lastError = ERR_SPI_TRANSACTION;
+		return ESP_ERR_INVALID_STATE;
+	}
+	if (xSemaphoreTake(spi_mutex, pdMS_TO_TICKS(2000)) != pdTRUE)
+	{
+		ESP_LOGE(TAG, "Timeout taking LoRa SPI mutex");
+		lastError = ERR_SPI_TRANSACTION;
+		return ESP_ERR_TIMEOUT;
 	}
 
-	return;
+	spi_transaction_t transaction = {
+		.length = data_length * 8,
+		.tx_buffer = data_out,
+		.rx_buffer = data_in,
+	};
+	esp_err_t err = spi_device_transmit(SpiHandle, &transaction);
+	xSemaphoreGive(spi_mutex);
+	if (err != ESP_OK)
+	{
+		ESP_LOGE(TAG, "LoRa SPI transaction failed: %s", esp_err_to_name(err));
+		lastError = ERR_SPI_TRANSACTION;
+	}
+	return err;
+}
+
+esp_err_t spi_write_byte(uint8_t *Dataout, size_t DataLength)
+{
+	return spi_transmit(NULL, Dataout, DataLength);
+}
+
+esp_err_t spi_read_byte(uint8_t *Datain, uint8_t *Dataout, size_t DataLength)
+{
+	if (Datain != NULL && Datain != Dataout && DataLength > 0)
+	{
+		memset(Datain, 0, DataLength);
+	}
+	return spi_transmit(Datain, Dataout, DataLength);
 }
 
 uint8_t spi_transfer(uint8_t address)
 {
-	uint8_t datain[1];
+	uint8_t datain[1] = {0};
 	uint8_t dataout[1];
 	dataout[0] = address;
 	// spi_write_byte(dataout, 1 );
-	spi_read_byte(datain, dataout, 1);
+	(void)spi_read_byte(datain, dataout, 1);
 	return datain[0];
 }
 
@@ -336,6 +379,11 @@ void LoRaDebugPrint(bool enable)
 
 uint8_t LoRaReceive(uint8_t *pData, int16_t len)
 {
+	if (pData == NULL || len <= 0)
+	{
+		return 0;
+	}
+
 	uint8_t rxLen = 0;
 	uint16_t irqRegs = GetIrqStatus();
 	// uint8_t status = GetStatus();
@@ -354,6 +402,11 @@ bool LoRaSend(uint8_t *pData, int16_t len, uint8_t mode)
 {
 	uint16_t irqStatus;
 	bool rv = false;
+	if (pData == NULL || len <= 0 || len > 255)
+	{
+		ESP_LOGE(TAG, "Invalid LoRa transmit buffer or length: %d", len);
+		return false;
+	}
 
 	if (txActive == false)
 	{
@@ -372,10 +425,18 @@ bool LoRaSend(uint8_t *pData, int16_t len, uint8_t mode)
 
 		if (mode & SX126x_TXMODE_SYNC)
 		{
+			const TickType_t wait_started = xTaskGetTickCount();
+			const TickType_t software_timeout = pdMS_TO_TICKS(750);
 			irqStatus = GetIrqStatus();
 			while ((!(irqStatus & SX126X_IRQ_TX_DONE)) && (!(irqStatus & SX126X_IRQ_TIMEOUT)))
 			{
-				delay(1);
+				if ((TickType_t)(xTaskGetTickCount() - wait_started) >= software_timeout)
+				{
+					ESP_LOGE(TAG, "Software timeout waiting for LoRa transmission");
+					lastError = ERR_TX_TIMEOUT;
+					break;
+				}
+				vTaskDelay(1);
 				irqStatus = GetIrqStatus();
 			}
 			if (debugPrint)
@@ -438,6 +499,11 @@ bool ReceiveMode(void)
 
 void GetPacketStatus(int8_t *rssiPacket, int8_t *snrPacket)
 {
+	if (rssiPacket == NULL || snrPacket == NULL)
+	{
+		return;
+	}
+
 	uint8_t buf[4];
 	ReadCommand(SX126X_CMD_GET_PACKET_STATUS, buf, 4); // 0x14
 	*rssiPacket = (buf[3] >> 1) * -1;
@@ -579,6 +645,12 @@ void CalibrateImage(uint32_t frequency)
 	{
 		calFreq[0] = 0x6B;
 		calFreq[1] = 0x6F;
+	}
+	else
+	{
+		ESP_LOGE(TAG, "Unsupported frequency for image calibration: %" PRIu32, frequency);
+		lastError = ERR_INVALID_MODE;
+		return;
 	}
 	WriteCommand(SX126X_CMD_CALIBRATE_IMAGE, calFreq, 2); // 0x98
 }
@@ -781,8 +853,9 @@ void SetTx(uint32_t timeoutInMs)
 	uint32_t tout = timeoutInMs;
 	if (timeoutInMs != 0)
 	{
-		uint32_t timeoutInUs = timeoutInMs * 1000;
-		tout = (uint32_t)(timeoutInUs / 0.015625);
+		/* SX126x timeout units are 15.625 us, i.e. 64 units per millisecond. */
+		uint64_t timeout_units = (uint64_t)timeoutInMs * 64ULL;
+		tout = timeout_units > 0xFFFFFFULL ? 0xFFFFFFU : (uint32_t)timeout_units;
 	}
 	if (debugPrint)
 	{
@@ -839,28 +912,33 @@ void GetRxBufferStatus(uint8_t *payloadLength, uint8_t *rxStartBufferPointer)
 	*rxStartBufferPointer = buf[2];
 }
 
-void WaitForIdleBegin(unsigned long timeout, char *text)
+bool WaitForIdleBegin(unsigned long timeout, char *text)
 {
-	// ensure BUSY is low (state meachine ready)
-	bool stop = false;
-	for (int retry = 0; retry < 10; retry++)
-	{
-		if (retry == 9)
-			stop = true;
-		bool ret = WaitForIdle(BUSY_WAIT, text, stop);
-		if (ret == true)
-			break;
-		ESP_LOGW(TAG, "WaitForIdle fail retry=%d", retry);
-		vTaskDelay(1);
-	}
+    // ensure BUSY is low (state meachine ready)
+    for (int retry = 0; retry < 3; retry++)
+    {
+        bool stop = retry == 2;
+        if (WaitForIdle(timeout, text, stop))
+        {
+            return true;
+        }
+        ESP_LOGW(TAG, "WaitForIdle fail retry=%d", retry);
+        vTaskDelay(1);
+    }
+    return false;
 }
 
 bool WaitForIdle(unsigned long timeout, char *text, bool stop)
 {
 	bool ret = true;
 	TickType_t start = xTaskGetTickCount();
+	TickType_t timeout_ticks = pdMS_TO_TICKS(timeout);
+	if (timeout_ticks == 0)
+	{
+		timeout_ticks = 1;
+	}
 	// delayMicroseconds(1);
-	while (xTaskGetTickCount() - start < (timeout / portTICK_PERIOD_MS))
+	while ((TickType_t)(xTaskGetTickCount() - start) < timeout_ticks)
 	{
 		if (gpio_get_level(SX126x_BUSY) == 0)
 			break;
@@ -870,6 +948,7 @@ bool WaitForIdle(unsigned long timeout, char *text, bool stop)
 	}
 	if (gpio_get_level(SX126x_BUSY))
 	{
+		ret = false;
 		if (stop)
 		{
 			ESP_LOGE(TAG, "WaitForIdle Timeout text=%s timeout=%lu start=%" PRIu32, text, timeout, start);
@@ -878,7 +957,6 @@ bool WaitForIdle(unsigned long timeout, char *text, bool stop)
 		else
 		{
 			ESP_LOGW(TAG, "WaitForIdle Timeout text=%s timeout=%lu start=%" PRIu32, text, timeout, start);
-			ret = false;
 		}
 	}
 	return ret;
@@ -886,6 +964,12 @@ bool WaitForIdle(unsigned long timeout, char *text, bool stop)
 
 uint8_t ReadBuffer(uint8_t *rxData, int16_t rxDataLen)
 {
+	if (rxData == NULL || rxDataLen <= 0)
+	{
+		ESP_LOGE(TAG, "Invalid receive buffer");
+		return 0;
+	}
+
 	uint8_t offset = 0;
 	uint8_t payloadLength = 0;
 	GetRxBufferStatus(&payloadLength, &offset);
@@ -896,26 +980,22 @@ uint8_t ReadBuffer(uint8_t *rxData, int16_t rxDataLen)
 	}
 
 	// ensure BUSY is low (state meachine ready)
-	WaitForIdle(BUSY_WAIT, "start ReadBuffer", true);
+    if (!WaitForIdle(BUSY_WAIT, "start ReadBuffer", true))
+    {
+        return 0;
+    }
 
-	// start transfer
-	uint8_t *buf;
-	buf = malloc(payloadLength + 3);
-	if (buf != NULL)
+	uint8_t buf[255 + 3];
+	buf[0] = SX126X_CMD_READ_BUFFER; // 0x1E
+	buf[1] = offset;				 // offset in rx fifo
+	buf[2] = SX126X_CMD_NOP;
+	memset(&buf[3], SX126X_CMD_NOP, payloadLength);
+	if (spi_read_byte(buf, buf, payloadLength + 3U) != ESP_OK)
 	{
-		buf[0] = SX126X_CMD_READ_BUFFER; // 0x1E
-		buf[1] = offset;				 // offset in rx fifo
-		buf[2] = SX126X_CMD_NOP;
-		memset(&buf[3], SX126X_CMD_NOP, payloadLength);
-		spi_read_byte(buf, buf, payloadLength + 3);
-		memcpy(rxData, &buf[3], payloadLength);
-		free(buf);
+		ESP_LOGE(TAG, "Failed to read LoRa receive buffer");
+		return 0;
 	}
-	else
-	{
-		ESP_LOGE(TAG, "ReadBuffer malloc fail");
-		payloadLength = 0;
-	}
+	memcpy(rxData, &buf[3], payloadLength);
 
 	// wait for BUSY to go low
 	WaitForIdle(BUSY_WAIT, "end ReadBuffer", false);
@@ -925,23 +1005,26 @@ uint8_t ReadBuffer(uint8_t *rxData, int16_t rxDataLen)
 
 void WriteBuffer(uint8_t *txData, int16_t txDataLen)
 {
-	// ensure BUSY is low (state meachine ready)
-	WaitForIdle(BUSY_WAIT, "start WriteBuffer", true);
-
-	// start transfer
-	uint8_t *buf;
-	buf = malloc(txDataLen + 2);
-	if (buf != NULL)
+	if (txData == NULL || txDataLen <= 0 || txDataLen > 255)
 	{
-		buf[0] = SX126X_CMD_WRITE_BUFFER; // 0x0E
-		buf[1] = 0;						  // offset in tx fifo
-		memcpy(&buf[2], txData, txDataLen);
-		spi_write_byte(buf, txDataLen + 2);
-		free(buf);
+		ESP_LOGE(TAG, "Invalid transmit buffer or length: %d", txDataLen);
+		lastError = ERR_PACKET_TOO_LONG;
+		return;
 	}
-	else
+
+	// ensure BUSY is low (state meachine ready)
+    if (!WaitForIdle(BUSY_WAIT, "start WriteBuffer", true))
+    {
+        return;
+    }
+
+	uint8_t buf[255 + 2];
+	buf[0] = SX126X_CMD_WRITE_BUFFER; // 0x0E
+	buf[1] = 0;						  // offset in tx fifo
+	memcpy(&buf[2], txData, txDataLen);
+	if (spi_write_byte(buf, (size_t)txDataLen + 2U) != ESP_OK)
 	{
-		ESP_LOGE(TAG, "WriteBuffer malloc fail");
+		ESP_LOGE(TAG, "Failed to write LoRa transmit buffer");
 	}
 
 	// wait for BUSY to go low
@@ -950,8 +1033,18 @@ void WriteBuffer(uint8_t *txData, int16_t txDataLen)
 
 void WriteRegister(uint16_t reg, uint8_t *data, uint8_t numBytes)
 {
+	if (numBytes > 13 || (numBytes > 0 && data == NULL))
+	{
+		ESP_LOGE(TAG, "Invalid WriteRegister length: %u", (unsigned int)numBytes);
+		lastError = ERR_SPI_TRANSACTION;
+		return;
+	}
+
 	// ensure BUSY is low (state meachine ready)
-	WaitForIdle(BUSY_WAIT, "start WriteRegister", true);
+    if (!WaitForIdle(BUSY_WAIT, "start WriteRegister", true))
+    {
+        return;
+    }
 
 	if (debugPrint)
 	{
@@ -968,7 +1061,10 @@ void WriteRegister(uint16_t reg, uint8_t *data, uint8_t numBytes)
 	buf[1] = (reg & 0xFF00) >> 8;
 	buf[2] = reg & 0xff;
 	memcpy(&buf[3], data, numBytes);
-	spi_write_byte(buf, 3 + numBytes);
+	if (spi_write_byte(buf, 3U + numBytes) != ESP_OK)
+	{
+		return;
+	}
 
 	// wait for BUSY to go low
 	WaitForIdle(BUSY_WAIT, "end WriteRegister", false);
@@ -976,8 +1072,22 @@ void WriteRegister(uint16_t reg, uint8_t *data, uint8_t numBytes)
 
 void ReadRegister(uint16_t reg, uint8_t *data, uint8_t numBytes)
 {
+	if (numBytes > 12 || (numBytes > 0 && data == NULL))
+	{
+		ESP_LOGE(TAG, "Invalid ReadRegister length: %u", (unsigned int)numBytes);
+		lastError = ERR_SPI_TRANSACTION;
+		return;
+	}
+
 	// ensure BUSY is low (state meachine ready)
-	WaitForIdle(BUSY_WAIT, "start ReadRegister", true);
+    if (!WaitForIdle(BUSY_WAIT, "start ReadRegister", true))
+    {
+        if (data != NULL && numBytes > 0)
+        {
+            memset(data, 0, numBytes);
+        }
+        return;
+    }
 
 	if (debugPrint)
 	{
@@ -990,8 +1100,18 @@ void ReadRegister(uint16_t reg, uint8_t *data, uint8_t numBytes)
 	buf[0] = SX126X_CMD_READ_REGISTER;
 	buf[1] = (reg & 0xFF00) >> 8;
 	buf[2] = reg & 0xff;
-	spi_read_byte(buf, buf, 4 + numBytes);
-	memcpy(data, &buf[4], numBytes);
+	if (spi_read_byte(buf, buf, 4U + numBytes) != ESP_OK)
+	{
+		if (data != NULL)
+		{
+			memset(data, 0, numBytes);
+		}
+		return;
+	}
+    if (numBytes > 0)
+    {
+        memcpy(data, &buf[4], numBytes);
+    }
 	if (debugPrint)
 	{
 		for (uint8_t n = 0; n < numBytes; n++)
@@ -1007,8 +1127,8 @@ void ReadRegister(uint16_t reg, uint8_t *data, uint8_t numBytes)
 // WriteCommand with retry
 void WriteCommand(uint8_t cmd, uint8_t *data, uint8_t numBytes)
 {
-	uint8_t status;
-	for (int retry = 1; retry < 10; retry++)
+	uint8_t status = SX126X_STATUS_SPI_FAILED;
+    for (int retry = 1; retry <= 3; retry++)
 	{
 		status = WriteCommand2(cmd, data, numBytes);
 		ESP_LOGD(TAG, "status=%02x", status);
@@ -1025,8 +1145,17 @@ void WriteCommand(uint8_t cmd, uint8_t *data, uint8_t numBytes)
 
 uint8_t WriteCommand2(uint8_t cmd, uint8_t *data, uint8_t numBytes)
 {
+	if (numBytes > 15 || (numBytes > 0 && data == NULL))
+	{
+		ESP_LOGE(TAG, "Invalid WriteCommand length: %u", (unsigned int)numBytes);
+		return SX126X_STATUS_SPI_FAILED;
+	}
+
 	// ensure BUSY is low (state meachine ready)
-	WaitForIdle(BUSY_WAIT, "start WriteCommand2", true);
+    if (!WaitForIdle(BUSY_WAIT, "start WriteCommand2", true))
+    {
+        return SX126X_STATUS_SPI_FAILED;
+    }
 
 	if (debugPrint)
 	{
@@ -1035,9 +1164,17 @@ uint8_t WriteCommand2(uint8_t cmd, uint8_t *data, uint8_t numBytes)
 
 	// start transfer
 	uint8_t buf[16];
+	memset(buf, SX126X_CMD_NOP, sizeof(buf));
 	buf[0] = cmd;
-	memcpy(&buf[1], data, numBytes);
-	spi_read_byte(buf, buf, numBytes + 1);
+	if (numBytes > 0)
+	{
+		memcpy(&buf[1], data, numBytes);
+	}
+	size_t transfer_length = numBytes == 0 ? 2U : (size_t)numBytes + 1U;
+	if (spi_read_byte(buf, buf, transfer_length) != ESP_OK)
+	{
+		return SX126X_STATUS_SPI_FAILED;
+	}
 
 	uint8_t status = 0;
 	uint8_t cmd_status = buf[1] & 0xe;
@@ -1064,8 +1201,22 @@ uint8_t WriteCommand2(uint8_t cmd, uint8_t *data, uint8_t numBytes)
 
 void ReadCommand(uint8_t cmd, uint8_t *data, uint8_t numBytes)
 {
+	if (numBytes > 15 || (numBytes > 0 && data == NULL))
+	{
+		ESP_LOGE(TAG, "Invalid ReadCommand length: %u", (unsigned int)numBytes);
+		lastError = ERR_SPI_TRANSACTION;
+		return;
+	}
+
 	// ensure BUSY is low (state meachine ready)
-	WaitForIdleBegin(BUSY_WAIT, "start ReadCommand");
+    if (!WaitForIdleBegin(BUSY_WAIT, "start ReadCommand"))
+    {
+        if (data != NULL)
+        {
+            memset(data, 0, numBytes);
+        }
+        return;
+    }
 
 	if (debugPrint)
 	{
@@ -1076,7 +1227,14 @@ void ReadCommand(uint8_t cmd, uint8_t *data, uint8_t numBytes)
 	uint8_t buf[16];
 	memset(buf, SX126X_CMD_NOP, sizeof(buf));
 	buf[0] = cmd;
-	spi_read_byte(buf, buf, 1 + numBytes);
+	if (spi_read_byte(buf, buf, 1U + numBytes) != ESP_OK)
+	{
+		if (data != NULL)
+		{
+			memset(data, 0, numBytes);
+		}
+		return;
+	}
 	if (data != NULL && numBytes)
 		memcpy(data, &buf[1], numBytes);
 

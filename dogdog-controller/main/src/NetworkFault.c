@@ -9,19 +9,20 @@
 #include <esp_system.h>
 #include "SevenSegment.h"
 #include "Clock.h"
+#include "esp_timer.h"
 
 extern QueueHandle_t networkFaultQueue;
 extern QueueHandle_t sevenSegmentQueue;
 
 const char *NETWORK_FAUT_TAG = "NETWORK_FAULT";
 
-void sendFaultInformation(int start, int stop)
+bool sendFaultInformation(int start, int stop)
 {
     SevenSegmentDisplay faultInformation;
     faultInformation.type = SEVEN_SEGMENT_NETWORK_FAULT;
     faultInformation.startFault = start;
     faultInformation.stopFault = stop;
-    xQueueSend(sevenSegmentQueue, &faultInformation, 0);
+    return xQueueSend(sevenSegmentQueue, &faultInformation, 0) == pdTRUE;
 }
 
 int last_start_state = 2;
@@ -38,6 +39,8 @@ void Network_Fault_Task(void *params)
 
     int64_t lastSeenStart = -timeoutMs;
     int64_t lastSeenStop = -timeoutMs;
+    int last_sent_start = -1;
+    int last_sent_stop = -1;
 
     while (1)
     {
@@ -45,24 +48,19 @@ void Network_Fault_Task(void *params)
         received.station = NOTHING_ALIVE;
         if (xQueueReceive(networkFaultQueue, &received, pdMS_TO_TICKS(500)))
         {
-            timeval_t now;
-            gettimeofday(&now, NULL);
             if (received.station == START_ALIVE)
             {
-
-                lastSeenStart = TIME_US(now) / 1000;
+                lastSeenStart = esp_timer_get_time() / 1000;
             }
             else if (received.station == STOP_ALIVE)
             {
-                lastSeenStop = TIME_US(now) / 1000;
+                lastSeenStop = esp_timer_get_time() / 1000;
             }
         }
 
-        timeval_t now;
-        gettimeofday(&now, NULL);
-
-        /* currentTime in milliseconds */
-        int64_t currentTime = TIME_US(now) / 1000;
+        /* Connectivity timeouts are durations and must not depend on wall-clock
+           corrections made by the RTC/time-sync code. */
+        int64_t currentTime = esp_timer_get_time() / 1000;
 
         if (received.station != NOTHING_ALIVE)
         {
@@ -82,6 +80,13 @@ void Network_Fault_Task(void *params)
         int to_send_for_start = startFault ? 2 : last_start_state;
         int to_send_for_stop = stopFault ? 2 : last_stop_state;
 
-        sendFaultInformation(to_send_for_start, to_send_for_stop);
+        if (to_send_for_start != last_sent_start || to_send_for_stop != last_sent_stop)
+        {
+            if (sendFaultInformation(to_send_for_start, to_send_for_stop))
+            {
+                last_sent_start = to_send_for_start;
+                last_sent_stop = to_send_for_stop;
+            }
+        }
     }
 }

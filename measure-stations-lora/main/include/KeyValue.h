@@ -1,14 +1,12 @@
-#ifndef __KEY_VALUE_H
-#define __KEY_VALUE_H
+#ifndef KEY_VALUE_H
+#define KEY_VALUE_H
 
-#include <stdio.h>
-#include "nvs_flash.h"
-#include "nvs.h"
+#include <stdint.h>
+
 #include "esp_err.h"
-#include "esp_log.h"
 
-void storeValue(const char *key, uint32_t value);
-int getValue(const char *key);
-void increaseKey(const char *key);
+esp_err_t storeValue(const char *key, int32_t value);
+esp_err_t getValue(const char *key, int32_t *value);
+esp_err_t increaseKey(const char *key);
 
 #endif
