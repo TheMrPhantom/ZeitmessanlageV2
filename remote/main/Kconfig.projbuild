@@ -1,12 +1,11 @@
-menu "EDIT HERE: Zeitmessanlage configuration"
-    choice STATION_TYPE
-        prompt "What is the station type?"
-        default START
+menu "Horn stop remote"
+
+    config HORN_TIMER_WIFI_CHANNEL
+        int "Horn Wi-Fi channel"
+        range 1 13
+        default 1
         help
-            Choose if the compiled code is for the start or the stop station
-        config START
-            bool "START"
-        config STOP
-            bool "STOP"
-    endchoice
+            Wi-Fi channel used to send the stop command to the horn.
+            This must match CONFIG_BUZZER_SOFTAP_CHANNEL in the horn project.
+
 endmenu

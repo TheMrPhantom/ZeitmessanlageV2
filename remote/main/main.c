@@ -1,156 +1,174 @@
-/*
- * SPDX-FileCopyrightText: 2010-2022 Espressif Systems (Shanghai) CO LTD
- *
- * SPDX-License-Identifier: CC0-1.0
- */
-
-#include <stdio.h>
-#include <inttypes.h>
-#include "sdkconfig.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "esp_chip_info.h"
-#include "esp_flash.h"
-#include "esp_system.h"
-#include "esp_log.h"
-#include "driver/gpio.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
-#include "esp_sleep.h"
-#include "driver/rtc_io.h"
+#include <stdbool.h>
+#include <stdint.h>
 #include <string.h>
-#include <stdio.h>
+
+#include "driver/gpio.h"
+#include "driver/rtc_io.h"
+#include "esp_check.h"
+#include "esp_err.h"
+#include "esp_event.h"
+#include "esp_log.h"
+#include "esp_mac.h"
+#include "esp_netif.h"
+#include "esp_sleep.h"
+#include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "freertos/queue.h"
-#include "driver/gpio.h"
-#include "esp_wifi.h"
-#include "esp_now.h"
-#include "esp_netif.h"
-#include "esp_mac.h"
-#include "esp_event.h"
-#include "esp_flash.h"
 #include "nvs_flash.h"
+#include "sdkconfig.h"
 
-#define min(x, y) (((x) < (y)) ? (x) : (y))
+#define BUTTON_GPIO GPIO_NUM_33
+#define BUTTON_RELEASE_DEBOUNCE_MS 50
 
-const char *TAG = "MAIN";
+#define HORN_FRAME_HEADER_LEN 24
+#define HORN_CONTROL_MESSAGE_LEN 2
+#define HORN_FRAME_LEN (HORN_FRAME_HEADER_LEN + HORN_CONTROL_MESSAGE_LEN)
+#define HORN_VENDOR_MARKER 0xdd
+#define HORN_COMMAND_STOP 0x03
 
-void receiveCallback(const esp_now_recv_info_t *esp_now_info, const uint8_t *data, int data_len)
-// Called when data is received
+static const char *TAG = "horn_remote";
+static const uint8_t s_horn_mac[6] = {0xde, 0x09, 0xdd, 0x09, 0x00, 0x01};
+
+static uint8_t s_source_mac[6];
+static uint8_t s_sequence_number;
+
+static esp_err_t init_nvs(void)
 {
-    // Only allow a maximum of 250 characters in the message + a null terminating byte
-    char buffer[ESP_NOW_MAX_DATA_LEN + 1];
-    int msgLen = min(ESP_NOW_MAX_DATA_LEN, data_len);
-    strncpy(buffer, (const char *)data, msgLen);
-
-    // Make sure we are null terminated
-    buffer[msgLen] = 0;
-
-    ESP_LOGI(TAG, "Received Package: %s", buffer);
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
+    return err;
 }
 
-void sentCallback(const uint8_t *macAddr, esp_now_send_status_t status)
-// Called when data is sent
+static esp_err_t init_button(void)
 {
-    ESP_LOGI(TAG, "Last Packet Send Status: %s", (status == ESP_NOW_SEND_SUCCESS) ? "Delivery Success" : "Delivery Fail");
+    const gpio_config_t config = {
+        .pin_bit_mask = 1ULL << BUTTON_GPIO,
+        .mode = GPIO_MODE_INPUT,
+        .pull_up_en = GPIO_PULLUP_ENABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE,
+    };
+    return gpio_config(&config);
 }
 
-void broadcast(char *message)
-// Emulates a broadcast
+static esp_err_t init_wifi(void)
 {
-    const char *BROADCAST_TAG = "NETWORK-BROADCAST";
+    ESP_RETURN_ON_ERROR(esp_netif_init(), TAG, "Failed to initialize esp-netif");
+    ESP_RETURN_ON_ERROR(esp_event_loop_create_default(), TAG, "Failed to create default event loop");
 
-    ESP_LOGI(BROADCAST_TAG, "Sending message: %s", message);
-    // Broadcast a message to every device in range
-    uint8_t broadcastAddress[] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-    esp_now_peer_info_t peerInfo = {};
-    memcpy(&peerInfo.peer_addr, broadcastAddress, 6);
-    if (!esp_now_is_peer_exist(broadcastAddress))
-    {
-        esp_now_add_peer(&peerInfo);
+    wifi_init_config_t wifi_config = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_RETURN_ON_ERROR(esp_wifi_init(&wifi_config), TAG, "Failed to initialize Wi-Fi");
+    ESP_RETURN_ON_ERROR(esp_wifi_set_storage(WIFI_STORAGE_RAM), TAG, "Failed to set Wi-Fi storage");
+    ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA), TAG, "Failed to set station mode");
+    ESP_RETURN_ON_ERROR(esp_read_mac(s_source_mac, ESP_MAC_WIFI_STA), TAG, "Failed to read station MAC");
+    return ESP_OK;
+}
+
+static void build_stop_frame(uint8_t frame[HORN_FRAME_LEN])
+{
+    const uint8_t frame_template[HORN_FRAME_LEN] = {
+        0xd0, 0x00,                          /* action management frame */
+        0x00, 0x00,                          /* duration */
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* destination */
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* source */
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, /* BSSID */
+        0x00, 0x00,                          /* sequence control */
+        HORN_VENDOR_MARKER,
+        HORN_COMMAND_STOP,
+    };
+
+    memcpy(frame, frame_template, sizeof(frame_template));
+    memcpy(frame + 4, s_horn_mac, sizeof(s_horn_mac));
+    memcpy(frame + 10, s_source_mac, sizeof(s_source_mac));
+    memcpy(frame + 16, s_horn_mac, sizeof(s_horn_mac));
+    frame[22] = (uint8_t)(s_sequence_number << 4);
+    frame[23] = (uint8_t)(s_sequence_number >> 4);
+    s_sequence_number++;
+}
+
+static esp_err_t send_stop_command(void)
+{
+    esp_err_t err = esp_wifi_start();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start Wi-Fi: %s", esp_err_to_name(err));
+        return err;
     }
 
-    // Send message
-    esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)message, strlen(message));
+    err = esp_wifi_set_channel(CONFIG_HORN_TIMER_WIFI_CHANNEL, WIFI_SECOND_CHAN_NONE);
+    if (err == ESP_OK) {
+        uint8_t frame[HORN_FRAME_LEN];
+        build_stop_frame(frame);
+        err = esp_wifi_80211_tx(WIFI_IF_STA, frame, sizeof(frame), false);
+    }
 
-    // Print results to serial monitor
-    if (result != ESP_OK)
-    {
-        if (result == ESP_ERR_ESPNOW_NOT_INIT)
-        {
-            ESP_LOGE(BROADCAST_TAG, "ESP-NOW not Init.");
-        }
-        else if (result == ESP_ERR_ESPNOW_ARG)
-        {
-            ESP_LOGE(BROADCAST_TAG, "Invalid Argument");
-        }
-        else if (result == ESP_ERR_ESPNOW_INTERNAL)
-        {
-            ESP_LOGE(BROADCAST_TAG, "Internal Error");
-        }
-        else if (result == ESP_ERR_ESPNOW_NO_MEM)
-        {
-            ESP_LOGE(BROADCAST_TAG, "ESP_ERR_ESPNOW_NO_MEM");
-        }
-        else if (result == ESP_ERR_ESPNOW_NOT_FOUND)
-        {
-            ESP_LOGE(BROADCAST_TAG, "Peer not found.");
-        }
-        else
-        {
-            ESP_LOGE(BROADCAST_TAG, "Unknown error");
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "Horn stop command sent");
+        vTaskDelay(pdMS_TO_TICKS(20));
+    } else {
+        ESP_LOGE(TAG, "Failed to send horn stop command: %s", esp_err_to_name(err));
+    }
+
+    esp_err_t stop_err = esp_wifi_stop();
+    if (stop_err != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to stop Wi-Fi: %s", esp_err_to_name(stop_err));
+        if (err == ESP_OK) {
+            err = stop_err;
         }
     }
+    return err;
+}
+
+static void wait_for_button_release(void)
+{
+    TickType_t released_since = 0;
+
+    while (released_since < pdMS_TO_TICKS(BUTTON_RELEASE_DEBOUNCE_MS)) {
+        if (gpio_get_level(BUTTON_GPIO) == 0) {
+            released_since = 0;
+        } else {
+            released_since++;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+}
+
+static bool sleep_until_button_press(void)
+{
+    ESP_ERROR_CHECK(rtc_gpio_pullup_en(BUTTON_GPIO));
+    ESP_ERROR_CHECK(esp_sleep_enable_ext0_wakeup(BUTTON_GPIO, 0));
+
+    esp_err_t err = esp_light_sleep_start();
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to enter light sleep: %s", esp_err_to_name(err));
+        vTaskDelay(pdMS_TO_TICKS(100));
+    }
+
+    ESP_ERROR_CHECK(rtc_gpio_deinit(BUTTON_GPIO));
+    ESP_ERROR_CHECK(init_button());
+    return err == ESP_OK && esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT0;
 }
 
 void app_main(void)
 {
-    while (true)
-    {
-        esp_rom_gpio_pad_select_gpio(GPIO_NUM_33);
-        gpio_set_direction(GPIO_NUM_33, GPIO_MODE_INPUT);
-        gpio_pulldown_dis(GPIO_NUM_33);
-        gpio_pullup_en(GPIO_NUM_33);
+    ESP_ERROR_CHECK(init_nvs());
+    ESP_ERROR_CHECK(init_button());
+    ESP_ERROR_CHECK(init_wifi());
 
-        ESP_LOGI(TAG, "Initialising WiFi");
-        wifi_init_config_t wifi_config = WIFI_INIT_CONFIG_DEFAULT();
-        esp_netif_init();
-        esp_event_loop_create_default();
+    ESP_LOGI(TAG,
+             "Ready on button GPIO %d; horn Wi-Fi channel %d",
+             BUTTON_GPIO,
+             CONFIG_HORN_TIMER_WIFI_CHANNEL);
 
-        nvs_flash_init();
-
-        esp_wifi_init(&wifi_config);
-        esp_wifi_set_mode(WIFI_MODE_STA);
-        esp_wifi_set_storage(WIFI_STORAGE_RAM);
-        esp_wifi_set_protocol(WIFI_IF_STA, WIFI_PROTOCOL_LR);
-        esp_wifi_start();
-
-        ESP_LOGI(TAG, "Initialising ESP NOW");
-        if (esp_now_init() == ESP_OK)
-        {
-            ESP_LOGI(TAG, "ESP-NOW Init Success");
-            esp_now_register_recv_cb(receiveCallback);
-            esp_now_register_send_cb(sentCallback);
-        }
-        else
-        {
-            ESP_LOGE(TAG, "ESP-NOW Init Failed");
-            vTaskDelay(pdTICKS_TO_MS(3000));
-            esp_restart();
+    bool button_pressed = gpio_get_level(BUTTON_GPIO) == 0;
+    while (true) {
+        if (button_pressed) {
+            send_stop_command();
+            wait_for_button_release();
         }
 
-        broadcast("reset");
-
-        esp_wifi_stop();
-
-        while (gpio_get_level(GPIO_NUM_33) == 0)
-        {
-            vTaskDelay(pdMS_TO_TICKS(10));
-        }
-
-        rtc_gpio_pullup_en(GPIO_NUM_33);
-        esp_sleep_enable_ext0_wakeup(GPIO_NUM_33, 0);
-        esp_light_sleep_start();
+        button_pressed = sleep_until_button_press();
     }
 }
