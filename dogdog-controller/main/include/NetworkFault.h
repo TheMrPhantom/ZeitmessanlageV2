@@ -1,6 +1,8 @@
 #ifndef __NETWORK_FAULT_H
 #define __NETWORK_FAULT_H
 
+#include <stdbool.h>
+
 #define NOTHING_ALIVE -1
 #define START_ALIVE 0
 #define STOP_ALIVE 1
@@ -12,6 +14,6 @@ typedef struct StationConnectivityStatus
 } StationConnectivityStatus;
 
 void Network_Fault_Task(void *params);
-void sendFaultInformation(int start, int stop);
+bool sendFaultInformation(int start, int stop);
 
 #endif

@@ -1,17 +1,27 @@
-#include <sys/time.h>
-#include "esp_private/esp_clk.h"
-typedef struct timeval timeval_t;
+#ifndef SENSOR_H
+#define SENSOR_H
 
-#define TIME_US(t) ((int64_t)t.tv_sec * 1000000L + (int64_t)t.tv_usec)
+#include <stdbool.h>
+#include <stdint.h>
 
-void Sensor_Interrupt_Task(void *params);
-void Sensor_Status_Task(void *params);
-void init_Pins();
-int get_num_sensors();
+#include "esp_err.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/event_groups.h"
+
+#define MEASUREMENT_SENSOR_READY BIT0
+
+extern EventGroupHandle_t measurementStartupEvents;
 
 typedef struct PinTrigger
 {
     int pin;
     int state;
-    esp_cpu_cycle_count_t triggered_at;
+    int64_t triggered_at_us;
 } PinTrigger;
+
+void Sensor_Interrupt_Task(void *params);
+void Sensor_Status_Task(void *params);
+esp_err_t init_Pins(void);
+bool get_last_release_timestamp(int64_t *timestamp);
+
+#endif

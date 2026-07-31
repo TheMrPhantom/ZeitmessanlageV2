@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <inttypes.h>
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
@@ -52,7 +53,7 @@
 
 extern QueueHandle_t buzzerQueue;
 
-void init_buzzer()
+static esp_err_t init_buzzer(void)
 {
     // Prepare and then apply the LEDC PWM timer configuration
     ledc_timer_config_t ledc_timer = {
@@ -61,7 +62,11 @@ void init_buzzer()
         .duty_resolution = LEDC_DUTY_RES,
         .freq_hz = LEDC_FREQUENCY, // Set output frequency at 5 kHz
         .clk_cfg = LEDC_AUTO_CLK};
-    ESP_ERROR_CHECK(ledc_timer_config(&ledc_timer));
+    esp_err_t err = ledc_timer_config(&ledc_timer);
+    if (err != ESP_OK)
+    {
+        return err;
+    }
 
     // Prepare and then apply the LEDC PWM channel configuration
     ledc_channel_config_t ledc_channel = {
@@ -72,41 +77,56 @@ void init_buzzer()
         .gpio_num = LEDC_OUTPUT_IO,
         .duty = 0, // Set duty to 0%
         .hpoint = 0};
-    ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
+    return ledc_channel_config(&ledc_channel);
 }
-
 void sound(uint32_t freq, uint32_t duration)
 {
+    if (ledc_set_freq(LEDC_MODE, LEDC_TIMER, freq) == 0)
+    {
+        ESP_LOGE(TAG, "Failed to set buzzer frequency to %" PRIu32 " Hz", freq);
+        return;
+    }
     // start
-    ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_0, LEDC_DUTY); // 12% duty - play here for your speaker or buzzer
-    ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_0);
+    ESP_ERROR_CHECK_WITHOUT_ABORT(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_0, LEDC_DUTY));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_0));
     ESP_LOGI(TAG, "Buzzing start");
     vTaskDelay(pdMS_TO_TICKS(duration));
     // stop
-    ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_0, 0);
-    ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_0);
+    ESP_ERROR_CHECK_WITHOUT_ABORT(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_0, 0));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_0));
     ESP_LOGI(TAG, "Buzzing end");
 }
 
 void startSound(uint32_t freq)
 {
+    if (ledc_set_freq(LEDC_MODE, LEDC_TIMER, freq) == 0)
+    {
+        ESP_LOGE(TAG, "Failed to set buzzer frequency to %" PRIu32 " Hz", freq);
+        return;
+    }
     // start
-    ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_0, LEDC_DUTY); // 12% duty - play here for your speaker or buzzer
-    ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_0);
+    ESP_ERROR_CHECK_WITHOUT_ABORT(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_0, LEDC_DUTY));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_0));
     ESP_LOGI(TAG, "Buzzing start");
 }
 
 void stopSound()
 {
     // stop
-    ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_0, 0);
-    ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_0);
+    ESP_ERROR_CHECK_WITHOUT_ABORT(ledc_set_duty(LEDC_MODE, LEDC_CHANNEL_0, 0));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(ledc_update_duty(LEDC_MODE, LEDC_CHANNEL_0));
     ESP_LOGI(TAG, "Buzzing end");
 }
 
 void Buzzer_Task(void *params)
 {
-    init_buzzer();
+    esp_err_t err = init_buzzer();
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to initialize buzzer: %s", esp_err_to_name(err));
+        vTaskDelete(NULL);
+        return;
+    }
     while (true)
     {
         int input = 0;

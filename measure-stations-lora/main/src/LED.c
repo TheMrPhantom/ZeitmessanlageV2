@@ -1,84 +1,137 @@
-#include <stdio.h>
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "led_strip.h"
-#include "esp_log.h"
-#include "esp_err.h"
 #include "LED.h"
 
-// GPIO assignment
+#include <stdbool.h>
+#include <stdint.h>
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+
+#include "esp_err.h"
+#include "esp_log.h"
+#include "led_strip.h"
+
 #define LED_STRIP_GPIO_PIN 48
-// 10MHz resolution, 1 tick = 0.1us (led strip needs a high resolution)
 #define LED_STRIP_RMT_RES_HZ (10 * 1000 * 1000)
 
 static const char *TAG = "LED";
-led_strip_handle_t led_handle;
-bool led_on_off = false;
 
-int number_of_leds = 0;
-float brightness = 1;
-bool is_initialized = false;
+static led_strip_handle_t led_handle;
+static SemaphoreHandle_t led_mutex;
+static int number_of_leds;
+static bool is_initialized;
+
+static bool lock_leds(void)
+{
+    if (!is_initialized || led_mutex == NULL)
+    {
+        return false;
+    }
+    if (xSemaphoreTake(led_mutex, pdMS_TO_TICKS(100)) != pdTRUE)
+    {
+        ESP_LOGW(TAG, "Timed out waiting for LED strip");
+        return false;
+    }
+    return true;
+}
 
 void init_led(int num_leds)
 {
-    ESP_LOGI(TAG, "Initializing LED strip");
+    if (num_leds <= 0)
+    {
+        ESP_LOGE(TAG, "Cannot initialize LED strip with %d LEDs", num_leds);
+        return;
+    }
+
+    led_mutex = xSemaphoreCreateMutex();
+    if (led_mutex == NULL)
+    {
+        ESP_LOGE(TAG, "Failed to allocate LED mutex; LEDs disabled");
+        return;
+    }
+
+    const led_strip_config_t strip_config = {
+        .strip_gpio_num = LED_STRIP_GPIO_PIN,
+        .max_leds = num_leds,
+        .led_model = LED_MODEL_WS2812,
+        .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB,
+        .flags = {
+            .invert_out = false,
+        },
+    };
+
+    const led_strip_rmt_config_t rmt_config = {
+        .clk_src = RMT_CLK_SRC_DEFAULT,
+        .resolution_hz = LED_STRIP_RMT_RES_HZ,
+        .mem_block_symbols = 64,
+        .flags = {
+            .with_dma = false,
+        },
+    };
+
+    esp_err_t err = led_strip_new_rmt_device(&strip_config, &rmt_config, &led_handle);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "LED strip initialization failed: %s", esp_err_to_name(err));
+        vSemaphoreDelete(led_mutex);
+        led_mutex = NULL;
+        return;
+    }
+
     number_of_leds = num_leds;
-    // LED strip general initialization, according to your led board design
-    led_strip_config_t strip_config = {
-        .strip_gpio_num = LED_STRIP_GPIO_PIN,                        // The GPIO that connected to the LED strip's data line
-        .max_leds = num_leds,                                        // The number of LEDs in the strip,
-        .led_model = LED_MODEL_WS2812,                               // LED strip model
-        .color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB, // The color order of the strip: GRB
-        .flags = {
-            .invert_out = false, // don't invert the output signal
-        }};
-
-    // LED strip backend configuration: RMT
-    led_strip_rmt_config_t rmt_config = {
-        .clk_src = RMT_CLK_SRC_DEFAULT,        // different clock source can lead to different power consumption
-        .resolution_hz = LED_STRIP_RMT_RES_HZ, // RMT counter clock frequency
-        .mem_block_symbols = 64,               // the memory size of each RMT channel, in words (4 bytes)
-        .flags = {
-            .with_dma = false, // DMA feature is available on chips like ESP32-S3/P4
-        }};
-
-    // LED Strip object handle
-    led_strip_handle_t led_strip;
-    ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip_config, &rmt_config, &led_strip));
-    ESP_LOGI(TAG, "Created LED strip object with RMT backend");
-    led_handle = led_strip;
     is_initialized = true;
 }
 
-void set_led(uint8_t led, uint8_t r, uint8_t g, uint8_t b)
+void set_led(uint8_t led, uint8_t red, uint8_t green, uint8_t blue)
 {
-
-    // ESP_LOGI(TAG, "Start blinking LED strip");
-    if (!is_initialized)
+    if (led >= number_of_leds)
     {
-        ESP_LOGW(TAG, "LED strip not initialized");
+        ESP_LOGW(TAG, "Ignoring out-of-range LED index %u", led);
         return;
     }
-    /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
-    ESP_LOGI(TAG, "Set LED %d to color R:%d G:%d B:%d", led, r, g, b);
-    vTaskDelay(pdMS_TO_TICKS(1));
-    ESP_ERROR_CHECK(led_strip_set_pixel(led_handle, led, r * brightness, g * brightness, b * brightness));
-    vTaskDelay(pdMS_TO_TICKS(1));
-    /* Refresh the strip to send data */
-    ESP_ERROR_CHECK(led_strip_refresh(led_handle));
+    if (!lock_leds())
+    {
+        return;
+    }
+
+    esp_err_t err = led_strip_set_pixel(led_handle, led, red, green, blue);
+    if (err == ESP_OK)
+    {
+        err = led_strip_refresh(led_handle);
+    }
+    xSemaphoreGive(led_mutex);
+
+    if (err != ESP_OK)
+    {
+        // LEDs are diagnostic only; a transient RMT failure must not reboot the
+        // timing station.
+        ESP_LOGE(TAG, "Failed to update LED %u: %s", led, esp_err_to_name(err));
+    }
 }
 
-void set_all_leds(uint8_t r, uint8_t g, uint8_t b)
+void set_all_leds(uint8_t red, uint8_t green, uint8_t blue)
 {
-    if (!is_initialized)
+    if (!lock_leds())
     {
-        ESP_LOGW(TAG, "LED strip not initialized");
         return;
     }
+
+    esp_err_t err = ESP_OK;
     for (int i = 0; i < number_of_leds; i++)
     {
-        ESP_ERROR_CHECK(led_strip_set_pixel(led_handle, i, r, g, b));
+        err = led_strip_set_pixel(led_handle, i, red, green, blue);
+        if (err != ESP_OK)
+        {
+            break;
+        }
     }
-    /* Refresh the strip to send data */
-    ESP_ERROR_CHECK(led_strip_refresh(led_handle));
+    if (err == ESP_OK)
+    {
+        err = led_strip_refresh(led_handle);
+    }
+    xSemaphoreGive(led_mutex);
+
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to update LED strip: %s", esp_err_to_name(err));
+    }
 }

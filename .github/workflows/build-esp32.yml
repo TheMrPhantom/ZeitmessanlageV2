@@ -9,20 +9,24 @@ on:
 
 jobs:
   build-measure-stations-lora:
-    if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build_and_push')"
+    if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build')"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
           submodules: "recursive"
+      - name: Set firmware version
+        shell: bash
+        run: printf 'PROJECT_VER=%.12s\n' "$GITHUB_SHA" >> "$GITHUB_ENV"
       - name: esp-idf build for measure-stations-lora
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.5.1
           target: esp32s3
           path: "measure-stations-lora"
-          command: idf.py build
+          extra_docker_args: -e PROJECT_VER
+          command: idf.py -D PROJECT_VER="$PROJECT_VER" build
       - name: Upload measure-stations-lora build output as artifact
         uses: actions/upload-artifact@v4
         with:
@@ -30,34 +34,93 @@ jobs:
           path: measure-stations-lora/build/measure-stations-lora.bin
 
   build-dogdog-controller:
-    if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build_and_push')"
+    if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build')"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
           submodules: "recursive"
+      - name: Set firmware version
+        shell: bash
+        run: printf 'PROJECT_VER=%.12s\n' "$GITHUB_SHA" >> "$GITHUB_ENV"
       - name: esp-idf build for dogdog-controller
         uses: espressif/esp-idf-ci-action@v1
         with:
           esp_idf_version: v5.5.1
           target: esp32s3
           path: "dogdog-controller"
-          command: idf.py build
+          extra_docker_args: -e PROJECT_VER
+          command: idf.py -D PROJECT_VER="$PROJECT_VER" build
       - name: Upload dogdog-controller build output as artifact
         uses: actions/upload-artifact@v4
         with:
           name: dogdog-controller-bin
           path: dogdog-controller/build/dogdog-controller.bin
 
-  release:
-    needs: [build-measure-stations-lora, build-dogdog-controller]  # Ensures this job runs after all build jobs complete
+  build-remote:
+    if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build')"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
           submodules: "recursive"
+      - name: Set firmware version
+        shell: bash
+        run: printf 'PROJECT_VER=%.12s\n' "$GITHUB_SHA" >> "$GITHUB_ENV"
+      - name: esp-idf build for remote
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.1
+          target: esp32
+          path: "remote"
+          extra_docker_args: -e PROJECT_VER
+          command: idf.py -D PROJECT_VER="$PROJECT_VER" build
+      - name: Upload remote build output as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: remote-bin
+          path: remote/build/remote.bin
+
+  release:
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    needs: [build-measure-stations-lora, build-dogdog-controller, build-remote]  # Ensures this job runs after all build jobs complete
+    runs-on: ubuntu-latest
+    concurrency:
+      group: latest-firmware-release
+      cancel-in-progress: false
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+
+      - name: Check that this run is still the master branch head
+        id: release_freshness
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          branch_head_sha="$(
+            git ls-remote --exit-code origin refs/heads/master |
+              awk 'NR == 1 {print $1}'
+          )"
+
+          if [[ ! "$branch_head_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Unable to determine the current master branch head" >&2
+            exit 1
+          fi
+
+          if [[ "$branch_head_sha" == "$GITHUB_SHA" ]]; then
+            echo "is_current=true" >> "$GITHUB_OUTPUT"
+            echo "This run is still the master branch head ($GITHUB_SHA)."
+          else
+            echo "is_current=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipping the latest release because $GITHUB_SHA is no longer the master branch head ($branch_head_sha)."
+          fi
 
       - name: Download measure-stations-lora artifact
         uses: actions/download-artifact@v4
@@ -69,7 +132,13 @@ jobs:
         with:
           name: dogdog-controller-bin
 
+      - name: Download remote artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: remote-bin
+
       - name: Delete previous 'latest' release (if exists)
+        if: steps.release_freshness.outputs.is_current == 'true'
         continue-on-error: true  # this prevents workflow failure if tag doesn't exist
         uses: dev-drprasad/delete-tag-and-release@v1.1
         with:
@@ -77,6 +146,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Create new 'latest' release and upload binary
+        if: steps.release_freshness.outputs.is_current == 'true'
         uses: softprops/action-gh-release@v1
         with:
           tag_name: latest
@@ -84,5 +154,43 @@ jobs:
           files: |
             measure-stations-lora.bin
             dogdog-controller.bin
+            remote.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update OTA mirror
+        if: steps.release_freshness.outputs.is_current == 'true'
+        shell: bash
+        env:
+          OTA_WEBHOOK_TOKEN: ${{ secrets.OTA_WEBHOOK_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          for binary in \
+            measure-stations-lora.bin \
+            dogdog-controller.bin \
+            remote.bin
+          do
+            sha256="$(sha256sum "$binary" | awk '{print $1}')"
+            size="$(stat --format='%s' "$binary")"
+            payload="$(jq --null-input \
+              --arg sha256 "$sha256" \
+              --argjson size "$size" \
+              --arg commit_sha "$GITHUB_SHA" \
+              '{sha256: $sha256, size: $size, commit_sha: $commit_sha}')"
+
+            curl \
+              --fail-with-body \
+              --show-error \
+              --silent \
+              --retry 4 \
+              --retry-all-errors \
+              --retry-delay 2 \
+              --connect-timeout 10 \
+              --max-time 180 \
+              --request POST \
+              --header "Authorization: Bearer $OTA_WEBHOOK_TOKEN" \
+              --header "Content-Type: application/json" \
+              --data "$payload" \
+              "https://ota.dogdog-zeitmessung.de/update/$binary"
+          done

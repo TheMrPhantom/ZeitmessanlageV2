@@ -5,8 +5,10 @@
  */
 
 #include <ctype.h>
+#include <errno.h>
 #include <inttypes.h>
 #include <stdbool.h>
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,8 +26,10 @@
 #include "esp_netif.h"
 #include "esp_timer.h"
 #include "esp_wifi.h"
+#include "esp_wifi_default.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "lwip/inet.h"
 #include "lwip/sockets.h"
@@ -48,16 +52,28 @@
 #define TIMER_DUPLICATE_WINDOW_US 2000000
 
 #define DNS_PORT 53
-#define DNS_TASK_STACK_SIZE 3072
+#define DNS_TASK_STACK_SIZE 4096
 #define DNS_TASK_PRIORITY 4
 #define DNS_BUF_LEN 512
 #define SOFTAP_IP_ADDR "192.168.4.1"
 #define STATUS_LED_RMT_RESOLUTION_HZ 10000000
 #define STATUS_LED_BRIGHTNESS 32
 #define BUTTON0_GPIO GPIO_NUM_0
-#define BUTTON0_TASK_STACK_SIZE 2048
+#define BUTTON0_TASK_STACK_SIZE 3072
 #define BUTTON0_TASK_PRIORITY 5
 #define BUTTON0_DEBOUNCE_US 200000
+
+#define CONTROL_QUEUE_LEN 24
+#define CONTROL_START_CAPACITY 8
+#define CONTROL_URGENT_CAPACITY 4
+#define CONTROL_TASK_STACK_SIZE 4096
+#define CONTROL_TASK_PRIORITY 6
+#define HTTP_RECV_TIMEOUT_RETRIES 3
+
+#if CONFIG_BUZZER_GPIO == CONFIG_STATUS_LED_GPIO || CONFIG_BUZZER_GPIO == 0 || \
+    CONFIG_STATUS_LED_GPIO == 0
+#error "Buzzer, status LED, and button GPIOs must be distinct"
+#endif
 
 #ifdef CONFIG_BUZZER_SECOND_ENABLED
 #define BUZZER_SECOND_ENABLED_DEFAULT true
@@ -75,8 +91,10 @@ static esp_timer_handle_t s_second_buzz_timer;
 static rmt_channel_handle_t s_status_led_rmt_channel;
 static rmt_encoder_handle_t s_status_led_encoder;
 static QueueHandle_t s_button0_queue;
+static QueueHandle_t s_control_queue;
+static SemaphoreHandle_t s_control_start_slots;
+static SemaphoreHandle_t s_control_urgent_slots;
 static portMUX_TYPE s_config_lock = portMUX_INITIALIZER_UNLOCKED;
-static portMUX_TYPE s_buzz_state_lock = portMUX_INITIALIZER_UNLOCKED;
 static int64_t s_runtime_delay_us = BUZZER_DELAY_US_MAX;
 static int64_t s_runtime_buzz_duration_us = BUZZER_DURATION_US_DEFAULT;
 static bool s_runtime_second_buzz_enabled = BUZZER_SECOND_ENABLED_DEFAULT;
@@ -87,6 +105,38 @@ static int64_t s_second_buzz_pending_delay_us;
 static bool s_have_last_start_elapsed;
 static uint64_t s_last_start_elapsed_ns;
 static size_t s_duplicate_cache_next;
+static atomic_uint s_dropped_control_commands;
+
+typedef enum {
+    TIMER_ACTION_NONE,
+    TIMER_ACTION_START,
+    TIMER_ACTION_RESET,
+    TIMER_ACTION_STOP,
+} timer_action_t;
+
+typedef enum {
+    CONTROL_EVENT_START,
+    CONTROL_EVENT_RESET,
+    CONTROL_EVENT_STOP,
+    CONTROL_EVENT_BUTTON_STOP,
+    CONTROL_EVENT_DELAY_EXPIRED,
+    CONTROL_EVENT_BUZZ_STOP_EXPIRED,
+    CONTROL_EVENT_SECOND_BUZZ_EXPIRED,
+} control_event_type_t;
+
+typedef struct {
+    control_event_type_t type;
+    uint64_t elapsed_ns;
+} control_event_t;
+
+typedef enum {
+    BUZZ_PHASE_IDLE,
+    BUZZ_PHASE_COUNTING,
+    BUZZ_PHASE_BUZZING,
+    BUZZ_PHASE_WAITING_SECOND,
+} buzz_phase_t;
+
+static buzz_phase_t s_buzz_phase;
 
 typedef struct {
     uint8_t source_mac[6];
@@ -185,7 +235,6 @@ static void stop_timer_if_active(esp_timer_handle_t timer)
 
 static bool start_message_should_schedule(uint64_t elapsed_ns)
 {
-    portENTER_CRITICAL(&s_buzz_state_lock);
     if (!s_have_last_start_elapsed || elapsed_ns < s_last_start_elapsed_ns) {
         s_buzz_fired = false;
         s_second_buzz_pending = false;
@@ -193,34 +242,26 @@ static bool start_message_should_schedule(uint64_t elapsed_ns)
     }
     s_have_last_start_elapsed = true;
     s_last_start_elapsed_ns = elapsed_ns;
-    bool should_schedule = !s_buzz_fired;
-    portEXIT_CRITICAL(&s_buzz_state_lock);
-    return should_schedule;
+    return !s_buzz_fired;
 }
 
 static void mark_buzz_fired(bool fired)
 {
-    portENTER_CRITICAL(&s_buzz_state_lock);
     s_buzz_fired = fired;
-    portEXIT_CRITICAL(&s_buzz_state_lock);
 }
 
 static void arm_second_buzz(bool pending, int64_t delay_us)
 {
-    portENTER_CRITICAL(&s_buzz_state_lock);
     s_second_buzz_pending = pending;
     s_second_buzz_pending_delay_us = pending ? delay_us : 0;
-    portEXIT_CRITICAL(&s_buzz_state_lock);
 }
 
 static bool consume_second_buzz(int64_t *delay_us)
 {
-    portENTER_CRITICAL(&s_buzz_state_lock);
     bool pending = s_second_buzz_pending;
     *delay_us = s_second_buzz_pending_delay_us;
     s_second_buzz_pending = false;
     s_second_buzz_pending_delay_us = 0;
-    portEXIT_CRITICAL(&s_buzz_state_lock);
     return pending;
 }
 
@@ -231,13 +272,11 @@ static void clear_second_buzz(void)
 
 static void reset_buzz_sequence(void)
 {
-    portENTER_CRITICAL(&s_buzz_state_lock);
     s_buzz_fired = false;
     s_second_buzz_pending = false;
     s_second_buzz_pending_delay_us = 0;
     s_have_last_start_elapsed = false;
     s_last_start_elapsed_ns = 0;
-    portEXIT_CRITICAL(&s_buzz_state_lock);
 }
 
 static esp_err_t buzzer_set_level(bool enabled)
@@ -260,7 +299,7 @@ static esp_err_t buzzer_set_level(bool enabled)
     return ESP_OK;
 }
 
-static void buzzer_set(bool enabled)
+static esp_err_t buzzer_set(bool enabled)
 {
     esp_err_t err = buzzer_set_level(enabled);
     if (err != ESP_OK) {
@@ -269,6 +308,7 @@ static void buzzer_set(bool enabled)
                  enabled ? "on" : "off",
                  esp_err_to_name(err));
     }
+    return err;
 }
 
 static void start_buzz(bool allow_second_buzz)
@@ -280,8 +320,13 @@ static void start_buzz(bool allow_second_buzz)
     get_runtime_second_buzz_config(&second_buzz_enabled, &second_buzz_delay_us);
     arm_second_buzz(allow_second_buzz && second_buzz_enabled, second_buzz_delay_us);
 
-    mark_buzz_fired(true);
-    buzzer_set(true);
+    if (buzzer_set(true) != ESP_OK) {
+        mark_buzz_fired(false);
+        clear_second_buzz();
+        (void)buzzer_set(false);
+        s_buzz_phase = BUZZ_PHASE_IDLE;
+        return;
+    }
 
     stop_timer_if_active(s_buzz_stop_timer);
     esp_err_t err = esp_timer_start_once(s_buzz_stop_timer, duration_us);
@@ -289,16 +334,20 @@ static void start_buzz(bool allow_second_buzz)
         ESP_LOGE(TAG, "Failed to start buzz stop timer: %s", esp_err_to_name(err));
         mark_buzz_fired(false);
         clear_second_buzz();
-        buzzer_set(false);
+        (void)buzzer_set(false);
+        s_buzz_phase = BUZZ_PHASE_IDLE;
     } else {
+        mark_buzz_fired(true);
+        s_buzz_phase = BUZZ_PHASE_BUZZING;
         ESP_LOGI(TAG, "Buzzer started for %" PRId64 " us", duration_us);
     }
 }
 
-static void buzz_stop_timer_cb(void *arg)
+static void finish_buzz(void)
 {
-    (void)arg;
-    buzzer_set(false);
+    (void)buzzer_set(false);
+    s_buzz_phase = BUZZ_PHASE_IDLE;
+
     esp_err_t led_err = status_led_set(STATUS_LED_READY);
     if (led_err != ESP_OK) {
         ESP_LOGW(TAG, "Failed to set ready LED after buzz: %s", esp_err_to_name(led_err));
@@ -310,6 +359,7 @@ static void buzz_stop_timer_cb(void *arg)
         if (timer_err != ESP_OK) {
             ESP_LOGE(TAG, "Failed to start second buzz timer: %s", esp_err_to_name(timer_err));
         } else {
+            s_buzz_phase = BUZZ_PHASE_WAITING_SECOND;
             ESP_LOGI(TAG, "Second buzz scheduled in %" PRId64 " us", second_buzz_delay_us);
         }
     }
@@ -317,24 +367,52 @@ static void buzz_stop_timer_cb(void *arg)
     ESP_LOGI(TAG, "Buzzer stopped");
 }
 
+static void enqueue_timer_event(control_event_type_t type)
+{
+    const control_event_t event = {
+        .type = type,
+    };
+
+    if (xQueueSendToFront(s_control_queue, &event, 0) != pdTRUE) {
+        ESP_LOGE(TAG, "Control queue full while handling timer event %d", (int)type);
+        if (type == CONTROL_EVENT_BUZZ_STOP_EXPIRED) {
+            /*
+             * Fail safe without racing the control task's multi-step GPIO hold
+             * sequence. A later serialized command will restore the low hold.
+             */
+            esp_err_t err = gpio_set_level(CONFIG_BUZZER_GPIO, 0);
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "Emergency buzzer shutdown failed: %s", esp_err_to_name(err));
+            }
+        }
+    }
+}
+
 static void buzz_start_timer_cb(void *arg)
 {
     (void)arg;
-    start_buzz(true);
+    enqueue_timer_event(CONTROL_EVENT_DELAY_EXPIRED);
+}
+
+static void buzz_stop_timer_cb(void *arg)
+{
+    (void)arg;
+    enqueue_timer_event(CONTROL_EVENT_BUZZ_STOP_EXPIRED);
 }
 
 static void second_buzz_timer_cb(void *arg)
 {
     (void)arg;
-    start_buzz(false);
+    enqueue_timer_event(CONTROL_EVENT_SECOND_BUZZ_EXPIRED);
 }
 
 static void cancel_buzz_state(void)
 {
+    s_buzz_phase = BUZZ_PHASE_IDLE;
     stop_timer_if_active(s_delay_timer);
     stop_timer_if_active(s_buzz_stop_timer);
     stop_timer_if_active(s_second_buzz_timer);
-    buzzer_set(false);
+    (void)buzzer_set(false);
 }
 
 static void schedule_buzz(uint64_t elapsed_ns)
@@ -363,7 +441,9 @@ static void schedule_buzz(uint64_t elapsed_ns)
     esp_err_t err = esp_timer_start_once(s_delay_timer, remaining_us);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to start delay timer: %s", esp_err_to_name(err));
+        (void)status_led_set(STATUS_LED_READY);
     } else {
+        s_buzz_phase = BUZZ_PHASE_COUNTING;
         ESP_LOGI(TAG,
                  "Buzzer scheduled in %" PRId64 " us (elapsed remote time: %" PRIu64 " ns)",
                  remaining_us,
@@ -386,10 +466,135 @@ static void stop_buzz_timer(void)
 {
     clear_second_buzz();
     cancel_buzz_state();
-    start_buzz(false);
     esp_err_t led_err = status_led_set(STATUS_LED_READY);
     if (led_err != ESP_OK) {
         ESP_LOGW(TAG, "Failed to set ready LED: %s", esp_err_to_name(led_err));
+    }
+    start_buzz(false);
+}
+
+static bool enqueue_control_command(timer_action_t action, uint64_t elapsed_ns)
+{
+    control_event_t event = {
+        .elapsed_ns = elapsed_ns,
+    };
+    SemaphoreHandle_t slots = NULL;
+    BaseType_t queued = pdFALSE;
+
+    switch (action) {
+    case TIMER_ACTION_START:
+        event.type = CONTROL_EVENT_START;
+        slots = s_control_start_slots;
+        break;
+    case TIMER_ACTION_RESET:
+        event.type = CONTROL_EVENT_RESET;
+        slots = s_control_urgent_slots;
+        break;
+    case TIMER_ACTION_STOP:
+        event.type = CONTROL_EVENT_STOP;
+        slots = s_control_urgent_slots;
+        break;
+    default:
+        return false;
+    }
+
+    if (xSemaphoreTake(slots, 0) != pdTRUE) {
+        atomic_fetch_add_explicit(&s_dropped_control_commands, 1, memory_order_relaxed);
+        return false;
+    }
+
+    /* External commands stay FIFO; timer expirations are the only front-queued events. */
+    queued = xQueueSendToBack(s_control_queue, &event, 0);
+
+    if (queued != pdTRUE) {
+        (void)xSemaphoreGive(slots);
+        atomic_fetch_add_explicit(&s_dropped_control_commands, 1, memory_order_relaxed);
+        return false;
+    }
+    return true;
+}
+
+static void enqueue_button_stop(void)
+{
+    const control_event_t event = {
+        .type = CONTROL_EVENT_BUTTON_STOP,
+    };
+
+    if (xQueueSendToFront(s_control_queue, &event, 0) != pdTRUE) {
+        ESP_LOGE(TAG, "Control queue full while handling the physical stop button");
+    }
+}
+
+static void release_control_command_slot(control_event_type_t type)
+{
+    if (type == CONTROL_EVENT_START) {
+        (void)xSemaphoreGive(s_control_start_slots);
+    } else if (type == CONTROL_EVENT_RESET || type == CONTROL_EVENT_STOP) {
+        (void)xSemaphoreGive(s_control_urgent_slots);
+    }
+}
+
+static void maybe_log_dropped_control_commands(void)
+{
+    static int64_t last_log_us;
+    int64_t now_us = esp_timer_get_time();
+
+    if (now_us - last_log_us < 1000000) {
+        return;
+    }
+
+    unsigned int dropped = atomic_exchange_explicit(&s_dropped_control_commands,
+                                                     0,
+                                                     memory_order_relaxed);
+    if (dropped > 0) {
+        ESP_LOGW(TAG, "Dropped %u timer command(s) because the control queue was busy", dropped);
+    }
+    last_log_us = now_us;
+}
+
+static void buzzer_control_task(void *arg)
+{
+    (void)arg;
+
+    control_event_t event;
+    while (true) {
+        if (xQueueReceive(s_control_queue, &event, portMAX_DELAY) != pdTRUE) {
+            continue;
+        }
+
+        release_control_command_slot(event.type);
+        maybe_log_dropped_control_commands();
+
+        switch (event.type) {
+        case CONTROL_EVENT_START:
+            schedule_buzz(event.elapsed_ns);
+            break;
+        case CONTROL_EVENT_RESET:
+            reset_buzz_timer();
+            break;
+        case CONTROL_EVENT_STOP:
+        case CONTROL_EVENT_BUTTON_STOP:
+            stop_buzz_timer();
+            break;
+        case CONTROL_EVENT_DELAY_EXPIRED:
+            if (s_buzz_phase == BUZZ_PHASE_COUNTING &&
+                !esp_timer_is_active(s_delay_timer)) {
+                start_buzz(true);
+            }
+            break;
+        case CONTROL_EVENT_BUZZ_STOP_EXPIRED:
+            if (s_buzz_phase == BUZZ_PHASE_BUZZING &&
+                !esp_timer_is_active(s_buzz_stop_timer)) {
+                finish_buzz();
+            }
+            break;
+        case CONTROL_EVENT_SECOND_BUZZ_EXPIRED:
+            if (s_buzz_phase == BUZZ_PHASE_WAITING_SECOND &&
+                !esp_timer_is_active(s_second_buzz_timer)) {
+                start_buzz(false);
+            }
+            break;
+        }
     }
 }
 
@@ -397,7 +602,11 @@ static void IRAM_ATTR button0_isr_handler(void *arg)
 {
     (void)arg;
     uint32_t gpio_num = BUTTON0_GPIO;
-    xQueueSendFromISR(s_button0_queue, &gpio_num, NULL);
+    BaseType_t higher_priority_task_woken = pdFALSE;
+    (void)xQueueSendFromISR(s_button0_queue, &gpio_num, &higher_priority_task_woken);
+    if (higher_priority_task_woken == pdTRUE) {
+        portYIELD_FROM_ISR();
+    }
 }
 
 static void button0_task(void *arg)
@@ -412,14 +621,14 @@ static void button0_task(void *arg)
         }
 
         int64_t now_us = esp_timer_get_time();
-        if (now_us - last_press_us < BUTTON0_DEBOUNCE_US) {
+        if (last_press_us != 0 && now_us - last_press_us < BUTTON0_DEBOUNCE_US) {
             continue;
         }
-        last_press_us = now_us;
 
         if (gpio_get_level((gpio_num_t)gpio_num) == 0) {
+            last_press_us = now_us;
             ESP_LOGI(TAG, "Button 0 pressed");
-            stop_buzz_timer();
+            enqueue_button_stop();
         }
     }
 }
@@ -470,13 +679,6 @@ static size_t ieee80211_header_len(const uint8_t *frame, uint16_t len)
     return header_len <= len ? header_len : 0;
 }
 
-typedef enum {
-    TIMER_ACTION_NONE,
-    TIMER_ACTION_START,
-    TIMER_ACTION_RESET,
-    TIMER_ACTION_STOP,
-} timer_action_t;
-
 static bool timer_frame_is_duplicate(const uint8_t *frame, uint8_t command)
 {
     const uint8_t *source_mac = frame + 10;
@@ -496,9 +698,28 @@ static bool timer_frame_is_duplicate(const uint8_t *frame, uint8_t command)
         if (now_us - signature->received_at_us <= TIMER_DUPLICATE_WINDOW_US) {
             return true;
         }
+    }
 
-        signature->received_at_us = now_us;
-        return false;
+    return false;
+}
+
+static void remember_timer_frame(const uint8_t *frame, uint8_t command)
+{
+    const uint8_t *source_mac = frame + 10;
+    uint16_t sequence_control = frame[22] | ((uint16_t)frame[23] << 8);
+    uint16_t sequence_number = sequence_control >> 4;
+    int64_t now_us = esp_timer_get_time();
+
+    /* Refresh an expired matching entry instead of consuming another cache slot. */
+    for (size_t i = 0; i < TIMER_DUPLICATE_CACHE_SIZE; i++) {
+        timer_packet_signature_t *signature = &s_duplicate_cache[i];
+        if (signature->valid &&
+            signature->sequence_number == sequence_number &&
+            signature->command == command &&
+            memcmp(signature->source_mac, source_mac, sizeof(signature->source_mac)) == 0) {
+            signature->received_at_us = now_us;
+            return;
+        }
     }
 
     timer_packet_signature_t *signature = &s_duplicate_cache[s_duplicate_cache_next];
@@ -508,7 +729,6 @@ static bool timer_frame_is_duplicate(const uint8_t *frame, uint8_t command)
     signature->received_at_us = now_us;
     signature->valid = true;
     s_duplicate_cache_next = (s_duplicate_cache_next + 1) % TIMER_DUPLICATE_CACHE_SIZE;
-    return false;
 }
 
 static timer_action_t parse_timer_message(const uint8_t *frame, uint16_t len, uint64_t *elapsed_ns)
@@ -536,19 +756,26 @@ static timer_action_t parse_timer_message(const uint8_t *frame, uint16_t len, ui
         return TIMER_ACTION_NONE;
     }
 
-    if (timer_frame_is_duplicate(frame, body[1])) {
-        return TIMER_ACTION_NONE;
-    }
-
     switch (body[1]) {
     case TIMER_COMMAND_START:
         if (len < header_len + TIMER_START_MESSAGE_LEN) {
             return TIMER_ACTION_NONE;
         }
+        break;
+    case TIMER_COMMAND_RESET:
+    case TIMER_COMMAND_STOP:
+        break;
+    default:
+        return TIMER_ACTION_NONE;
+    }
+
+    switch (body[1]) {
+    case TIMER_COMMAND_START: {
         uint64_t value = 0;
         memcpy(&value, body + 2, sizeof(value));
         *elapsed_ns = value;
         return TIMER_ACTION_START;
+    }
     case TIMER_COMMAND_RESET:
         return TIMER_ACTION_RESET;
     case TIMER_COMMAND_STOP:
@@ -560,19 +787,30 @@ static timer_action_t parse_timer_message(const uint8_t *frame, uint16_t len, ui
 
 static void wifi_promiscuous_cb(void *buf, wifi_promiscuous_pkt_type_t type)
 {
-    if (type != WIFI_PKT_MGMT) {
+    if (buf == NULL || type != WIFI_PKT_MGMT) {
         return;
     }
 
     const wifi_promiscuous_pkt_t *pkt = (const wifi_promiscuous_pkt_t *)buf;
     uint64_t elapsed_ns = 0;
     timer_action_t action = parse_timer_message(pkt->payload, pkt->rx_ctrl.sig_len, &elapsed_ns);
+    if (action == TIMER_ACTION_NONE) {
+        return;
+    }
+
+    uint8_t command = TIMER_COMMAND_STOP;
     if (action == TIMER_ACTION_START) {
-        schedule_buzz(elapsed_ns);
+        command = TIMER_COMMAND_START;
     } else if (action == TIMER_ACTION_RESET) {
-        reset_buzz_timer();
-    } else if (action == TIMER_ACTION_STOP) {
-        stop_buzz_timer();
+        command = TIMER_COMMAND_RESET;
+    }
+    if (timer_frame_is_duplicate(pkt->payload, command)) {
+        return;
+    }
+
+    if (enqueue_control_command(action, elapsed_ns)) {
+        /* Only accepted commands suppress retransmissions with the same signature. */
+        remember_timer_frame(pkt->payload, command);
     }
 }
 
@@ -626,16 +864,29 @@ static esp_err_t init_status_led(void)
         .flags.msb_first = 1,
     };
 
-    ESP_RETURN_ON_ERROR(rmt_new_tx_channel(&tx_channel_config,
-                                           &s_status_led_rmt_channel),
-                        TAG,
-                        "Failed to create status LED RMT channel");
-    ESP_RETURN_ON_ERROR(rmt_new_bytes_encoder(&encoder_config, &s_status_led_encoder),
-                        TAG,
-                        "Failed to create status LED encoder");
-    ESP_RETURN_ON_ERROR(rmt_enable(s_status_led_rmt_channel),
-                        TAG,
-                        "Failed to enable status LED RMT channel");
+    esp_err_t err = rmt_new_tx_channel(&tx_channel_config, &s_status_led_rmt_channel);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create status LED RMT channel: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = rmt_new_bytes_encoder(&encoder_config, &s_status_led_encoder);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create status LED encoder: %s", esp_err_to_name(err));
+        (void)rmt_del_channel(s_status_led_rmt_channel);
+        s_status_led_rmt_channel = NULL;
+        return err;
+    }
+
+    err = rmt_enable(s_status_led_rmt_channel);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to enable status LED RMT channel: %s", esp_err_to_name(err));
+        (void)rmt_del_encoder(s_status_led_encoder);
+        (void)rmt_del_channel(s_status_led_rmt_channel);
+        s_status_led_encoder = NULL;
+        s_status_led_rmt_channel = NULL;
+        return err;
+    }
     ESP_RETURN_ON_ERROR(status_led_set(STATUS_LED_BOOT), TAG, "Failed to set boot LED");
     return ESP_OK;
 }
@@ -655,11 +906,72 @@ static esp_err_t init_timers(void)
         .name = "buzz_second",
     };
 
-    ESP_RETURN_ON_ERROR(esp_timer_create(&delay_args, &s_delay_timer), TAG, "Failed to create delay timer");
-    ESP_RETURN_ON_ERROR(esp_timer_create(&stop_args, &s_buzz_stop_timer), TAG, "Failed to create stop timer");
-    ESP_RETURN_ON_ERROR(esp_timer_create(&second_args, &s_second_buzz_timer),
-                        TAG,
-                        "Failed to create second buzz timer");
+    esp_err_t err = esp_timer_create(&delay_args, &s_delay_timer);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create delay timer: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = esp_timer_create(&stop_args, &s_buzz_stop_timer);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create stop timer: %s", esp_err_to_name(err));
+        (void)esp_timer_delete(s_delay_timer);
+        s_delay_timer = NULL;
+        return err;
+    }
+
+    err = esp_timer_create(&second_args, &s_second_buzz_timer);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create second buzz timer: %s", esp_err_to_name(err));
+        (void)esp_timer_delete(s_buzz_stop_timer);
+        (void)esp_timer_delete(s_delay_timer);
+        s_buzz_stop_timer = NULL;
+        s_delay_timer = NULL;
+        return err;
+    }
+    return ESP_OK;
+}
+
+static esp_err_t init_buzzer_control(void)
+{
+    s_control_queue = xQueueCreate(CONTROL_QUEUE_LEN, sizeof(control_event_t));
+    s_control_start_slots = xSemaphoreCreateCounting(CONTROL_START_CAPACITY,
+                                                     CONTROL_START_CAPACITY);
+    s_control_urgent_slots = xSemaphoreCreateCounting(CONTROL_URGENT_CAPACITY,
+                                                      CONTROL_URGENT_CAPACITY);
+    if (s_control_queue == NULL ||
+        s_control_start_slots == NULL ||
+        s_control_urgent_slots == NULL) {
+        if (s_control_urgent_slots != NULL) {
+            vSemaphoreDelete(s_control_urgent_slots);
+            s_control_urgent_slots = NULL;
+        }
+        if (s_control_start_slots != NULL) {
+            vSemaphoreDelete(s_control_start_slots);
+            s_control_start_slots = NULL;
+        }
+        if (s_control_queue != NULL) {
+            vQueueDelete(s_control_queue);
+            s_control_queue = NULL;
+        }
+        return ESP_ERR_NO_MEM;
+    }
+
+    BaseType_t created = xTaskCreate(buzzer_control_task,
+                                    "buzzer_control",
+                                    CONTROL_TASK_STACK_SIZE,
+                                    NULL,
+                                    CONTROL_TASK_PRIORITY,
+                                    NULL);
+    if (created != pdPASS) {
+        vSemaphoreDelete(s_control_urgent_slots);
+        vSemaphoreDelete(s_control_start_slots);
+        vQueueDelete(s_control_queue);
+        s_control_urgent_slots = NULL;
+        s_control_start_slots = NULL;
+        s_control_queue = NULL;
+        return ESP_ERR_NO_MEM;
+    }
     return ESP_OK;
 }
 
@@ -678,31 +990,85 @@ static esp_err_t init_button0_gpio(void)
         .intr_type = GPIO_INTR_NEGEDGE,
     };
 
-    ESP_RETURN_ON_ERROR(gpio_config(&config), TAG, "Failed to configure button 0 GPIO");
-
-    esp_err_t err = gpio_install_isr_service(0);
-    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-        ESP_RETURN_ON_ERROR(err, TAG, "Failed to install GPIO ISR service");
+    esp_err_t err = gpio_config(&config);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to configure button 0 GPIO: %s", esp_err_to_name(err));
+        vQueueDelete(s_button0_queue);
+        s_button0_queue = NULL;
+        return err;
     }
 
-    ESP_RETURN_ON_ERROR(gpio_isr_handler_add(BUTTON0_GPIO, button0_isr_handler, NULL),
-                        TAG,
-                        "Failed to add button 0 ISR handler");
+    err = gpio_install_isr_service(0);
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "Failed to install GPIO ISR service: %s", esp_err_to_name(err));
+        vQueueDelete(s_button0_queue);
+        s_button0_queue = NULL;
+        return err;
+    }
 
+    TaskHandle_t button_task_handle = NULL;
     BaseType_t created = xTaskCreate(button0_task,
                                     "button0",
                                     BUTTON0_TASK_STACK_SIZE,
                                     NULL,
                                     BUTTON0_TASK_PRIORITY,
-                                    NULL);
-    return created == pdPASS ? ESP_OK : ESP_ERR_NO_MEM;
+                                    &button_task_handle);
+    if (created != pdPASS) {
+        vQueueDelete(s_button0_queue);
+        s_button0_queue = NULL;
+        return ESP_ERR_NO_MEM;
+    }
+
+    err = gpio_isr_handler_add(BUTTON0_GPIO, button0_isr_handler, NULL);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to add button 0 ISR handler: %s", esp_err_to_name(err));
+        vTaskDelete(button_task_handle);
+        vQueueDelete(s_button0_queue);
+        s_button0_queue = NULL;
+        return err;
+    }
+    return ESP_OK;
 }
 
 static esp_err_t init_wifi_softap(void)
 {
+    wifi_config_t wifi_config = { 0 };
+    const size_t ssid_len = strlen(CONFIG_BUZZER_SOFTAP_SSID);
+    const size_t password_len = strlen(CONFIG_BUZZER_SOFTAP_PASSWORD);
+
+    if (ssid_len == 0 || ssid_len > sizeof(wifi_config.ap.ssid)) {
+        ESP_LOGE(TAG,
+                 "SoftAP SSID must contain between 1 and %u bytes",
+                 (unsigned int)sizeof(wifi_config.ap.ssid));
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (password_len > sizeof(wifi_config.ap.password) - 1 ||
+        (password_len > 0 && password_len < 8)) {
+        ESP_LOGE(TAG, "SoftAP password must be empty or contain between 8 and 63 bytes");
+        return ESP_ERR_INVALID_ARG;
+    }
+
     ESP_RETURN_ON_ERROR(esp_netif_init(), TAG, "Failed to init netif");
     ESP_RETURN_ON_ERROR(esp_event_loop_create_default(), TAG, "Failed to create event loop");
-    esp_netif_t *ap_netif = esp_netif_create_default_wifi_ap();
+
+    esp_netif_config_t netif_config = ESP_NETIF_DEFAULT_WIFI_AP();
+    esp_netif_t *ap_netif = esp_netif_new(&netif_config);
+    if (ap_netif == NULL) {
+        ESP_LOGE(TAG, "Failed to create default Wi-Fi AP netif");
+        return ESP_ERR_NO_MEM;
+    }
+
+    esp_err_t err = esp_netif_attach_wifi_ap(ap_netif);
+    if (err == ESP_OK) {
+        err = esp_wifi_set_default_wifi_ap_handlers();
+    }
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to attach default Wi-Fi AP netif: %s", esp_err_to_name(err));
+        /* Also clears IDF's interface pointer if attachment failed part-way. */
+        esp_netif_destroy_default_wifi(ap_netif);
+        return err;
+    }
+
     esp_netif_ip_info_t ip_info;
     ESP_RETURN_ON_ERROR(esp_netif_get_ip_info(ap_netif, &ip_info), TAG, "Failed to get AP IP info");
     esp_netif_dns_info_t dns_info = {
@@ -718,12 +1084,9 @@ static esp_err_t init_wifi_softap(void)
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_RETURN_ON_ERROR(esp_wifi_init(&cfg), TAG, "Failed to init Wi-Fi");
 
-    wifi_config_t wifi_config = { 0 };
-    strlcpy((char *)wifi_config.ap.ssid, CONFIG_BUZZER_SOFTAP_SSID, sizeof(wifi_config.ap.ssid));
-    strlcpy((char *)wifi_config.ap.password,
-            CONFIG_BUZZER_SOFTAP_PASSWORD,
-            sizeof(wifi_config.ap.password));
-    wifi_config.ap.ssid_len = strlen(CONFIG_BUZZER_SOFTAP_SSID);
+    memcpy(wifi_config.ap.ssid, CONFIG_BUZZER_SOFTAP_SSID, ssid_len);
+    memcpy(wifi_config.ap.password, CONFIG_BUZZER_SOFTAP_PASSWORD, password_len);
+    wifi_config.ap.ssid_len = ssid_len;
     wifi_config.ap.channel = CONFIG_BUZZER_SOFTAP_CHANNEL;
     wifi_config.ap.max_connection = 4;
     wifi_config.ap.authmode = strlen(CONFIG_BUZZER_SOFTAP_PASSWORD) == 0
@@ -740,7 +1103,7 @@ static esp_err_t init_wifi_softap(void)
                         "Failed to set Wi-Fi channel");
 
     wifi_promiscuous_filter_t filter = {
-        .filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA,
+        .filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT,
     };
     ESP_RETURN_ON_ERROR(esp_wifi_set_promiscuous_filter(&filter), TAG, "Failed to set promiscuous filter");
     ESP_RETURN_ON_ERROR(esp_wifi_set_promiscuous_rx_cb(wifi_promiscuous_cb),
@@ -763,16 +1126,33 @@ static esp_err_t init_wifi_softap(void)
 
 static int build_dns_response(uint8_t *buf, int query_len)
 {
-    if (query_len < 12) {
+    if (query_len < 12 || query_len > DNS_BUF_LEN ||
+        (buf[2] & 0xf8) != 0 || /* only standard queries, never responses */
+        (buf[4] == 0 && buf[5] == 0)) {
         return -1;
     }
 
-    int question_end = 12;
-    while (question_end < query_len && buf[question_end] != 0) {
-        question_end += buf[question_end] + 1;
+    size_t cursor = 12;
+    while (true) {
+        if (cursor >= (size_t)query_len) {
+            return -1;
+        }
+
+        uint8_t label_len = buf[cursor++];
+        if (label_len == 0) {
+            break;
+        }
+        if (label_len > 63 || label_len > (size_t)query_len - cursor) {
+            return -1;
+        }
+        cursor += label_len;
     }
-    question_end += 5; /* terminating zero plus QTYPE and QCLASS */
-    if (question_end > query_len || question_end + 16 > DNS_BUF_LEN) {
+
+    if ((size_t)query_len - cursor < 4) {
+        return -1;
+    }
+    size_t question_end = cursor + 4; /* QTYPE and QCLASS */
+    if (question_end + 16 > DNS_BUF_LEN) {
         return -1;
     }
 
@@ -800,20 +1180,54 @@ static int build_dns_response(uint8_t *buf, int query_len)
     answer[9] = 0x3c; /* TTL 60 seconds */
     answer[10] = 0x00;
     answer[11] = 0x04; /* RDLENGTH */
-    inet_pton(AF_INET, SOFTAP_IP_ADDR, answer + 12);
+    if (inet_pton(AF_INET, SOFTAP_IP_ADDR, answer + 12) != 1) {
+        return -1;
+    }
 
-    return question_end + 16;
+    return (int)(question_end + 16);
 }
 
 static void captive_dns_task(void *arg)
 {
-    (void)arg;
+    int sock = (int)(intptr_t)arg;
 
+    uint8_t buf[DNS_BUF_LEN];
+    while (true) {
+        struct sockaddr_in source_addr;
+        socklen_t socklen = sizeof(source_addr);
+        int len = recvfrom(sock, buf, sizeof(buf), 0, (struct sockaddr *)&source_addr, &socklen);
+        if (len < 0) {
+            if (errno != EINTR) {
+                ESP_LOGW(TAG, "DNS receive failed: errno %d", errno);
+                vTaskDelay(pdMS_TO_TICKS(100));
+            }
+            continue;
+        }
+        if (len == 0) {
+            continue;
+        }
+
+        int response_len = build_dns_response(buf, len);
+        if (response_len > 0) {
+            int sent = sendto(sock,
+                              buf,
+                              response_len,
+                              0,
+                              (struct sockaddr *)&source_addr,
+                              socklen);
+            if (sent < 0) {
+                ESP_LOGD(TAG, "DNS response send failed: errno %d", errno);
+            }
+        }
+    }
+}
+
+static esp_err_t start_captive_dns(void)
+{
     int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
     if (sock < 0) {
-        ESP_LOGE(TAG, "Failed to create DNS socket");
-        vTaskDelete(NULL);
-        return;
+        ESP_LOGE(TAG, "Failed to create DNS socket: errno %d", errno);
+        return ESP_FAIL;
     }
 
     struct sockaddr_in listen_addr = {
@@ -821,39 +1235,23 @@ static void captive_dns_task(void *arg)
         .sin_port = htons(DNS_PORT),
         .sin_addr.s_addr = htonl(INADDR_ANY),
     };
-
     if (bind(sock, (struct sockaddr *)&listen_addr, sizeof(listen_addr)) < 0) {
-        ESP_LOGE(TAG, "Failed to bind DNS socket");
+        ESP_LOGE(TAG, "Failed to bind DNS socket: errno %d", errno);
         close(sock);
-        vTaskDelete(NULL);
-        return;
+        return ESP_FAIL;
     }
 
-    uint8_t buf[DNS_BUF_LEN];
-    while (true) {
-        struct sockaddr_in source_addr;
-        socklen_t socklen = sizeof(source_addr);
-        int len = recvfrom(sock, buf, sizeof(buf), 0, (struct sockaddr *)&source_addr, &socklen);
-        if (len <= 0) {
-            continue;
-        }
-
-        int response_len = build_dns_response(buf, len);
-        if (response_len > 0) {
-            sendto(sock, buf, response_len, 0, (struct sockaddr *)&source_addr, socklen);
-        }
-    }
-}
-
-static esp_err_t start_captive_dns(void)
-{
     BaseType_t created = xTaskCreate(captive_dns_task,
                                     "captive_dns",
                                     DNS_TASK_STACK_SIZE,
-                                    NULL,
+                                    (void *)(intptr_t)sock,
                                     DNS_TASK_PRIORITY,
                                     NULL);
-    return created == pdPASS ? ESP_OK : ESP_ERR_NO_MEM;
+    if (created != pdPASS) {
+        close(sock);
+        return ESP_ERR_NO_MEM;
+    }
+    return ESP_OK;
 }
 
 static esp_err_t set_no_store_headers(httpd_req_t *req)
@@ -907,7 +1305,9 @@ static esp_err_t root_get_handler(httpd_req_t *req)
     }
 
     ESP_RETURN_ON_ERROR(set_no_store_headers(req), TAG, "Failed to set no-store headers");
-    httpd_resp_set_type(req, "text/html");
+    ESP_RETURN_ON_ERROR(httpd_resp_set_type(req, "text/html"),
+                        TAG,
+                        "Failed to set HTML response type");
 
     char *html = malloc(HTTP_ROOT_BUF_LEN);
     if (html == NULL) {
@@ -1010,7 +1410,9 @@ static esp_err_t config_get_handler(httpd_req_t *req)
     }
 
     ESP_RETURN_ON_ERROR(set_no_store_headers(req), TAG, "Failed to set no-store headers");
-    httpd_resp_set_type(req, "application/json");
+    ESP_RETURN_ON_ERROR(httpd_resp_set_type(req, "application/json"),
+                        TAG,
+                        "Failed to set JSON response type");
     return httpd_resp_send(req, json, HTTPD_RESP_USE_STRLEN);
 }
 
@@ -1022,25 +1424,35 @@ static const char *find_json_value(const char *body, const char *key)
     while ((value = strstr(value, key)) != NULL) {
         const char *key_end = value + key_len;
         if (value > body && value[-1] == '"' && *key_end == '"') {
-            value = key_end + 1;
-            break;
+            const char *separator = key_end + 1;
+            while (isspace((unsigned char)*separator)) {
+                separator++;
+            }
+            if (*separator == ':') {
+                value = separator + 1;
+                while (isspace((unsigned char)*value)) {
+                    value++;
+                }
+                if (*value == '"') {
+                    value++;
+                }
+                return *value == '\0' ? NULL : value;
+            }
         }
         value = key_end;
     }
+    return NULL;
+}
 
-    if (value == NULL) {
-        return NULL;
+static bool json_token_has_valid_end(const char *end)
+{
+    if (*end == '"') {
+        end++;
     }
-
-    value = strchr(value, ':');
-    if (value == NULL) {
-        return NULL;
+    while (isspace((unsigned char)*end)) {
+        end++;
     }
-    value++;
-    while (*value == ' ' || *value == '\t' || *value == '"') {
-        value++;
-    }
-    return *value == '\0' ? NULL : value;
+    return *end == ',' || *end == '}' || *end == '\0';
 }
 
 static const char *find_json_number_value(const char *body, const char *key)
@@ -1057,8 +1469,10 @@ static bool parse_uint_field(const char *body, const char *key, uint32_t max_val
     }
 
     char *end = NULL;
+    errno = 0;
     unsigned long parsed = strtoul(value, &end, 10);
-    if (end == value || parsed > max_value) {
+    if (end == value || errno == ERANGE || parsed > max_value ||
+        !json_token_has_valid_end(end)) {
         return false;
     }
 
@@ -1073,15 +1487,15 @@ static bool parse_bool_field(const char *body, const char *key, bool *value_out)
         return false;
     }
 
-    if (strncmp(value, "true", 4) == 0) {
+    if (strncmp(value, "true", 4) == 0 && json_token_has_valid_end(value + 4)) {
         *value_out = true;
         return true;
     }
-    if (strncmp(value, "false", 5) == 0) {
+    if (strncmp(value, "false", 5) == 0 && json_token_has_valid_end(value + 5)) {
         *value_out = false;
         return true;
     }
-    if (*value == '1' || *value == '0') {
+    if ((*value == '1' || *value == '0') && json_token_has_valid_end(value + 1)) {
         *value_out = *value == '1';
         return true;
     }
@@ -1101,20 +1515,31 @@ static bool parse_seconds_field(const char *body,
     }
 
     char *end = NULL;
+    errno = 0;
     unsigned long seconds = strtoul(value, &end, 10);
-    if (end == value || seconds > max_ms / 1000UL) {
+    if (end == value || errno == ERANGE || seconds > max_ms / 1000UL) {
         return false;
     }
 
     uint32_t fraction_ms = 0;
     if (*end == '.') {
         end++;
+        unsigned int digits = 0;
         uint32_t scale = 100;
-        while (isdigit((unsigned char)*end) && scale > 0) {
-            fraction_ms += (uint32_t)(*end - '0') * scale;
-            scale /= 10;
+        while (isdigit((unsigned char)*end)) {
+            if (digits < 3) {
+                fraction_ms += (uint32_t)(*end - '0') * scale;
+                scale /= 10;
+            }
+            digits++;
             end++;
         }
+        if (digits == 0 || digits > 3) {
+            return false;
+        }
+    }
+    if (!json_token_has_valid_end(end)) {
+        return false;
     }
 
     uint64_t parsed_ms = (uint64_t)seconds * 1000ULL + fraction_ms;
@@ -1147,20 +1572,27 @@ static bool json_has_key(const char *body, const char *key)
 
 static esp_err_t config_post_handler(httpd_req_t *req)
 {
-    if (req->content_len <= 0 || req->content_len >= HTTP_POST_BUF_LEN) {
+    if (req->content_len == 0 || req->content_len >= HTTP_POST_BUF_LEN) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Invalid body size");
     }
 
     char body[HTTP_POST_BUF_LEN] = { 0 };
-    int received_total = 0;
+    size_t received_total = 0;
+    unsigned int timeout_retries = 0;
     while (received_total < req->content_len) {
         int received = httpd_req_recv(req,
                                       body + received_total,
                                       req->content_len - received_total);
+        if (received == HTTPD_SOCK_ERR_TIMEOUT &&
+            timeout_retries < HTTP_RECV_TIMEOUT_RETRIES) {
+            timeout_retries++;
+            continue;
+        }
         if (received <= 0) {
             return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to read body");
         }
-        received_total += received;
+        timeout_retries = 0;
+        received_total += (size_t)received;
     }
     body[received_total] = '\0';
 
@@ -1209,7 +1641,11 @@ static esp_err_t start_webserver(void)
     config.stack_size = 6144;
     config.uri_match_fn = httpd_uri_match_wildcard;
 
-    ESP_RETURN_ON_ERROR(httpd_start(&server, &config), TAG, "Failed to start HTTP server");
+    esp_err_t err = httpd_start(&server, &config);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to start HTTP server: %s", esp_err_to_name(err));
+        return err;
+    }
 
     const httpd_uri_t root_uri = {
         .uri = "/*",
@@ -1227,13 +1663,21 @@ static esp_err_t start_webserver(void)
         .handler = config_post_handler,
     };
 
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(server, &config_get_uri),
-                        TAG,
-                        "Failed to register GET /api/config");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(server, &config_post_uri),
-                        TAG,
-                        "Failed to register POST /api/config");
-    ESP_RETURN_ON_ERROR(httpd_register_uri_handler(server, &root_uri), TAG, "Failed to register /*");
+    err = httpd_register_uri_handler(server, &config_get_uri);
+    if (err == ESP_OK) {
+        err = httpd_register_uri_handler(server, &config_post_uri);
+    }
+    if (err == ESP_OK) {
+        err = httpd_register_uri_handler(server, &root_uri);
+    }
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to register HTTP handler: %s", esp_err_to_name(err));
+        esp_err_t stop_err = httpd_stop(server);
+        if (stop_err != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to stop incomplete HTTP server: %s", esp_err_to_name(stop_err));
+        }
+        return err;
+    }
 
     ESP_LOGI(TAG, "HTTP server started");
     return ESP_OK;
@@ -1256,11 +1700,12 @@ void app_main(void)
     ESP_ERROR_CHECK(ret);
 
     ESP_ERROR_CHECK(init_timers());
+    ESP_ERROR_CHECK(init_buzzer_control());
+    ESP_ERROR_CHECK(status_led_set(STATUS_LED_READY));
     ESP_ERROR_CHECK(init_button0_gpio());
     ESP_ERROR_CHECK(init_wifi_softap());
     ESP_ERROR_CHECK(start_captive_dns());
     ESP_ERROR_CHECK(start_webserver());
-    ESP_ERROR_CHECK(status_led_set(STATUS_LED_READY));
 
     ESP_LOGI(TAG,
              "Ready. GPIO %d, status LED GPIO %d, default delay %d ms, buzz duration %d ms, "

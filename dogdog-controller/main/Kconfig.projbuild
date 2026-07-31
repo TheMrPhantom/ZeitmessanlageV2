@@ -7,12 +7,12 @@ menu "EDIT HERE: Zeitmessanlage configuration"
             available in code as CONFIG_IS_LORA_CONTROLLER.
     config SENSOR_AMOUNT
         int "sensor_amount"
-        range 0 255
+        range 0 10
         default 4
         depends on !IS_LORA_CONTROLLER
         help
             Number of sensors connected to the controller. Must be an integer
-            between 0 and 255. This value will be available in code as
+            between 0 and 10. This value will be available in code as
             CONFIG_SENSOR_AMOUNT.
     config HORN_TIMER_WIFI_CHANNEL
         int "horn_timer_wifi_channel"

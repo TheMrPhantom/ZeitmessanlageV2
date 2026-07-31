@@ -1,6 +1,7 @@
 #ifndef _RA01S_H
 #define _RA01S_H
 
+#include "esp_err.h"
 #include "driver/spi_master.h"
 
 //return values
@@ -34,7 +35,7 @@
 
 #define LOW                             0
 #define HIGH                            1
-#define BUSY_WAIT                       5000
+#define BUSY_WAIT                       100
 
 // SX126X Model
 #define SX1261_TRANCEIVER                             0x01
@@ -377,16 +378,18 @@ typedef struct timeval timeval_t;
 #define TIME_US(t) ((int64_t)t.tv_sec * 1000000L + (int64_t)t.tv_usec)
 
 // Public function
-void     LoRaInit(void);
+esp_err_t LoRaInit(void);
+void     LoRaDeinit(void);
 int16_t  LoRaBegin(uint32_t frequencyInHz, int8_t txPowerInDbm, float tcxoVoltage, bool useRegulatorLDO);
 void     LoRaConfig(uint8_t spreadingFactor, uint8_t bandwidth, uint8_t codingRate, uint16_t preambleLength, uint8_t payloadLen, bool crcOn, bool invertIrq);
 uint8_t  LoRaReceive(uint8_t *pData, int16_t len);
 bool     LoRaSend(uint8_t *pData, int16_t len, uint8_t mode);
 void     LoRaDebugPrint(bool enable);
+int      LoRaGetLastError(void);
 
 // Private function
-void     spi_write_byte(uint8_t* Dataout, size_t DataLength );
-void     spi_read_byte(uint8_t* Datain, uint8_t* Dataout, size_t DataLength );
+esp_err_t spi_write_byte(uint8_t* Dataout, size_t DataLength );
+esp_err_t spi_read_byte(uint8_t* Datain, uint8_t* Dataout, size_t DataLength );
 uint8_t  spi_transfer(uint8_t address);
 
 bool     ReceiveMode(void);
@@ -425,7 +428,7 @@ int      GetPacketLost();
 uint8_t  GetRssiInst();
 void     GetRxBufferStatus(uint8_t *payloadLength, uint8_t *rxStartBufferPointer);
 void     Wakeup(void);
-void     WaitForIdleBegin(unsigned long timeout, char *text);
+bool     WaitForIdleBegin(unsigned long timeout, char *text);
 bool     WaitForIdle(unsigned long timeout, char *text, bool stop);
 uint8_t  ReadBuffer(uint8_t *rxData, int16_t rxDataLen);
 void     WriteBuffer(uint8_t *txData, int16_t txDataLen);

@@ -33,9 +33,9 @@ static void horn_timer_send_message(uint8_t command, const uint8_t *payload, siz
     }
 
     size_t message_len = HORN_TIMER_CONTROL_MESSAGE_LEN + payload_len;
-    if (message_len > HORN_TIMER_MAX_MESSAGE_LEN)
+    if ((payload_len > 0 && !payload) || message_len > HORN_TIMER_MAX_MESSAGE_LEN)
     {
-        ESP_LOGW(TAG, "Horn timer payload too large: %u", (unsigned int)payload_len);
+        ESP_LOGW(TAG, "Invalid horn timer payload: %u bytes", (unsigned int)payload_len);
         return;
     }
 
@@ -93,11 +93,22 @@ esp_err_t init_horn_timer_broadcast(void)
         return err;
     }
 
-    ESP_ERROR_CHECK_WITHOUT_ABORT(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-    ESP_ERROR_CHECK_WITHOUT_ABORT(esp_wifi_set_mode(WIFI_MODE_STA));
+    err = esp_wifi_set_storage(WIFI_STORAGE_RAM);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to configure Wi-Fi storage: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    err = esp_wifi_set_mode(WIFI_MODE_STA);
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(TAG, "Failed to configure Wi-Fi station mode: %s", esp_err_to_name(err));
+        return err;
+    }
 
     err = esp_wifi_start();
-    if (err != ESP_OK && err != ESP_ERR_WIFI_CONN && err != ESP_ERR_WIFI_NOT_INIT)
+    if (err != ESP_OK)
     {
         ESP_LOGE(TAG, "Failed to start Wi-Fi: %s", esp_err_to_name(err));
         return err;
@@ -137,7 +148,9 @@ void horn_timer_broadcast_elapsed_us(int64_t elapsed_us)
         elapsed_us = 0;
     }
 
-    uint64_t elapsed_ns = (uint64_t)elapsed_us * 1000ULL;
+    uint64_t elapsed_ns = (uint64_t)elapsed_us > UINT64_MAX / 1000ULL
+                              ? UINT64_MAX
+                              : (uint64_t)elapsed_us * 1000ULL;
     horn_timer_send_message(HORN_TIMER_COMMAND_START, (const uint8_t *)&elapsed_ns, sizeof(elapsed_ns));
 }
 

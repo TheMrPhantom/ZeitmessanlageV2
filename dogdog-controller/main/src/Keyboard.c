@@ -5,6 +5,7 @@
  */
 
 #include <stdlib.h>
+#include <string.h>
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -12,9 +13,11 @@
 #include "class/hid/hid_device.h"
 #include "driver/gpio.h"
 #include "Keyboard.h"
+#include "freertos/semphr.h"
 
 #define APP_BUTTON (GPIO_NUM_0) // Use BOOT signal by default
 static const char *TAG = "Keyboard";
+static SemaphoreHandle_t keyboard_mutex;
 
 /************* TinyUSB descriptors ****************/
 
@@ -87,16 +90,42 @@ void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_
 
 /********* Application ***************/
 
-static void send_keyboard_stroke(uint8_t keycode)
+static bool wait_until_hid_ready(TickType_t timeout)
 {
+    TickType_t started = xTaskGetTickCount();
+    do
+    {
+        if (tud_mounted() && tud_hid_ready())
+        {
+            return true;
+        }
+        vTaskDelay(pdMS_TO_TICKS(1));
+    } while ((xTaskGetTickCount() - started) < timeout);
+    return false;
+}
+
+static BaseType_t send_keyboard_stroke(uint8_t keycode)
+{
+    if (!wait_until_hid_ready(pdMS_TO_TICKS(100)))
+    {
+        return pdFALSE;
+    }
+
     uint8_t keycodes[6] = {keycode};
-    tud_hid_keyboard_report(HID_ITF_PROTOCOL_KEYBOARD, 0, keycodes);
+    if (!tud_hid_keyboard_report(HID_ITF_PROTOCOL_KEYBOARD, 0, keycodes))
+    {
+        return pdFALSE;
+    }
     vTaskDelay(pdMS_TO_TICKS(25));
-    tud_hid_keyboard_report(HID_ITF_PROTOCOL_KEYBOARD, 0, NULL);
-    vTaskDelay(pdMS_TO_TICKS(25));
-    tud_hid_keyboard_report(HID_ITF_PROTOCOL_KEYBOARD, 0, NULL);
+    if (!wait_until_hid_ready(pdMS_TO_TICKS(100)) ||
+        !tud_hid_keyboard_report(HID_ITF_PROTOCOL_KEYBOARD, 0, NULL))
+    {
+        ESP_LOGE(TAG, "Failed to send key-release report");
+        return pdFALSE;
+    }
     vTaskDelay(pdMS_TO_TICKS(25));
     ESP_LOGI(TAG, "Keycode sent: %i", keycode);
+    return pdTRUE;
 }
 
 void init_keyboard(void)
@@ -118,30 +147,59 @@ void init_keyboard(void)
     };
 
     ESP_ERROR_CHECK(tinyusb_driver_install(&tusb_cfg));
+    keyboard_mutex = xSemaphoreCreateMutex();
+    if (!keyboard_mutex)
+    {
+        ESP_LOGE(TAG, "Failed to create keyboard mutex");
+    }
     ESP_LOGI(TAG, "USB initialization DONE");
 }
 
 BaseType_t sendKey(uint8_t keycode)
 {
+    if (!keyboard_mutex || xSemaphoreTake(keyboard_mutex, pdMS_TO_TICKS(500)) != pdTRUE)
+    {
+        ESP_LOGE(TAG, "Keyboard is unavailable/busy");
+        return pdFALSE;
+    }
+
+    BaseType_t result = pdFALSE;
     if (tud_mounted())
     {
-        send_keyboard_stroke(keycode);
-        return pdTRUE;
+        result = send_keyboard_stroke(keycode);
     }
     else
     {
         ESP_LOGE(TAG, "USB not mounted, cannot send key");
-        return pdFALSE;
     }
+    xSemaphoreGive(keyboard_mutex);
+    return result;
 }
 
 void sendText(char *text)
 {
-    // go through each character in the string and send it
-    for (int i = 0; i < strlen(text); i++)
+    if (!text)
     {
-        sendKey(charToKeycode(text[i]));
+        ESP_LOGE(TAG, "Cannot send null text");
+        return;
     }
+    if (!keyboard_mutex || xSemaphoreTake(keyboard_mutex, pdMS_TO_TICKS(500)) != pdTRUE)
+    {
+        ESP_LOGE(TAG, "Keyboard is unavailable/busy");
+        return;
+    }
+
+    // go through each character in the string and send it
+    size_t length = strlen(text);
+    for (size_t i = 0; i < length; i++)
+    {
+        if (send_keyboard_stroke(charToKeycode(text[i])) != pdTRUE)
+        {
+            ESP_LOGW(TAG, "Stopped text report at character %u", (unsigned int)i);
+            break;
+        }
+    }
+    xSemaphoreGive(keyboard_mutex);
 }
 
 /*

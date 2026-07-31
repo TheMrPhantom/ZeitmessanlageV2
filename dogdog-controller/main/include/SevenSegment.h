@@ -10,7 +10,6 @@
 #include "esp_lcd_panel_vendor.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_lvgl_port.h"
-#include "lv_conf.h"
 #include "esp_lcd_touch_cst816s.h"
 #include <esp_system.h>
 #include "soc/soc.h"
@@ -19,13 +18,23 @@
 #define IS_THS_MODE (strcmp(pc_programm, "ths") == 0)
 #define IS_SIMPLE_AGILITY_MODE (strcmp(pc_programm, "simple-agility") == 0)
 
+#define DISPLAY_MAX_SENSOR_COUNT 10
+
+typedef struct DisplaySensorStatus
+{
+    int sensor;
+    bool status[DISPLAY_MAX_SENSOR_COUNT];
+    int num_sensors;
+    bool is_trigger;
+} DisplaySensorStatus;
+
 typedef struct SevenSegmentDisplay
 {
     int time;
     int type;
     int startFault;            // 1 = Bad Signal; 2 = Fault
     int stopFault;             // 1 = Bad Signal; 2 = Fault
-    SensorStatus sensorStatus; // Used for SEVEN_SEGMENT_SENSOR_STATUS
+    DisplaySensorStatus sensorStatus; // Used for SEVEN_SEGMENT_SENSOR_STATUS
 } SevenSegmentDisplay;
 
 typedef struct HistoryEntry
@@ -44,7 +53,7 @@ void increase_refusals();
 
 void inrease_fault();
 
-void setupSevenSegment();
+esp_err_t setupSevenSegment(void);
 
 void setup_timing_screen();
 void setup_splashscreen();
@@ -67,6 +76,8 @@ void add_reset_button();
 void del_reset_button();
 void add_vorlaeufig();
 void remove_vorlaeufig();
+esp_err_t init_firmware_upgrade_screen(void);
+esp_err_t display_firmware_upgrade_status(const char *message);
 
 /* End of Adaption */
 
@@ -87,13 +98,14 @@ void reset_btn_event_cb(lv_event_t *e);
 #define SEVEN_SEGMENT_DIS_PREVIEW 11
 #define SEVEN_SEGMENT_DIS_PREVIEW_REVERT 12
 #define SEVEN_SEGMENT_DIS_PREVIEW_CONFIRM 13
+#define SEVEN_SEGMENT_FIRMWARE_UPGRADE 14
 
 /* LCD size */
 #define LCD_H_RES (480)
 #define LCD_V_RES (320)
 
 /* LCD settings */
-#define LCD_SPI_NUM (SPI2_HOST)
+#define LCD_SPI_NUM (LCD_SPI_HOST)
 #define LCD_PIXEL_CLK_HZ (40 * 1000 * 1000)
 #define LCD_CMD_BITS (8)
 #define LCD_PARAM_BITS (8)

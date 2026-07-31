@@ -13,6 +13,8 @@
 #include "Keyboard.h"
 #include "GPIOPins.h"
 #include "LoraNetwork.h"
+#include "esp_timer.h"
+#include "Startup.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -23,12 +25,12 @@ extern QueueHandle_t resetQueue;
 extern QueueHandle_t buzzerQueue;
 extern TaskHandle_t buttonTask;
 
-static esp_lcd_touch_handle_t touch = NULL;
 static lv_obj_t *avatar;
 
 /* LCD IO and panel */
 static esp_lcd_panel_io_handle_t lcd_io = NULL;
 static esp_lcd_panel_handle_t lcd_panel = NULL;
+static bool lcd_bus_initialized = false;
 
 /* LVGL display and touch */
 static lv_display_t *lvgl_disp = NULL;
@@ -38,7 +40,6 @@ static lv_obj_t *splash_screen = NULL;
 static lv_obj_t *timing_screen = NULL;
 static lv_obj_t *pc_programm_screen = NULL;
 static lv_obj_t *top_label = NULL;
-static lv_obj_t *bottom_label = NULL;
 static lv_obj_t *reset_button = NULL;
 static lv_obj_t *fist_image = NULL;
 static lv_obj_t *hand_image = NULL;
@@ -49,6 +50,8 @@ static lv_obj_t *end_label = NULL;
 static lv_obj_t *sensor_left = NULL;
 static lv_obj_t *sensor_right = NULL;
 static lv_obj_t *vorlaeufig = NULL;
+static lv_obj_t *firmware_upgrade_screen = NULL;
+static lv_obj_t *firmware_upgrade_label = NULL;
 
 /* Font and image declarations */
 LV_FONT_DECLARE(monospace);
@@ -60,22 +63,65 @@ int history_index = 0;
 bool isDis = false;
 static bool dis_preview_active = false;
 static bool dis_preview_previous_state = false;
+static bool firmware_upgrade_display_active = false;
 static long last_displayed_time_ms = 0;
-extern bool sensors_active;
+extern volatile bool sensors_active;
 
 extern char *pc_programm;
 extern int controller_id;
 extern int start_id;
 extern int stop_id;
 
+static bool service_firmware_upgrade_display(bool force)
+{
+    const EventBits_t bits = xEventGroupGetBits(startupEventGroup);
+    if (!force && (bits & DOGDOG_OTA_DISPLAY_REQUEST_BIT) == 0)
+    {
+        return false;
+    }
+
+    xEventGroupClearBits(startupEventGroup, DOGDOG_OTA_DISPLAY_REQUEST_BIT);
+    xQueueReset(sevenSegmentQueue);
+
+    const esp_err_t err = display_firmware_upgrade_status("Firmware Upgrade in progress");
+    if (err != ESP_OK)
+    {
+        ESP_LOGE(SEVEN_SEGMENT_TAG, "Could not display firmware-upgrade screen: %s",
+                 esp_err_to_name(err));
+        return true;
+    }
+
+    firmware_upgrade_display_active = true;
+    xEventGroupSetBits(startupEventGroup, DOGDOG_OTA_DISPLAY_ACK_BIT);
+    return true;
+}
+
 void Seven_Segment_Task(void *params)
 {
-    setupSevenSegment();
+    (void)params;
 
-    bool networkFault = false;
+    const esp_err_t setup_err = setupSevenSegment();
+    if (setup_err != ESP_OK)
+    {
+        ESP_LOGE(SEVEN_SEGMENT_TAG, "Display initialization failed: %s",
+                 esp_err_to_name(setup_err));
+        dogdog_startup_signal_failure();
+        vTaskDelete(NULL);
+        return;
+    }
 
     while (true)
     {
+        if (service_firmware_upgrade_display(false))
+        {
+            continue;
+        }
+        if (firmware_upgrade_display_active)
+        {
+            vTaskDelay(pdMS_TO_TICKS(100));
+            continue;
+        }
+
         SevenSegmentDisplay toDisplay;
         if (xQueueReceive(sevenSegmentQueue, &toDisplay, portMAX_DELAY))
         {
@@ -112,7 +158,6 @@ void Seven_Segment_Task(void *params)
             case SEVEN_SEGMENT_SENSOR_STATUS:
                 lvgl_port_lock(-1);
                 draw_sensor_status_single(toDisplay.sensorStatus.sensor, toDisplay.sensorStatus.status, toDisplay.sensorStatus.num_sensors, toDisplay.sensorStatus.is_trigger);
-                free(toDisplay.sensorStatus.status);
                 lvgl_port_unlock();
                 break;
             case SEVEN_SEGMENT_INCREASE_FAULT:
@@ -181,6 +226,9 @@ void Seven_Segment_Task(void *params)
             case SEVEN_SEGMENT_DIS_PREVIEW_CONFIRM:
                 dis_preview_active = false;
                 break;
+            case SEVEN_SEGMENT_FIRMWARE_UPGRADE:
+                service_firmware_upgrade_display(true);
+                break;
             default:
                 ESP_LOGW(SEVEN_SEGMENT_TAG, "Unknown display type");
                 break;
@@ -196,7 +244,7 @@ void add_vorlaeufig()
     {
         vorlaeufig = lv_label_create(timing_screen);
         lv_label_set_text(vorlaeufig, "Verifizierung\nausstehend");
-        lv_obj_set_style_text_font(vorlaeufig, &lv_font_montserrat_26, 0);
+        lv_obj_set_style_text_font(vorlaeufig, &lv_font_montserrat_20, 0);
         lv_obj_set_style_text_color(vorlaeufig, lv_color_hex(0xFF0000), 0);
         lv_obj_align(vorlaeufig, LV_ALIGN_TOP_MID, 0, 10);
         lv_obj_set_style_text_color(top_label, lv_color_hex(0xFF0000), 0);
@@ -284,7 +332,7 @@ esp_err_t app_lcd_init(void)
     gpio_config_t bk_gpio_config = {
         .mode = GPIO_MODE_OUTPUT,
         .pin_bit_mask = 1ULL << LCD_GPIO_BL};
-    ESP_ERROR_CHECK(gpio_config(&bk_gpio_config));
+    ESP_RETURN_ON_ERROR(gpio_config(&bk_gpio_config), SEVEN_SEGMENT_TAG, "Backlight GPIO init failed");
 
     // Initialize SPI bus
     ESP_LOGD(SEVEN_SEGMENT_TAG, "Initialize SPI bus");
@@ -296,6 +344,7 @@ esp_err_t app_lcd_init(void)
         .quadhd_io_num = GPIO_NUM_NC,
         .max_transfer_sz = LCD_H_RES * LCD_DRAW_BUFF_HEIGHT * sizeof(uint16_t)};
     ESP_RETURN_ON_ERROR(spi_bus_initialize(LCD_SPI_HOST, &buscfg, SPI_DMA_CH_AUTO), SEVEN_SEGMENT_TAG, "SPI init failed");
+    lcd_bus_initialized = true;
 
     // Install panel IO
     ESP_LOGD(SEVEN_SEGMENT_TAG, "Install panel IO");
@@ -318,16 +367,16 @@ esp_err_t app_lcd_init(void)
     ESP_GOTO_ON_ERROR(esp_lcd_new_panel_st7789(lcd_io, &panel_config, &lcd_panel), err, SEVEN_SEGMENT_TAG, "New panel failed");
 
     // Initialize LCD panel
-    esp_lcd_panel_reset(lcd_panel);
-    esp_lcd_panel_init(lcd_panel);
-    esp_lcd_panel_mirror(lcd_panel, true, true);
-    esp_lcd_panel_disp_on_off(lcd_panel, true);
+    ESP_GOTO_ON_ERROR(esp_lcd_panel_reset(lcd_panel), err, SEVEN_SEGMENT_TAG, "Panel reset failed");
+    ESP_GOTO_ON_ERROR(esp_lcd_panel_init(lcd_panel), err, SEVEN_SEGMENT_TAG, "Panel init failed");
+    ESP_GOTO_ON_ERROR(esp_lcd_panel_mirror(lcd_panel, true, true), err, SEVEN_SEGMENT_TAG, "Panel mirror setup failed");
+    ESP_GOTO_ON_ERROR(esp_lcd_panel_disp_on_off(lcd_panel, true), err, SEVEN_SEGMENT_TAG, "Panel enable failed");
 
     // Turn on LCD backlight
-    ESP_ERROR_CHECK(gpio_set_level(LCD_GPIO_BL, LCD_BL_ON_LEVEL));
+    ESP_GOTO_ON_ERROR(gpio_set_level(LCD_GPIO_BL, LCD_BL_ON_LEVEL), err, SEVEN_SEGMENT_TAG, "Backlight enable failed");
 
-    esp_lcd_panel_set_gap(lcd_panel, 0, 0);
-    esp_lcd_panel_invert_color(lcd_panel, false);
+    ESP_GOTO_ON_ERROR(esp_lcd_panel_set_gap(lcd_panel, 0, 0), err, SEVEN_SEGMENT_TAG, "Panel gap setup failed");
+    ESP_GOTO_ON_ERROR(esp_lcd_panel_invert_color(lcd_panel, false), err, SEVEN_SEGMENT_TAG, "Panel color setup failed");
 
     return ret;
 
@@ -377,7 +426,7 @@ esp_err_t app_lvgl_init(void)
     lvgl_port_display_cfg_t disp_cfg = {
         .io_handle = lcd_io,
         .panel_handle = lcd_panel,
-        .buffer_size = LCD_H_RES * LCD_DRAW_BUFF_HEIGHT * sizeof(uint16_t),
+        .buffer_size = LCD_H_RES * LCD_DRAW_BUFF_HEIGHT,
         .double_buffer = LCD_DRAW_BUFF_DOUBLE,
         .hres = LCD_H_RES,
         .vres = LCD_V_RES,
@@ -388,25 +437,45 @@ esp_err_t app_lvgl_init(void)
             .mirror_y = false},
         .flags = {.buff_dma = true}};
     lvgl_disp = lvgl_port_add_disp(&disp_cfg);
+    if (!lvgl_disp)
+    {
+        ESP_LOGE(SEVEN_SEGMENT_TAG, "Failed to allocate LVGL display");
+        return ESP_ERR_NO_MEM;
+    }
 
     return ESP_OK;
 }
 
-void setupSevenSegment()
+esp_err_t setupSevenSegment(void)
 {
     /* LCD HW initialization */
-    ESP_ERROR_CHECK(app_lcd_init());
+    esp_err_t err = app_lcd_init();
+    if (err != ESP_OK)
+    {
+        return err;
+    }
 
     ESP_LOGI(SEVEN_SEGMENT_TAG, "Initialize touch controller");
     // esp_lcd_touch_new_i2c_cst816s(tp_io_handle, &tp_cfg, &touch);
 
     /* LVGL initialization */
-    ESP_ERROR_CHECK(app_lvgl_init());
+    err = app_lvgl_init();
+    if (err != ESP_OK)
+    {
+        cleanup_lcd_resources();
+        return err;
+    }
 
-    lvgl_port_lock(-1);
+    if (!lvgl_port_lock(-1))
+    {
+        cleanup_lcd_resources();
+        return ESP_ERR_TIMEOUT;
+    }
     setup_splashscreen();
     setup_timing_screen();
     setup_pc_programm_screen();
+
+    dogdog_startup_signal_ready(DOGDOG_STARTUP_DISPLAY_READY_BIT);
 
     xTaskNotifyGive(buttonTask);
 
@@ -415,12 +484,16 @@ void setupSevenSegment()
 
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     xTaskNotifyGive(buttonTask);
-    lvgl_port_lock(-1);
-    // Buzz for startup
-    xQueueSend(buzzerQueue, &(int){BUZZER_STARTUP}, 0);
+    if ((xEventGroupGetBits(startupEventGroup) & DOGDOG_OTA_DISPLAY_REQUEST_BIT) == 0)
+    {
+        lvgl_port_lock(-1);
+        // Buzz for startup
+        xQueueSend(buzzerQueue, &(int){BUZZER_STARTUP}, 0);
 
-    lv_scr_load_anim(timing_screen, LV_SCR_LOAD_ANIM_MOVE_TOP, 500, 0, false);
-    lvgl_port_unlock();
+        lv_scr_load_anim(timing_screen, LV_SCR_LOAD_ANIM_MOVE_TOP, 500, 0, false);
+        lvgl_port_unlock();
+    }
+    return ESP_OK;
 }
 
 void setup_splashscreen()
@@ -633,9 +706,15 @@ void add_to_history()
                 char padded_time[9]; // 8 digits + null terminator
                 // fill padded time with zeros
                 memset(padded_time, '0', 8);
-                int length = strlen(time_text);
+                size_t length = strlen(time_text);
+                const char *time_suffix = time_text;
+                if (length > 8)
+                {
+                    time_suffix += length - 8;
+                    length = 8;
+                }
                 // copy time text to padded time from the end
-                memcpy(padded_time + 8 - length, time_text, length);
+                memcpy(padded_time + 8 - length, time_suffix, length);
                 padded_time[8] = 0x00; // null terminator
 
                 printf("e%s\n", padded_time);
@@ -676,9 +755,15 @@ void add_to_history()
             char padded_time[9]; // 8 digits + null terminator
             // fill padded time with zeros
             memset(padded_time, '0', 8);
-            int length = strlen(time_text);
+            size_t length = strlen(time_text);
+            const char *time_suffix = time_text;
+            if (length > 8)
+            {
+                time_suffix += length - 8;
+                length = 8;
+            }
             // copy time text to padded time from the end
-            memcpy(padded_time + 8 - length, time_text, length);
+            memcpy(padded_time + 8 - length, time_suffix, length);
             padded_time[8] = 0x00; // null terminator
 
             printf("e%s\n", padded_time);
@@ -796,22 +881,25 @@ void del_reset_button()
 
 void handleCountdown(SevenSegmentDisplay toDisplay)
 {
-    int startTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
-    int endTime = startTime + toDisplay.time;
-    int remainingTime = endTime - (int)pdTICKS_TO_MS(xTaskGetTickCount());
+    int64_t end_time_us = esp_timer_get_time() + (int64_t)toDisplay.time * 1000;
+    int64_t remaining_time_ms = (end_time_us - esp_timer_get_time()) / 1000;
 
-    setSeconds(remainingTime / 1000);
+    setSeconds((long)(remaining_time_ms / 1000));
     xQueueSend(buzzerQueue, &(int){BUZZER_7_MINUTE_TIMER_START}, 0);
     vTaskDelay(pdMS_TO_TICKS(2000));
 
-    startTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
-    endTime = startTime + toDisplay.time;
-    remainingTime = endTime - (int)pdTICKS_TO_MS(xTaskGetTickCount());
+    end_time_us = esp_timer_get_time() + (int64_t)toDisplay.time * 1000;
+    remaining_time_ms = (end_time_us - esp_timer_get_time()) / 1000;
 
-    while (remainingTime > 0)
+    while (remaining_time_ms > 0)
     {
-        setSeconds(remainingTime / 1000);
-        remainingTime = endTime - (int)pdTICKS_TO_MS(xTaskGetTickCount());
+        if (service_firmware_upgrade_display(false))
+        {
+            return;
+        }
+
+        setSeconds((long)(remaining_time_ms / 1000));
+        remaining_time_ms = (end_time_us - esp_timer_get_time()) / 1000;
 
         if (xQueueReceive(sevenSegmentQueue, &toDisplay, pdMS_TO_TICKS(200)))
         {
@@ -822,20 +910,23 @@ void handleCountdown(SevenSegmentDisplay toDisplay)
             }
             else if (toDisplay.type == SEVEN_SEGMENT_COUNTDOWN)
             {
-                startTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
-                endTime = startTime + toDisplay.time * 1000;
-                remainingTime = endTime - (int)pdTICKS_TO_MS(xTaskGetTickCount());
+                end_time_us = esp_timer_get_time() + (int64_t)toDisplay.time * 1000;
+                remaining_time_ms = (end_time_us - esp_timer_get_time()) / 1000;
             }
             else if (toDisplay.type == SEVEN_SEGMENT_SENSOR_STATUS)
             {
                 lvgl_port_lock(-1);
                 draw_sensor_status_single(toDisplay.sensorStatus.sensor, toDisplay.sensorStatus.status, toDisplay.sensorStatus.num_sensors, toDisplay.sensorStatus.is_trigger);
-                free(toDisplay.sensorStatus.status);
                 lvgl_port_unlock();
             }
             else if (toDisplay.type == SEVEN_SEGMENT_NETWORK_FAULT)
             {
                 displayFault(toDisplay.startFault, toDisplay.stopFault);
+            }
+            else if (toDisplay.type == SEVEN_SEGMENT_FIRMWARE_UPGRADE)
+            {
+                service_firmware_upgrade_display(true);
+                return;
             }
         }
     }
@@ -863,12 +954,18 @@ void cleanup_lcd_resources()
     if (lcd_panel)
     {
         esp_lcd_panel_del(lcd_panel);
+        lcd_panel = NULL;
     }
     if (lcd_io)
     {
         esp_lcd_panel_io_del(lcd_io);
+        lcd_io = NULL;
     }
-    spi_bus_free(LCD_SPI_NUM);
+    if (lcd_bus_initialized)
+    {
+        spi_bus_free(LCD_SPI_NUM);
+        lcd_bus_initialized = false;
+    }
 }
 
 void draw_connection_status(int start_alive, int end_alive)
@@ -938,6 +1035,21 @@ void draw_sensor_status(bool *sensor_connected_left, bool *sensor_connected_righ
 
 void draw_sensor_status_single(int sensor, bool *status, int num, bool is_trigger)
 {
+    if (num < 0)
+    {
+        num = 0;
+    }
+    if (num > 10)
+    {
+        ESP_LOGW(SEVEN_SEGMENT_TAG, "Only the first 10 of %d sensors fit on screen", num);
+        num = 10;
+    }
+    if (num > 0 && !status)
+    {
+        ESP_LOGE(SEVEN_SEGMENT_TAG, "Missing sensor status array");
+        num = 0;
+    }
+
     lv_obj_t *sensor_box = NULL;
     if (sensor == SENSOR_START)
     {
@@ -1012,6 +1124,76 @@ void draw_vertical_line(int x_pos)
     lv_obj_set_pos(line, x_pos, 0); // Screen coordinate (x_pos,0)
 }
 
+static void create_firmware_upgrade_screen_locked(const char *message)
+{
+    if (firmware_upgrade_screen == NULL)
+    {
+        firmware_upgrade_screen = lv_obj_create(NULL);
+        lv_obj_set_style_bg_color(firmware_upgrade_screen, lv_color_white(), 0);
+        lv_obj_set_style_bg_opa(firmware_upgrade_screen, LV_OPA_COVER, 0);
+
+        firmware_upgrade_label = lv_label_create(firmware_upgrade_screen);
+        lv_obj_set_width(firmware_upgrade_label, LCD_H_RES - 40);
+        lv_obj_set_style_text_align(firmware_upgrade_label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_font(firmware_upgrade_label, &lv_font_montserrat_30, 0);
+        lv_obj_set_style_text_color(firmware_upgrade_label, lv_color_hex(0x000000), 0);
+        lv_obj_center(firmware_upgrade_label);
+    }
+
+    lv_label_set_text(firmware_upgrade_label, message);
+    lv_scr_load(firmware_upgrade_screen);
+}
+
+esp_err_t init_firmware_upgrade_screen(void)
+{
+    esp_err_t err = app_lcd_init();
+    if (err != ESP_OK)
+    {
+        return err;
+    }
+
+    err = app_lvgl_init();
+    if (err != ESP_OK)
+    {
+        cleanup_lcd_resources();
+        return err;
+    }
+
+    if (!lvgl_port_lock(-1))
+    {
+        return ESP_ERR_TIMEOUT;
+    }
+    create_firmware_upgrade_screen_locked("Firmware Upgrade in progress");
+    lvgl_port_unlock();
+    return ESP_OK;
+}
+
+esp_err_t display_firmware_upgrade_status(const char *message)
+{
+    if (message == NULL)
+    {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (lvgl_disp == NULL)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    if (!lvgl_port_lock(pdMS_TO_TICKS(1000)))
+    {
+        ESP_LOGW(SEVEN_SEGMENT_TAG, "Timed out updating firmware upgrade screen");
+        return ESP_ERR_TIMEOUT;
+    }
+    create_firmware_upgrade_screen_locked(message);
+    lvgl_port_unlock();
+    return ESP_OK;
+}
+
+static void free_line_points(lv_event_t *event)
+{
+    free(lv_event_get_user_data(event));
+}
+
 void draw_line(int x1, int y1, int x2, int y2)
 {
     lv_point_t *line_points = malloc(sizeof(lv_point_t) * 2);
@@ -1026,7 +1208,14 @@ void draw_line(int x1, int y1, int x2, int y2)
     line_points[1].y = y2;
 
     lv_obj_t *line = lv_line_create(timing_screen);
+    if (!line)
+    {
+        free(line_points);
+        ESP_LOGE(SEVEN_SEGMENT_TAG, "Failed to create line object");
+        return;
+    }
     lv_line_set_points(line, line_points, 2);
+    lv_obj_add_event_cb(line, free_line_points, LV_EVENT_DELETE, line_points);
 
     /* Style */
     lv_obj_set_style_line_color(line, lv_color_hex(0xb0b0b0), 0); // grey

@@ -16,10 +16,10 @@ const int sensorGlowPins[] = {BUTTON_GLOW_GPIO_TYPE_ACTIVATE,
                               BUTTON_GLOW_GPIO_TYPE_REFUSAL,
                               BUTTON_GLOW_GPIO_TYPE_RESET};
 
-QueueHandle_t buttonQueue;
-extern bool sensors_active;
+extern QueueHandle_t buttonQueue;
+extern volatile bool sensors_active;
 bool active_glowing = false;
-timeval_t last_glow;
+static TickType_t last_glow_tick;
 
 void init_glow_pins()
 {
@@ -27,12 +27,14 @@ void init_glow_pins()
     for (int i = 0; i < sizeof(sensorGlowPins) / sizeof(int); i++)
     {
 
-        gpio_config_t io_conf;
+        gpio_config_t io_conf = {0};
         io_conf.pin_bit_mask = 1ULL << sensorGlowPins[i]; // select pin
         io_conf.mode = GPIO_MODE_OUTPUT;                  // input mode
         io_conf.intr_type = GPIO_INTR_DISABLE;
-        gpio_config(&io_conf);
-        gpio_set_level(sensorGlowPins[i], 0);
+        io_conf.pull_up_en = GPIO_PULLUP_DISABLE;
+        io_conf.pull_down_en = GPIO_PULLDOWN_DISABLE;
+        ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_config(&io_conf));
+        ESP_ERROR_CHECK_WITHOUT_ABORT(gpio_set_level(sensorGlowPins[i], 0));
     }
 
     ESP_LOGI(TAG, "Done configuring IO");
@@ -40,7 +42,7 @@ void init_glow_pins()
 
 void Button_Task(void *params)
 {
-    buttonQueue = xQueueCreate(15, sizeof(glow_state_t));
+    last_glow_tick = xTaskGetTickCount();
 
     gpio_set_level(BUTTON_GLOW_GPIO_TYPE_ACTIVATE, 1);
     gpio_set_level(BUTTON_GLOW_GPIO_TYPE_RESET, 1);
@@ -89,9 +91,8 @@ void Button_Task(void *params)
 
         if (!sensors_active)
         {
-            timeval_t now;
-            gettimeofday(&now, NULL);
-            if (TIME_US(now) - TIME_US(last_glow) > 1000000)
+            TickType_t now_tick = xTaskGetTickCount();
+            if ((now_tick - last_glow_tick) > pdMS_TO_TICKS(1000))
             {
 
                 if (active_glowing)
@@ -108,7 +109,7 @@ void Button_Task(void *params)
                     xQueueSend(buttonQueue, &glow_state, pdMS_TO_TICKS(50));
                     active_glowing = true;
                 }
-                gettimeofday(&last_glow, NULL);
+                last_glow_tick = now_tick;
             }
         }
     }

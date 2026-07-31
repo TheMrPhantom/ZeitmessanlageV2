@@ -1,30 +1,87 @@
 menu "OTA Settings"
-    menu "Download Settings"
-        # Firmware URL Configuration
-        config FIRMWARE_URL
-            string "Firmware URL"
-            default "https://example.com/firmware.bin"
-            help
-                URL where the firmware can be downloaded for OTA updates.
-        config RECV_TIMEOUT
-            int "OTA Receive Timeout"
-            default 5000
-            help
-                Maximum time for reception
+    config DD_OTA_USE_CERTIFICATE_BUNDLE
+        bool
+        default y
+        select MBEDTLS_CERTIFICATE_BUNDLE
 
-        config ENABLE_PARTIAL_HTTP_DOWNLOAD
+    config DD_OTA_ENABLE_ROLLBACK
+        bool "Enable application rollback"
+        default y
+        select BOOTLOADER_APP_ROLLBACK_ENABLE
+        help
+            Keep newly installed images in pending-verification state until the
+            application calls dd_ota_mark_app_valid().
+
+    menu "Download Settings"
+        config DD_OTA_BASE_URL
+            string "Firmware server base URL"
+            default "https://ota.dogdog-zeitmessung.de"
+            help
+                HTTPS origin hosting firmware without redirects. The component
+                appends /<project-name>.bin to this value.
+
+        config DD_OTA_RECV_TIMEOUT_MS
+            int "OTA receive timeout (ms)"
+            default 5000
+            range 1000 120000
+            help
+                Maximum time in milliseconds for an OTA HTTP receive operation.
+
+        config DD_OTA_NO_PROGRESS_TIMEOUT_MS
+            int "OTA no-progress timeout (ms)"
+            default 60000
+            range 5000 600000
+            help
+                Abort and reboot if no additional firmware bytes are received
+                for this long. The timer is reset whenever download progress is
+                made, so it does not limit the total update duration.
+
+        config DD_OTA_ENABLE_PARTIAL_HTTP_DOWNLOAD
             bool "Enable partial HTTP download"
-            default n
+            default y
             help
                 This enables use of Range header in esp_https_ota component.
                 Firmware image will be downloaded over multiple HTTP requests.
-        config HTTP_REQUEST_SIZE
+
+        config DD_OTA_HTTP_REQUEST_SIZE
             int "HTTP request size"
-            default MBEDTLS_SSL_IN_CONTENT_LEN
-            depends on ENABLE_PARTIAL_HTTP_DOWNLOAD
+            default 16384
+            range 4096 65536
+            depends on DD_OTA_ENABLE_PARTIAL_HTTP_DOWNLOAD
             help
-                This options specifies HTTP request size. Number of bytes specified
-                in this option will be downloaded in single HTTP request.
+                Number of bytes requested in each partial HTTP download request.
+    endmenu
+
+    menu "Worker Settings"
+        config DD_OTA_TASK_STACK_SIZE
+            int "OTA worker stack size"
+            default 16384
+            range 8192 32768
+            help
+                Stack allocated to the HTTPS OTA worker task, in bytes.
+
+        config DD_OTA_TASK_PRIORITY
+            int "OTA worker priority"
+            default 5
+            range 1 24
+            help
+                FreeRTOS priority used by the shared OTA worker task.
+
+        config DD_OTA_FAILURE_REBOOT_DELAY_MS
+            int "Failure reboot delay (ms)"
+            default 5000
+            range 0 60000
+            help
+                Time provided to the application to display a failure status
+                before rebooting into the unchanged firmware.
+
+        config DD_OTA_SUCCESS_REBOOT_DELAY_MS
+            int "Success reboot delay (ms)"
+            default 1000
+            range 0 10000
+            help
+                Time provided to the application to display success before
+                rebooting into the newly installed firmware.
     endmenu
 
     # WiFi Settings Submenu
@@ -60,6 +117,21 @@ menu "OTA Settings"
             default ""
             help
                 Password identifier for SAE H2E mode.
+
+        config OTA_WIFI_MAXIMUM_RETRY
+            int "Maximum WiFi connection retries"
+            default 5
+            range 0 100
+            help
+                Number of reconnection attempts before the OTA request is abandoned.
+
+        config OTA_WIFI_CONNECT_TIMEOUT_MS
+            int "WiFi connection timeout (ms)"
+            default 30000
+            range 1000 300000
+            help
+                Maximum total time to wait for an IP address before abandoning the
+                OTA request.
 
     endmenu
 endmenu
