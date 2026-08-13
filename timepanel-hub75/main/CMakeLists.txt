@@ -1,5 +1,14 @@
 idf_component_register(
-    SRCS "main.cpp"
+    SRCS
+        "main.cpp"
+        "globals.cpp"
+        "runner_state.cpp"
+        "drawing.cpp"
+        "runner_view.cpp"
+        "parcours_view.cpp"
+        "screens.cpp"
+        "hardware.cpp"
+        "app.cpp"
     INCLUDE_DIRS "."
     REQUIRES
         driver
