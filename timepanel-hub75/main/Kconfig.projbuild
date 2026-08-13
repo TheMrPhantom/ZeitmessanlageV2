@@ -1,0 +1,85 @@
+menu "Timepanel HUB75 configuration"
+
+config TIMEPANEL_PANEL_WIDTH
+    int "Single HUB75 panel width"
+    range 16 512
+    default 64
+
+config TIMEPANEL_PANEL_HEIGHT
+    int "Single HUB75 panel height"
+    range 16 256
+    default 32
+
+config TIMEPANEL_MATRIX_CHAIN_WIDTH
+    int "HUB75 panels chained horizontally"
+    range 1 8
+    default 4
+
+config TIMEPANEL_MATRIX_CHAIN_HEIGHT
+    int "HUB75 panels chained vertically"
+    range 1 4
+    default 1
+
+config TIMEPANEL_PANEL_BRIGHTNESS
+    int "HUB75 panel brightness"
+    range 0 255
+    default 50
+    help
+        Brightness passed to the HUB75 driver. 0 blanks the panel and 255 is
+        maximum brightness.
+
+config TIMEPANEL_BUTTON_GPIO
+    int "Preview mode switch GPIO"
+    range 0 48
+    default 0
+
+config TIMEPANEL_PARCOURS_SECONDS
+    int "Parcours walk timer duration in seconds"
+    range 1 3600
+    default 420
+
+config TIMEPANEL_PARCOURS_INTRO_SECONDS
+    int "Parcours intro duration in seconds"
+    range 0 120
+    default 5
+
+config TIMEPANEL_SENSOR_ENABLED
+    bool "Log FHT40 temperature and humidity"
+    default y
+
+config TIMEPANEL_SENSOR_I2C_PORT
+    int "FHT40 I2C port"
+    depends on TIMEPANEL_SENSOR_ENABLED
+    range 0 1
+    default 0
+
+config TIMEPANEL_SENSOR_I2C_SDA_GPIO
+    int "FHT40 I2C SDA GPIO"
+    depends on TIMEPANEL_SENSOR_ENABLED
+    range 0 48
+    default 35
+
+config TIMEPANEL_SENSOR_I2C_SCL_GPIO
+    int "FHT40 I2C SCL GPIO"
+    depends on TIMEPANEL_SENSOR_ENABLED
+    range 0 48
+    default 36
+
+config TIMEPANEL_SENSOR_I2C_FREQUENCY_HZ
+    int "FHT40 I2C frequency"
+    depends on TIMEPANEL_SENSOR_ENABLED
+    range 10000 1000000
+    default 400000
+
+config TIMEPANEL_SENSOR_I2C_INTERNAL_PULLUPS
+    bool "Enable internal pull-ups on FHT40 I2C pins"
+    depends on TIMEPANEL_SENSOR_ENABLED
+    default n
+
+config TIMEPANEL_SENSOR_LOG_INTERVAL_SECONDS
+    int "FHT40 console log interval in seconds"
+    depends on TIMEPANEL_SENSOR_ENABLED
+    range 1 3600
+    default 10
+
+endmenu
