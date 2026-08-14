@@ -1,19 +1,71 @@
 #include "timepanel_common.h"
 
+namespace {
+
+bool idle_splash_due(ScreenMode mode, int64_t now_us, int64_t screen_started_us)
+{
+    if (IDLE_SPLASH_SECONDS <= 0 || mode == ScreenMode::StartupSplash ||
+        mode == ScreenMode::IdleSplash || mode == ScreenMode::ParcoursIntro ||
+        mode == ScreenMode::ParcoursStartWhoosh ||
+        mode == ScreenMode::ParcoursTimer ||
+        mode == ScreenMode::ParcoursWhoosh) {
+        return false;
+    }
+
+    if (mode == ScreenMode::RunnerPreview && runner_timer_running()) {
+        return false;
+    }
+
+    const int64_t last_activity_us =
+        g_last_activity_us.load(std::memory_order_acquire);
+    const int64_t idle_baseline_us = std::max(last_activity_us, screen_started_us);
+    return idle_baseline_us > 0 &&
+           now_us - idle_baseline_us >=
+               static_cast<int64_t>(IDLE_SPLASH_SECONDS) * 1000000LL;
+}
+
+} // namespace
+
+void mark_timepanel_activity(int64_t now_us)
+{
+    g_last_activity_us.store(now_us, std::memory_order_release);
+}
+
+void mark_timepanel_activity()
+{
+    mark_timepanel_activity(esp_timer_get_time());
+}
+
 void switch_to_runner_preview()
 {
+    const int64_t now_us = esp_timer_get_time();
+    mark_timepanel_activity(now_us);
     g_frizzles_reset_requested.store(true, std::memory_order_release);
-    g_screen_started_us.store(esp_timer_get_time(), std::memory_order_release);
+    g_screen_started_us.store(now_us, std::memory_order_release);
     g_screen_mode.store(static_cast<int>(ScreenMode::RunnerPreview),
                         std::memory_order_release);
 }
 
 void switch_to_parcours_intro()
 {
+    switch_to_parcours_intro(TIMER_SECONDS * 1000U);
+}
+
+void switch_to_parcours_intro(uint32_t duration_ms)
+{
+    const int64_t now_us = esp_timer_get_time();
+    mark_timepanel_activity(now_us);
+    g_parcours_duration_ms.store(std::max<uint32_t>(1000, duration_ms),
+                                 std::memory_order_release);
     g_frizzles_reset_requested.store(true, std::memory_order_release);
-    g_screen_started_us.store(esp_timer_get_time(), std::memory_order_release);
+    g_screen_started_us.store(now_us, std::memory_order_release);
     g_screen_mode.store(static_cast<int>(ScreenMode::ParcoursIntro),
                         std::memory_order_release);
+}
+
+void apply_parcours_command_start(uint32_t duration_ms)
+{
+    switch_to_parcours_intro(duration_ms);
 }
 
 void button_task(void *)
@@ -48,6 +100,7 @@ void button_task(void *)
             if (stable_level == 0 &&
                 (now_us - last_press_us) >= BUTTON_REPEAT_GUARD_MS * 1000LL) {
                 last_press_us = now_us;
+                mark_timepanel_activity(now_us);
                 const ScreenMode mode = static_cast<ScreenMode>(
                     g_screen_mode.load(std::memory_order_acquire));
                 if (mode == ScreenMode::RunnerPreview) {
@@ -120,6 +173,15 @@ void ui_task(void *)
             g_screen_started_us.load(std::memory_order_acquire);
         const int64_t elapsed_ms = (now_us - started_us) / 1000;
 
+        if (idle_splash_due(mode, now_us, started_us)) {
+            g_screen_started_us.store(now_us, std::memory_order_release);
+            g_screen_mode.store(static_cast<int>(ScreenMode::IdleSplash),
+                                std::memory_order_release);
+            last_static_mode = -1;
+            vTaskDelay(pdMS_TO_TICKS(40));
+            continue;
+        }
+
         switch (mode) {
         case ScreenMode::StartupSplash:
             if (elapsed_ms >= STARTUP_SPLASH_DURATION_MS) {
@@ -170,7 +232,8 @@ void ui_task(void *)
         case ScreenMode::ParcoursTimer:
             last_static_mode = -1;
             if (elapsed_ms >=
-                TIMER_SECONDS * 1000LL + COUNTDOWN_FINISHED_HOLD_MS) {
+                g_parcours_duration_ms.load(std::memory_order_acquire) +
+                    COUNTDOWN_FINISHED_HOLD_MS) {
                 g_screen_started_us.store(now_us, std::memory_order_release);
                 g_screen_mode.store(static_cast<int>(ScreenMode::ParcoursWhoosh),
                                     std::memory_order_release);
@@ -198,6 +261,14 @@ void ui_task(void *)
                 last_static_mode = static_cast<int>(ScreenMode::ParcoursEnded);
             }
             vTaskDelay(pdMS_TO_TICKS(100));
+            break;
+
+        case ScreenMode::IdleSplash:
+            if (last_static_mode != static_cast<int>(ScreenMode::IdleSplash)) {
+                render_startup_splash_screen();
+                last_static_mode = static_cast<int>(ScreenMode::IdleSplash);
+            }
+            vTaskDelay(pdMS_TO_TICKS(250));
             break;
         }
     }

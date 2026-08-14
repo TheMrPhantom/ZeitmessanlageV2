@@ -28,6 +28,12 @@ constexpr int FHT40_READ_RETRY_DELAY_MS = 5;
 constexpr int FHT40_READ_ATTEMPTS = 3;
 constexpr int FHT40_I2C_TIMEOUT_MS = 50;
 
+#ifdef CONFIG_TIMEPANEL_HUB75_DOUBLE_BUFFER
+constexpr bool HUB75_DOUBLE_BUFFER_ENABLED = true;
+#else
+constexpr bool HUB75_DOUBLE_BUFFER_ENABLED = false;
+#endif
+
 #if CONFIG_TIMEPANEL_SENSOR_I2C_INTERNAL_PULLUPS
 constexpr bool SENSOR_I2C_INTERNAL_PULLUPS = true;
 #else
@@ -78,7 +84,7 @@ void initialize_hub75()
     config.pins = HUB75_PINS;
     config.output_clock_speed = Hub75ClockSpeed::HZ_20M;
     config.min_refresh_rate = 80;
-    config.double_buffer = true;
+    config.double_buffer = HUB75_DOUBLE_BUFFER_ENABLED;
     config.brightness = CONFIG_TIMEPANEL_PANEL_BRIGHTNESS;
 
     g_hub75 = std::make_unique<Hub75Driver>(config);

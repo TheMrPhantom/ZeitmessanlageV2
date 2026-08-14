@@ -17,6 +17,7 @@
 #include "SevenSegment.h"
 #include "Buzzer.h"
 #include "Timer.h"
+#include "TimepanelClient.h"
 
 #if CONFIG_START
 #define STATION_TYPE 0
@@ -75,6 +76,7 @@ static void send_dis_key_to_pc()
     {
         BaseType_t result = sendKey(HID_KEY_D);
         ESP_LOGI(TAG, "Result of sending key: %i", result);
+        timepanel_send_dis();
     }
     else
     {
@@ -293,6 +295,7 @@ void Button_Input_Task(void *params)
                         if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_FAULT)
                         {
                             BaseType_t result = sendKey(HID_KEY_F);
+                            timepanel_send_fault_increment();
                             SevenSegmentDisplay toSendSevenSegment;
                             toSendSevenSegment.type = SEVEN_SEGMENT_INCREASE_FAULT;
                             xQueueSend(sevenSegmentQueue, &toSendSevenSegment, 0);
@@ -311,6 +314,7 @@ void Button_Input_Task(void *params)
                                 result = sendKey(HID_KEY_R);
                             }
 
+                            timepanel_send_refusal_increment();
                             SevenSegmentDisplay toSendSevenSegment;
                             toSendSevenSegment.type = SEVEN_SEGMENT_INCREASE_REFUSAL;
                             xQueueSend(sevenSegmentQueue, &toSendSevenSegment, 0);
@@ -355,6 +359,7 @@ void Button_Input_Task(void *params)
             toSend.type = SEVEN_SEGMENT_COUNTDOWN;
             toSend.time = 60 * 7 * 1000;
             xQueueSend(sevenSegmentQueue, &toSend, 0);
+            timepanel_send_parcours_timer(60 * 7 * 1000);
             gettimeofday(&reset_pressed, NULL);
             ESP_LOGI(TAG, "Countdown started");
         }

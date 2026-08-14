@@ -21,4 +21,16 @@ menu "EDIT HERE: Zeitmessanlage configuration"
         help
             Wi-Fi channel used to broadcast timer elapsed time for the horn.
             This must match CONFIG_BUZZER_SOFTAP_CHANNEL in the horn project.
+    config TIMEPANEL_ENABLED
+        bool "timepanel_enabled"
+        default y
+        help
+            Send timer, result and parcours commands to the HUB75 timepanel.
+    config TIMEPANEL_MAC_ID
+        hex "timepanel_mac_id"
+        range 0x0000 0xFFFF
+        default 0x0002
+        help
+            Configurable last two bytes of the timepanel MAC. The fixed DogDog
+            prefix is de:09:dd:09, so 0x0002 becomes de:09:dd:09:00:02.
 endmenu

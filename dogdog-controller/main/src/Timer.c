@@ -10,6 +10,7 @@
 #include "Button.h"
 #include "GPIOPins.h"
 #include "HornTimer.h"
+#include "TimepanelClient.h"
 
 extern QueueHandle_t sevenSegmentQueue;
 
@@ -21,6 +22,7 @@ extern QueueHandle_t buttonQueue;
 
 extern QueueSetHandle_t triggerAndResetQueue;
 extern char *pc_programm;
+extern bool isDis;
 
 char *TIMER_TAG = "TIMER";
 TimerTrigger timerTriggerCause;
@@ -47,6 +49,7 @@ void startTimer(int64_t timestamp)
     }
 
     horn_timer_broadcast_elapsed_us(elapsed_time);
+    timepanel_send_start(elapsed_time / 1000);
     last_horn_broadcast_time = elapsed_time;
 
     if (sensors_active)
@@ -139,6 +142,14 @@ void Timer_Task(void *params)
 
                         xQueueSend(timeQueue, &timeElapsedLocal, 0);
                         ESP_LOGI(TIMER_TAG, "Timer stopped. Elapsed time: %lld ms", timeElapsedLocal);
+                        if (isDis)
+                        {
+                            timepanel_send_dis();
+                        }
+                        else
+                        {
+                            timepanel_send_stop(timeElapsedLocal);
+                        }
 
                         SevenSegmentDisplay toSend;
                         toSend.type = SEVEN_SEGMENT_STORE_TO_HISTORY;
@@ -163,6 +174,14 @@ void Timer_Task(void *params)
 
                     xQueueSend(timeQueue, &timeElapsedLocal, 0);
                     ESP_LOGI(TIMER_TAG, "Timer stopped. Elapsed time: %lld ms", timeElapsedLocal);
+                    if (isDis)
+                    {
+                        timepanel_send_dis();
+                    }
+                    else
+                    {
+                        timepanel_send_stop(timeElapsedLocal);
+                    }
 
                     if (!IS_THS_MODE)
                     {
@@ -191,6 +210,7 @@ void Timer_Task(void *params)
                 xQueueReceive(resetQueue, &resetCause, 0);
                 stopTimer();
                 horn_timer_broadcast_reset();
+                timepanel_send_reset();
 
                 int x = -2;
                 xQueueSend(timeQueue, &x, 0);

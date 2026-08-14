@@ -28,6 +28,15 @@ config TIMEPANEL_PANEL_BRIGHTNESS
         Brightness passed to the HUB75 driver. 0 blanks the panel and 255 is
         maximum brightness.
 
+config TIMEPANEL_HUB75_DOUBLE_BUFFER
+    bool "Enable HUB75 DMA double buffering"
+    default n
+    help
+        Allocates a second HUB75 DMA framebuffer. This is smoother, but a
+        four-panel ESP32-S3 chain needs a large contiguous DMA-capable SRAM
+        block. Keep disabled if HUB75 startup fails while allocating buffer B
+        or descriptor chain 1.
+
 config TIMEPANEL_BUTTON_GPIO
     int "Preview mode switch GPIO"
     range 0 48
@@ -42,6 +51,36 @@ config TIMEPANEL_PARCOURS_INTRO_SECONDS
     int "Parcours intro duration in seconds"
     range 0 120
     default 5
+
+config TIMEPANEL_DEMO_PREVIEW_ENABLED
+    bool "Run the visual demo after startup"
+    default n
+    help
+        Replays the temporary visual demo after the splash screen. Keep this
+        disabled for real controller operation.
+
+config TIMEPANEL_IDLE_SPLASH_SECONDS
+    int "DogDog splash idle timeout in seconds"
+    range 0 3600
+    default 300
+    help
+        Shows the DogDog splash screen after this many seconds without a
+        button press or controller command. Set to 0 to disable.
+
+config TIMEPANEL_WIFI_CHANNEL
+    int "Timepanel promiscuous Wi-Fi channel"
+    range 1 13
+    default 1
+    help
+        Wi-Fi channel used by the controller and the timepanel.
+
+config TIMEPANEL_MAC_ID
+    hex "timepanel_mac_id"
+    range 0x0000 0xFFFF
+    default 0x0002
+    help
+        Configurable last two bytes of the timepanel MAC. The fixed DogDog
+        prefix is de:09:dd:09, so 0x0002 becomes de:09:dd:09:00:02.
 
 config TIMEPANEL_SENSOR_ENABLED
     bool "Log FHT40 temperature and humidity"

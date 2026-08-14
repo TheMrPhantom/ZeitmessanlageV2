@@ -16,6 +16,8 @@ RunnerState g_runner_state{};
 
 std::atomic<int> g_screen_mode{static_cast<int>(ScreenMode::StartupSplash)};
 std::atomic<int64_t> g_screen_started_us{0};
+std::atomic<int64_t> g_last_activity_us{0};
+std::atomic<int64_t> g_parcours_duration_ms{TIMER_SECONDS * 1000LL};
 std::atomic_bool g_frizzles_reset_requested{true};
 std::atomic<uint32_t> g_runner_revision{0};
 

@@ -236,6 +236,7 @@ void render_parcours_intro(lv_layer_t *layer, int64_t elapsed_ms)
 
 void format_timer_text(char *buffer, size_t buffer_size, int remaining_seconds)
 {
+    remaining_seconds = std::max(0, remaining_seconds);
     const int minutes = remaining_seconds / 60;
     const int seconds = remaining_seconds % 60;
     std::snprintf(buffer, buffer_size, "%d:%02d", minutes, seconds);
@@ -254,8 +255,10 @@ void render_parcours_start_whoosh(lv_layer_t *layer, int64_t elapsed_ms)
     const int source_y = (DISPLAY_HEIGHT - source_size.y) / 2;
     const int source_mid_y = source_y + source_size.y / 2;
 
-    char timer_text[8]{};
-    format_timer_text(timer_text, sizeof(timer_text), TIMER_SECONDS);
+    char timer_text[16]{};
+    const int duration_seconds = static_cast<int>(
+        std::max<int64_t>(1, g_parcours_duration_ms.load(std::memory_order_acquire) / 1000));
+    format_timer_text(timer_text, sizeof(timer_text), duration_seconds);
     const int scale = DISPLAY_WIDTH >= 240 ? 3 : 2;
     const int counter_width = pixel_text_width(timer_text, scale);
     const int target_x = (DISPLAY_WIDTH - counter_width) / 2;
@@ -326,10 +329,14 @@ void render_parcours_timer(int64_t elapsed_ms)
 {
     draw_timer_background(elapsed_ms);
 
+    const int64_t duration_ms =
+        std::max<int64_t>(1000, g_parcours_duration_ms.load(std::memory_order_acquire));
+    const int duration_seconds =
+        static_cast<int>(std::max<int64_t>(1, duration_ms / 1000));
     const int elapsed_seconds =
-        static_cast<int>(std::clamp<int64_t>(elapsed_ms / 1000, 0, TIMER_SECONDS));
-    const int remaining_seconds = std::max(0, TIMER_SECONDS - elapsed_seconds);
-    char timer_text[8]{};
+        static_cast<int>(std::clamp<int64_t>(elapsed_ms / 1000, 0, duration_seconds));
+    const int remaining_seconds = std::max(0, duration_seconds - elapsed_seconds);
+    char timer_text[16]{};
     format_timer_text(timer_text, sizeof(timer_text), remaining_seconds);
 
     const int scale = DISPLAY_WIDTH >= 240 ? 3 : 2;
@@ -346,9 +353,9 @@ void render_parcours_timer(int64_t elapsed_ms)
                        PROGRESS_BAR_HEIGHT,
                        lv_color_hex(0x061426));
     const int progress_width =
-        TIMER_SECONDS <= 0
-            ? DISPLAY_WIDTH
-            : (DISPLAY_WIDTH * elapsed_seconds) / TIMER_SECONDS;
+        static_cast<int>((DISPLAY_WIDTH *
+                          std::clamp<int64_t>(elapsed_ms, 0, duration_ms)) /
+                         duration_ms);
     canvas_rect_direct(0,
                        bar_y,
                        progress_width,
@@ -370,7 +377,9 @@ void render_parcours_whoosh(int64_t elapsed_ms)
             elapsed_ms * 1000 / WHOOSH_DURATION_MS, 0, 1000));
     const int eased = ease_out_cubic_per_mille(progress);
 
-    draw_frizzles_background(TIMER_SECONDS * 1000LL + elapsed_ms, progress);
+    const int64_t duration_ms =
+        std::max<int64_t>(1000, g_parcours_duration_ms.load(std::memory_order_acquire));
+    draw_frizzles_background(duration_ms + elapsed_ms, progress);
 
     constexpr char done_time[] = "0:00";
     const int scale = DISPLAY_WIDTH >= 240 ? 3 : 2;

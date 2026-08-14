@@ -46,13 +46,22 @@ inline constexpr size_t DISPLAY_STRIDE_BYTES =
 inline constexpr int TIMER_SECONDS = CONFIG_TIMEPANEL_PARCOURS_SECONDS;
 inline constexpr int INTRO_SECONDS = CONFIG_TIMEPANEL_PARCOURS_INTRO_SECONDS;
 inline constexpr int STARTUP_SPLASH_DURATION_MS = 7000;
+#ifdef CONFIG_TIMEPANEL_IDLE_SPLASH_SECONDS
+inline constexpr int IDLE_SPLASH_SECONDS = CONFIG_TIMEPANEL_IDLE_SPLASH_SECONDS;
+#else
+inline constexpr int IDLE_SPLASH_SECONDS = 300;
+#endif
 inline constexpr int START_WHOOSH_DURATION_MS = 1000;
 inline constexpr int WHOOSH_DURATION_MS = 1400;
 inline constexpr int COUNTDOWN_FINISHED_HOLD_MS = 3000;
 inline constexpr int RUNNER_LABEL_SCROLL_SPEED = 20;
 inline constexpr int RUNNER_TIME_OVERLAP = 5;
 inline constexpr int RUNNER_WHOOSH_DURATION_MS = 760;
+#ifdef CONFIG_TIMEPANEL_DEMO_PREVIEW_ENABLED
 inline constexpr bool RUNNER_DEMO_PREVIEW_ENABLED = true;
+#else
+inline constexpr bool RUNNER_DEMO_PREVIEW_ENABLED = false;
+#endif
 inline constexpr int BUTTON_DEBOUNCE_MS = 45;
 inline constexpr int BUTTON_REPEAT_GUARD_MS = 250;
 inline constexpr float TWO_PI = 6.28318530717958647692f;
@@ -97,6 +106,7 @@ enum class ScreenMode : int {
     ParcoursTimer = 4,
     ParcoursWhoosh = 5,
     ParcoursEnded = 6,
+    IdleSplash = 7,
 };
 
 enum class RunnerWhooshType : uint8_t {
@@ -201,6 +211,8 @@ extern SemaphoreHandle_t g_runner_mutex;
 extern RunnerState g_runner_state;
 extern std::atomic<int> g_screen_mode;
 extern std::atomic<int64_t> g_screen_started_us;
+extern std::atomic<int64_t> g_last_activity_us;
+extern std::atomic<int64_t> g_parcours_duration_ms;
 extern std::atomic_bool g_frizzles_reset_requested;
 extern std::atomic<uint32_t> g_runner_revision;
 extern std::array<uint8_t, DISPLAY_STRIDE_BYTES * DISPLAY_HEIGHT>
@@ -214,6 +226,7 @@ extern std::array<RgbPixel, DISPLAY_WIDTH * FRIZZLES_HEIGHT>
 void initialize_runner_state();
 RunnerSnapshot runner_snapshot(int64_t now_us);
 bool runner_whoosh_active(const RunnerWhoosh &whoosh, int64_t now_us);
+bool runner_timer_running();
 void apply_runner_command_reset(const char *first_name,
                                 const char *last_name,
                                 const char *dog_name);
@@ -225,6 +238,7 @@ void apply_runner_command_stop(int elapsed_ms);
 void apply_runner_command_fault(int faults);
 void apply_runner_command_refusal(int refusals);
 void apply_runner_command_dis();
+void apply_parcours_command_start(uint32_t duration_ms);
 
 uint16_t rgb565_from_rgb(const RgbPixel &pixel);
 RgbPixel make_rgb(uint32_t color);
@@ -316,7 +330,13 @@ void initialize_environment_sensor();
 EnvironmentReading read_environment_sensor();
 void log_environment_temperature(const EnvironmentReading &reading);
 void start_environment_sensor_log_task();
+void initialize_wireless_receiver();
 
+void mark_timepanel_activity();
+void mark_timepanel_activity(int64_t now_us);
+void switch_to_runner_preview();
+void switch_to_parcours_intro();
+void switch_to_parcours_intro(uint32_t duration_ms);
 void button_task(void *);
 void start_runner_demo_preview_task();
 void ui_task(void *);

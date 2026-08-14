@@ -2,7 +2,9 @@
 
 extern "C" void app_main(void)
 {
-    g_screen_started_us.store(esp_timer_get_time(), std::memory_order_release);
+    const int64_t now_us = esp_timer_get_time();
+    g_screen_started_us.store(now_us, std::memory_order_release);
+    mark_timepanel_activity(now_us);
     g_runner_mutex = xSemaphoreCreateMutex();
     if (g_runner_mutex == nullptr) {
         ESP_LOGE(TAG, "Runner state mutex could not be created");
@@ -15,6 +17,7 @@ extern "C" void app_main(void)
     initialize_environment_sensor();
     log_environment_temperature(read_environment_sensor());
     start_environment_sensor_log_task();
+    initialize_wireless_receiver();
 
     xTaskCreate(ui_task, "timepanel_ui", 6144, nullptr, 5, nullptr);
     xTaskCreate(button_task, "mode_button", 2048, nullptr, 4, nullptr);

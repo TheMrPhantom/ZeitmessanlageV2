@@ -57,8 +57,23 @@ bool runner_whoosh_active(const RunnerWhoosh &whoosh, int64_t now_us)
     return elapsed_ms >= 0 && elapsed_ms < whoosh.duration_ms;
 }
 
+bool runner_timer_running()
+{
+    bool running = false;
+    bool locked = false;
+    if (g_runner_mutex != nullptr) {
+        locked = xSemaphoreTake(g_runner_mutex, pdMS_TO_TICKS(20)) == pdTRUE;
+    }
+    running = g_runner_state.running;
+    if (locked) {
+        xSemaphoreGive(g_runner_mutex);
+    }
+    return running;
+}
+
 void mark_runner_changed(int64_t now_us)
 {
+    mark_timepanel_activity(now_us);
     g_screen_started_us.store(now_us, std::memory_order_release);
     g_screen_mode.store(static_cast<int>(ScreenMode::RunnerPreview),
                         std::memory_order_release);
@@ -145,6 +160,7 @@ RunnerSnapshot runner_snapshot(int64_t now_us)
                                                      const char *last_name,
                                                      const char *dog_name)
 {
+    const int64_t now_us = esp_timer_get_time();
     if (g_runner_mutex != nullptr) {
         xSemaphoreTake(g_runner_mutex, portMAX_DELAY);
     }
@@ -154,6 +170,7 @@ RunnerSnapshot runner_snapshot(int64_t now_us)
     if (g_runner_mutex != nullptr) {
         xSemaphoreGive(g_runner_mutex);
     }
+    mark_timepanel_activity(now_us);
     g_runner_revision.fetch_add(1, std::memory_order_acq_rel);
 }
 
