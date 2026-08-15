@@ -32,11 +32,17 @@ static const char *TAG = "DogDogOTA";
 #define WIFI_FAIL_BIT BIT1
 #define DOGDOG_OTA_SKIP_ONCE_MARKER 0xdd075a11U
 #define DOGDOG_OTA_UPDATE_PENDING_MARKER 0xdd075a12U
+#define DOGDOG_OTA_MARKER_XOR 0xffffffffU
 #ifndef CONFIG_DOGDOG_OTA_TASK_STACK_SIZE
 #define CONFIG_DOGDOG_OTA_TASK_STACK_SIZE 24576
 #endif
 
-RTC_DATA_ATTR static uint32_t s_ota_marker = 0;
+typedef struct dogdog_ota_rtc_state {
+    uint32_t marker;
+    uint32_t marker_check;
+} dogdog_ota_rtc_state_t;
+
+RTC_NOINIT_ATTR static dogdog_ota_rtc_state_t s_ota_rtc_state;
 
 typedef struct dogdog_ota_context {
     EventGroupHandle_t event_group;
@@ -91,36 +97,54 @@ static esp_err_t build_firmware_url(char *firmware_url,
     return ESP_OK;
 }
 
+static bool marker_is_set(uint32_t marker)
+{
+    return s_ota_rtc_state.marker == marker &&
+           s_ota_rtc_state.marker_check == (marker ^ DOGDOG_OTA_MARKER_XOR);
+}
+
+static void set_marker(uint32_t marker)
+{
+    s_ota_rtc_state.marker = marker;
+    s_ota_rtc_state.marker_check = marker ^ DOGDOG_OTA_MARKER_XOR;
+}
+
+static void clear_marker(void)
+{
+    s_ota_rtc_state.marker = 0;
+    s_ota_rtc_state.marker_check = 0;
+}
+
 static bool consume_skip_once_marker(void)
 {
-    if (s_ota_marker != DOGDOG_OTA_SKIP_ONCE_MARKER) {
+    if (!marker_is_set(DOGDOG_OTA_SKIP_ONCE_MARKER)) {
         return false;
     }
 
-    s_ota_marker = 0;
+    clear_marker();
     ESP_LOGI(TAG, "Skipping OTA probe once after OTA restart marker");
     return true;
 }
 
 bool dogdog_ota_update_pending(void)
 {
-    return s_ota_marker == DOGDOG_OTA_UPDATE_PENDING_MARKER;
+    return marker_is_set(DOGDOG_OTA_UPDATE_PENDING_MARKER);
 }
 
 static bool consume_update_pending_marker(void)
 {
-    if (s_ota_marker != DOGDOG_OTA_UPDATE_PENDING_MARKER) {
+    if (!marker_is_set(DOGDOG_OTA_UPDATE_PENDING_MARKER)) {
         return false;
     }
 
-    s_ota_marker = 0;
+    clear_marker();
     ESP_LOGI(TAG, "Resuming pending OTA update");
     return true;
 }
 
 static void restart_with_skip_once_marker(void)
 {
-    s_ota_marker = DOGDOG_OTA_SKIP_ONCE_MARKER;
+    set_marker(DOGDOG_OTA_SKIP_ONCE_MARKER);
     s_ota_wifi_shutting_down = true;
     ESP_LOGI(TAG, "Restarting after OTA probe, next boot skips OTA once");
     vTaskDelay(pdMS_TO_TICKS(1000));
@@ -130,7 +154,7 @@ static void restart_with_skip_once_marker(void)
 static void restart_with_update_pending_marker(dogdog_ota_context_t *context,
                                                int delay_ms)
 {
-    s_ota_marker = DOGDOG_OTA_UPDATE_PENDING_MARKER;
+    set_marker(DOGDOG_OTA_UPDATE_PENDING_MARKER);
     s_ota_wifi_shutting_down = true;
     notify_status(context, DOGDOG_OTA_EVENT_RESTARTING_FOR_UPDATE);
     ESP_LOGI(TAG, "Restarting into OTA-only boot path");
@@ -382,6 +406,101 @@ static bool same_app_descriptor(const esp_app_desc_t *running,
                   sizeof(running->time)) == 0;
 }
 
+static int month_number(const char *month)
+{
+    static const char *months[] = {
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+    };
+
+    for (int i = 0; i < 12; ++i) {
+        if (strncmp(month, months[i], 3) == 0) {
+            return i + 1;
+        }
+    }
+    return 0;
+}
+
+static bool app_build_timestamp(const esp_app_desc_t *desc, int64_t *timestamp)
+{
+    if (desc == NULL || timestamp == NULL) {
+        return false;
+    }
+
+    char month_name[4] = {0};
+    int day = 0;
+    int year = 0;
+    int hour = 0;
+    int minute = 0;
+    int second = 0;
+
+    if (sscanf(desc->date, "%3s %d %d", month_name, &day, &year) != 3 ||
+        sscanf(desc->time, "%d:%d:%d", &hour, &minute, &second) != 3) {
+        return false;
+    }
+
+    const int month = month_number(month_name);
+    if (month <= 0 || day <= 0 || day > 31 ||
+        hour < 0 || hour > 23 ||
+        minute < 0 || minute > 59 ||
+        second < 0 || second > 59) {
+        return false;
+    }
+
+    *timestamp = (((((int64_t)year * 12 + month) * 31 + day) * 24 + hour) *
+                      60 +
+                  minute) *
+                     60 +
+                 second;
+    return true;
+}
+
+static bool same_project_name(const esp_app_desc_t *running,
+                              const esp_app_desc_t *incoming)
+{
+    if (running == NULL || incoming == NULL) {
+        return false;
+    }
+
+    return memcmp(running->project_name,
+                  incoming->project_name,
+                  sizeof(running->project_name)) == 0;
+}
+
+static bool should_install_image(const esp_app_desc_t *running,
+                                 const esp_app_desc_t *incoming)
+{
+    if (running == NULL || incoming == NULL) {
+        return false;
+    }
+
+    if (same_app_descriptor(running, incoming)) {
+        ESP_LOGI(TAG, "OTA image is already installed");
+        return false;
+    }
+
+    if (!same_project_name(running, incoming)) {
+        ESP_LOGW(TAG, "OTA image project differs, skipping update");
+        return false;
+    }
+
+    int64_t running_timestamp = 0;
+    int64_t incoming_timestamp = 0;
+    if (app_build_timestamp(running, &running_timestamp) &&
+        app_build_timestamp(incoming, &incoming_timestamp)) {
+        if (incoming_timestamp < running_timestamp) {
+            ESP_LOGW(TAG, "OTA image is older than running firmware, skipping update");
+            return false;
+        }
+        if (incoming_timestamp == running_timestamp) {
+            ESP_LOGW(TAG, "OTA image build time matches running firmware, skipping update");
+            return false;
+        }
+    }
+
+    return true;
+}
+
 static esp_err_t probe_ota_update_available(const char *device_name,
                                             dogdog_ota_context_t *context,
                                             bool *update_available)
@@ -450,8 +569,7 @@ static esp_err_t probe_ota_update_available(const char *device_name,
                  incoming_desc.date,
                  incoming_desc.time);
 
-        if (same_app_descriptor(&running_desc, &incoming_desc)) {
-            ESP_LOGI(TAG, "OTA image is already installed");
+        if (!should_install_image(&running_desc, &incoming_desc)) {
             esp_https_ota_abort(ota_handle);
             notify_status(context, DOGDOG_OTA_EVENT_NO_UPDATE);
             return ESP_OK;
@@ -526,8 +644,7 @@ static esp_err_t perform_ota(const char *device_name,
                  incoming_desc.date,
                  incoming_desc.time);
 
-        if (same_app_descriptor(&running_desc, &incoming_desc)) {
-            ESP_LOGI(TAG, "OTA image is already installed");
+        if (!should_install_image(&running_desc, &incoming_desc)) {
             esp_https_ota_abort(ota_handle);
             notify_status(context, DOGDOG_OTA_EVENT_NO_UPDATE);
             return ESP_OK;
