@@ -423,6 +423,52 @@ static int month_number(const char *month)
     return 0;
 }
 
+static int64_t days_from_civil(int year, int month, int day)
+{
+    year -= month <= 2;
+    const int era = (year >= 0 ? year : year - 399) / 400;
+    const unsigned yoe = (unsigned)(year - era * 400);
+    const unsigned doy = (153 * (month + (month > 2 ? -2 : 9)) + 2) / 5 + day - 1;
+    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    return (int64_t)era * 146097 + (int64_t)doe - 719468;
+}
+
+static int64_t utc_epoch_from_calendar(int year, int month, int day,
+                                      int hour, int minute, int second)
+{
+    const int64_t days = days_from_civil(year, month, day);
+    return days * 86400LL + (int64_t)hour * 3600LL + (int64_t)minute * 60LL +
+           second;
+}
+
+static int64_t local_utc_offset_seconds(void)
+{
+    time_t now = time(NULL);
+    if (now == (time_t)-1) {
+        return 0;
+    }
+
+    struct tm utc_tm = {0};
+    struct tm local_tm = {0};
+    if (gmtime_r(&now, &utc_tm) == NULL || localtime_r(&now, &local_tm) == NULL) {
+        return 0;
+    }
+
+    const int64_t utc_epoch = utc_epoch_from_calendar(utc_tm.tm_year + 1900,
+                                                      utc_tm.tm_mon + 1,
+                                                      utc_tm.tm_mday,
+                                                      utc_tm.tm_hour,
+                                                      utc_tm.tm_min,
+                                                      utc_tm.tm_sec);
+    const int64_t local_epoch = utc_epoch_from_calendar(local_tm.tm_year + 1900,
+                                                        local_tm.tm_mon + 1,
+                                                        local_tm.tm_mday,
+                                                        local_tm.tm_hour,
+                                                        local_tm.tm_min,
+                                                        local_tm.tm_sec);
+    return local_epoch - utc_epoch;
+}
+
 static bool app_build_timestamp(const esp_app_desc_t *desc,
                                bool timestamp_is_utc,
                                int64_t *timestamp)
@@ -451,47 +497,12 @@ static bool app_build_timestamp(const esp_app_desc_t *desc,
         return false;
     }
 
-    struct tm tm = {0};
-    tm.tm_year = year - 1900;
-    tm.tm_mon = month - 1;
-    tm.tm_mday = day;
-    tm.tm_hour = hour;
-    tm.tm_min = minute;
-    tm.tm_sec = second;
-    tm.tm_isdst = -1;
-
-    char *old_tz = NULL;
-    if (timestamp_is_utc) {
-        old_tz = getenv("TZ");
-        if (setenv("TZ", "UTC", 1) != 0) {
-            return false;
-        }
-        tzset();
+    int64_t epoch = utc_epoch_from_calendar(year, month, day, hour, minute, second);
+    if (!timestamp_is_utc) {
+        epoch -= local_utc_offset_seconds();
     }
 
-    const time_t epoch = mktime(&tm);
-    if (epoch == (time_t)-1) {
-        if (timestamp_is_utc) {
-            if (old_tz != NULL) {
-                setenv("TZ", old_tz, 1);
-            } else {
-                unsetenv("TZ");
-            }
-            tzset();
-        }
-        return false;
-    }
-
-    if (timestamp_is_utc) {
-        if (old_tz != NULL) {
-            setenv("TZ", old_tz, 1);
-        } else {
-            unsetenv("TZ");
-        }
-        tzset();
-    }
-
-    *timestamp = (int64_t)epoch;
+    *timestamp = epoch;
     return true;
 }
 
@@ -528,6 +539,11 @@ static bool should_install_image(const esp_app_desc_t *running,
     int64_t incoming_timestamp = 0;
     if (app_build_timestamp(running, false, &running_timestamp) &&
         app_build_timestamp(incoming, true, &incoming_timestamp)) {
+        ESP_LOGI(TAG,
+                 "Firmware compare: running_epoch=%lld incoming_epoch=%lld",
+                 (long long)running_timestamp,
+                 (long long)incoming_timestamp);
+
         if (incoming_timestamp < running_timestamp) {
             ESP_LOGW(TAG,
                      "OTA image is older than running firmware (UTC compare), skipping update");
