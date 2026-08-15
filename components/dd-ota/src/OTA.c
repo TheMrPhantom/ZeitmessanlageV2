@@ -55,6 +55,7 @@ static esp_netif_t *s_wifi_netif = NULL;
 static esp_event_handler_instance_t s_wifi_instance = NULL;
 static esp_event_handler_instance_t s_ip_instance = NULL;
 static bool s_ota_wifi_shutting_down = false;
+static bool s_ota_probe_suppressed_for_boot = false;
 
 static void notify_status(dogdog_ota_context_t *context,
                           dogdog_ota_event_t event)
@@ -71,6 +72,23 @@ static const char *device_name_from_config(const dogdog_ota_config_t *config)
         return config->device_name;
     }
     return CONFIG_DOGDOG_OTA_FALLBACK_DEVICE_NAME;
+}
+
+static esp_err_t build_firmware_url(char *firmware_url,
+                                    size_t firmware_url_size,
+                                    const char *device_name)
+{
+    const int url_len = snprintf(firmware_url,
+                                 firmware_url_size,
+                                 "%s/firmware/%s.bin",
+                                 CONFIG_DOGDOG_OTA_BASE_URL,
+                                 device_name);
+    if (url_len <= 0 || url_len >= (int)firmware_url_size) {
+        ESP_LOGE(TAG, "OTA firmware URL too long");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    return ESP_OK;
 }
 
 static bool consume_skip_once_marker(void)
@@ -364,18 +382,97 @@ static bool same_app_descriptor(const esp_app_desc_t *running,
                   sizeof(running->time)) == 0;
 }
 
+static esp_err_t probe_ota_update_available(const char *device_name,
+                                            dogdog_ota_context_t *context,
+                                            bool *update_available)
+{
+    if (update_available == NULL) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    *update_available = false;
+
+    char firmware_url[192];
+    esp_err_t err = build_firmware_url(firmware_url,
+                                       sizeof(firmware_url),
+                                       device_name);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    ESP_LOGI(TAG, "Checking OTA image at %s", firmware_url);
+
+    esp_http_client_config_t http_config = {
+        .url = firmware_url,
+        .timeout_ms = CONFIG_DOGDOG_OTA_RECV_TIMEOUT_MS,
+        .keep_alive_enable = true,
+#if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
+        .crt_bundle_attach = esp_crt_bundle_attach,
+#endif
+    };
+
+    esp_https_ota_config_t ota_config = {
+        .http_config = &http_config,
+#if CONFIG_DOGDOG_OTA_ENABLE_PARTIAL_HTTP_DOWNLOAD
+        .partial_http_download = true,
+        .max_http_request_size = CONFIG_DOGDOG_OTA_HTTP_REQUEST_SIZE,
+#endif
+    };
+
+    esp_https_ota_handle_t ota_handle = NULL;
+    err = esp_https_ota_begin(&ota_config, &ota_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "OTA probe begin failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    esp_app_desc_t incoming_desc = {0};
+    err = esp_https_ota_get_img_desc(ota_handle, &incoming_desc);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "OTA probe image description failed: %s",
+                 esp_err_to_name(err));
+        esp_https_ota_abort(ota_handle);
+        return err;
+    }
+
+    esp_app_desc_t running_desc = {0};
+    const esp_partition_t *running_partition = esp_ota_get_running_partition();
+    if (running_partition != NULL &&
+        esp_ota_get_partition_description(running_partition,
+                                          &running_desc) == ESP_OK) {
+        ESP_LOGI(TAG,
+                 "Running firmware: %s %s %s",
+                 running_desc.project_name,
+                 running_desc.date,
+                 running_desc.time);
+        ESP_LOGI(TAG,
+                 "Available firmware: %s %s %s",
+                 incoming_desc.project_name,
+                 incoming_desc.date,
+                 incoming_desc.time);
+
+        if (same_app_descriptor(&running_desc, &incoming_desc)) {
+            ESP_LOGI(TAG, "OTA image is already installed");
+            esp_https_ota_abort(ota_handle);
+            notify_status(context, DOGDOG_OTA_EVENT_NO_UPDATE);
+            return ESP_OK;
+        }
+    }
+
+    esp_https_ota_abort(ota_handle);
+    *update_available = true;
+    ESP_LOGI(TAG, "OTA image update is available");
+    return ESP_OK;
+}
+
 static esp_err_t perform_ota(const char *device_name,
                              dogdog_ota_context_t *context)
 {
     char firmware_url[192];
-    const int url_len = snprintf(firmware_url,
-                                 sizeof(firmware_url),
-                                 "%s/firmware/%s.bin",
-                                 CONFIG_DOGDOG_OTA_BASE_URL,
-                                 device_name);
-    if (url_len <= 0 || url_len >= (int)sizeof(firmware_url)) {
-        ESP_LOGE(TAG, "OTA firmware URL too long");
-        return ESP_ERR_INVALID_SIZE;
+    esp_err_t err = build_firmware_url(firmware_url,
+                                       sizeof(firmware_url),
+                                       device_name);
+    if (err != ESP_OK) {
+        return err;
     }
 
     ESP_LOGI(TAG, "Starting OTA from %s", firmware_url);
@@ -399,7 +496,7 @@ static esp_err_t perform_ota(const char *device_name,
     };
 
     esp_https_ota_handle_t ota_handle = NULL;
-    esp_err_t err = esp_https_ota_begin(&ota_config, &ota_handle);
+    err = esp_https_ota_begin(&ota_config, &ota_handle);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "OTA begin failed: %s", esp_err_to_name(err));
         return err;
@@ -476,6 +573,10 @@ esp_err_t dogdog_ota_check_and_update_ex(const dogdog_ota_config_t *config)
     (void)config;
     return ESP_OK;
 #else
+    if (s_ota_probe_suppressed_for_boot) {
+        ESP_LOGI(TAG, "Skipping OTA probe for this boot");
+        return ESP_OK;
+    }
     if (consume_skip_once_marker()) {
         return ESP_OK;
     }
@@ -518,8 +619,14 @@ esp_err_t dogdog_ota_check_and_update_ex(const dogdog_ota_config_t *config)
     err = connect_to_ota_network(&context);
     if (err == ESP_OK) {
         if (restart_before_update) {
-            notify_status(&context, DOGDOG_OTA_EVENT_UPDATING);
-            restart_with_update_pending_marker(&context, restart_delay_ms);
+            bool update_available = false;
+            err = probe_ota_update_available(device_name_from_config(config),
+                                             &context,
+                                             &update_available);
+            if (err == ESP_OK && update_available) {
+                notify_status(&context, DOGDOG_OTA_EVENT_UPDATING);
+                restart_with_update_pending_marker(&context, restart_delay_ms);
+            }
         } else {
             err = perform_ota(device_name_from_config(config), &context);
         }
@@ -531,7 +638,11 @@ esp_err_t dogdog_ota_check_and_update_ex(const dogdog_ota_config_t *config)
                  esp_err_to_name(err));
     }
 
-    restart_with_skip_once_marker();
+    if (resume_pending_update) {
+        s_ota_probe_suppressed_for_boot = true;
+    }
+
+    cleanup_wifi(&context);
     return err;
 #endif
 }
