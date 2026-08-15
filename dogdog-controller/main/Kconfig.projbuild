@@ -33,4 +33,37 @@ menu "EDIT HERE: Zeitmessanlage configuration"
         help
             Configurable last two bytes of the timepanel MAC. The fixed DogDog
             prefix is de:09:dd:09, so 0x0002 becomes de:09:dd:09:00:02.
+    config TIMEPANEL_TEST_TIMER_SEQUENCE
+        bool "temporary_timepanel_timer_test_sequence"
+        depends on TIMEPANEL_ENABLED
+        default n
+        help
+            Temporary test mode: after boot, send a start trigger into the
+            controller timer and then send stop triggers after randomized
+            durations. Disable this before real event operation.
+    config TIMEPANEL_TEST_TIMER_START_DELAY_MS
+        int "temporary_timepanel_timer_test_start_delay_ms"
+        depends on TIMEPANEL_TEST_TIMER_SEQUENCE
+        range 0 600000
+        default 15000
+    config TIMEPANEL_TEST_TIMER_REPETITIONS
+        int "temporary_timepanel_timer_test_repetitions"
+        depends on TIMEPANEL_TEST_TIMER_SEQUENCE
+        range 1 100
+        default 5
+    config TIMEPANEL_TEST_TIMER_GAP_MS
+        int "temporary_timepanel_timer_test_gap_ms"
+        depends on TIMEPANEL_TEST_TIMER_SEQUENCE
+        range 0 600000
+        default 7000
+    config TIMEPANEL_TEST_TIMER_RUN_MS
+        int "temporary_timepanel_timer_test_run_min_ms"
+        depends on TIMEPANEL_TEST_TIMER_SEQUENCE
+        range 1 600000
+        default 20000
+    config TIMEPANEL_TEST_TIMER_RUN_MAX_MS
+        int "temporary_timepanel_timer_test_run_max_ms"
+        depends on TIMEPANEL_TEST_TIMER_SEQUENCE
+        range 1 600000
+        default 23000
 endmenu

@@ -15,6 +15,7 @@ void render_startup_splash_screen()
     lv_layer_t layer;
     lv_canvas_init_layer(g_canvas, &layer);
     render_startup_splash_text(&layer);
+    draw_power_status_icon(&layer, esp_timer_get_time());
     lv_canvas_finish_layer(g_canvas, &layer);
 
     present_canvas_buffer();
@@ -35,6 +36,7 @@ void render_canvas(void (*draw)(lv_layer_t *))
     lv_layer_t layer;
     lv_canvas_init_layer(g_canvas, &layer);
     draw(&layer);
+    draw_power_status_icon(&layer, esp_timer_get_time());
     lv_canvas_finish_layer(g_canvas, &layer);
 
     lv_obj_invalidate(g_canvas);
@@ -57,6 +59,7 @@ void render_runner_preview_screen(int64_t now_us)
     lv_canvas_init_layer(g_canvas, &layer);
     draw_runner_preview(&layer, snapshot);
     draw_runner_area_whoosh(&layer, snapshot, now_us);
+    draw_power_status_icon(&layer, now_us);
     lv_canvas_finish_layer(g_canvas, &layer);
 
     show_runner_labels(snapshot);
@@ -79,6 +82,7 @@ void render_intro_screen(int64_t elapsed_ms)
     lv_layer_t layer;
     lv_canvas_init_layer(g_canvas, &layer);
     render_parcours_intro(&layer, elapsed_ms);
+    draw_power_status_icon(&layer, esp_timer_get_time());
     lv_canvas_finish_layer(g_canvas, &layer);
     lv_obj_invalidate(g_canvas);
     lv_refr_now(g_display);
@@ -98,6 +102,7 @@ void render_start_whoosh_screen(int64_t elapsed_ms)
     lv_layer_t layer;
     lv_canvas_init_layer(g_canvas, &layer);
     render_parcours_start_whoosh(&layer, elapsed_ms);
+    draw_power_status_icon(&layer, esp_timer_get_time());
     lv_canvas_finish_layer(g_canvas, &layer);
     lv_obj_invalidate(g_canvas);
     lv_refr_now(g_display);
@@ -115,6 +120,7 @@ void render_timer_screen(int64_t elapsed_ms)
     hide_runner_whoosh_bands();
     clear_canvas_buffer();
     render_parcours_timer(elapsed_ms);
+    draw_power_status_icon_direct(esp_timer_get_time());
     present_canvas_buffer();
     lvgl_port_unlock();
 }
@@ -130,6 +136,7 @@ void render_whoosh_screen(int64_t elapsed_ms)
     hide_runner_whoosh_bands();
     clear_canvas_buffer();
     render_parcours_whoosh(elapsed_ms);
+    draw_power_status_icon_direct(esp_timer_get_time());
     present_canvas_buffer();
     lvgl_port_unlock();
 }

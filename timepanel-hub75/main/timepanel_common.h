@@ -14,6 +14,7 @@
 
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
+#include "esp_attr.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -45,7 +46,6 @@ inline constexpr size_t DISPLAY_STRIDE_BYTES =
 
 inline constexpr int TIMER_SECONDS = CONFIG_TIMEPANEL_PARCOURS_SECONDS;
 inline constexpr int INTRO_SECONDS = CONFIG_TIMEPANEL_PARCOURS_INTRO_SECONDS;
-inline constexpr int STARTUP_SPLASH_DURATION_MS = 7000;
 #ifdef CONFIG_TIMEPANEL_IDLE_SPLASH_SECONDS
 inline constexpr int IDLE_SPLASH_SECONDS = CONFIG_TIMEPANEL_IDLE_SPLASH_SECONDS;
 #else
@@ -57,11 +57,7 @@ inline constexpr int COUNTDOWN_FINISHED_HOLD_MS = 3000;
 inline constexpr int RUNNER_LABEL_SCROLL_SPEED = 20;
 inline constexpr int RUNNER_TIME_OVERLAP = 5;
 inline constexpr int RUNNER_WHOOSH_DURATION_MS = 760;
-#ifdef CONFIG_TIMEPANEL_DEMO_PREVIEW_ENABLED
-inline constexpr bool RUNNER_DEMO_PREVIEW_ENABLED = true;
-#else
-inline constexpr bool RUNNER_DEMO_PREVIEW_ENABLED = false;
-#endif
+inline constexpr int POWER_STATUS_ICON_DURATION_MS = 5000;
 inline constexpr int BUTTON_DEBOUNCE_MS = 45;
 inline constexpr int BUTTON_REPEAT_GUARD_MS = 250;
 inline constexpr float TWO_PI = 6.28318530717958647692f;
@@ -212,6 +208,7 @@ extern RunnerState g_runner_state;
 extern std::atomic<int> g_screen_mode;
 extern std::atomic<int64_t> g_screen_started_us;
 extern std::atomic<int64_t> g_last_activity_us;
+extern std::atomic<int64_t> g_power_status_icon_until_us;
 extern std::atomic<int64_t> g_parcours_duration_ms;
 extern std::atomic_bool g_frizzles_reset_requested;
 extern std::atomic<uint32_t> g_runner_revision;
@@ -294,6 +291,9 @@ void draw_pixel_text_direct(int x,
                             const char *text,
                             int scale,
                             lv_color_t color);
+bool power_status_icon_visible(int64_t now_us);
+void draw_power_status_icon(lv_layer_t *layer, int64_t now_us);
+void draw_power_status_icon_direct(int64_t now_us);
 void draw_startup_splash_logo_direct();
 void render_startup_splash_text(lv_layer_t *layer);
 
@@ -324,6 +324,7 @@ void render_timer_screen(int64_t elapsed_ms);
 void render_whoosh_screen(int64_t elapsed_ms);
 void render_ended_screen();
 
+int hub75_brightness();
 void initialize_hub75();
 void initialize_lvgl();
 void initialize_environment_sensor();
@@ -338,5 +339,4 @@ void switch_to_runner_preview();
 void switch_to_parcours_intro();
 void switch_to_parcours_intro(uint32_t duration_ms);
 void button_task(void *);
-void start_runner_demo_preview_task();
 void ui_task(void *);

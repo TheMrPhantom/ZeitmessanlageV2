@@ -4,6 +4,9 @@ extern "C" void app_main(void)
 {
     const int64_t now_us = esp_timer_get_time();
     g_screen_started_us.store(now_us, std::memory_order_release);
+    g_power_status_icon_until_us.store(
+        now_us + static_cast<int64_t>(POWER_STATUS_ICON_DURATION_MS) * 1000LL,
+        std::memory_order_release);
     mark_timepanel_activity(now_us);
     g_runner_mutex = xSemaphoreCreateMutex();
     if (g_runner_mutex == nullptr) {
@@ -21,11 +24,10 @@ extern "C" void app_main(void)
 
     xTaskCreate(ui_task, "timepanel_ui", 6144, nullptr, 5, nullptr);
     xTaskCreate(button_task, "mode_button", 2048, nullptr, 4, nullptr);
-    start_runner_demo_preview_task();
 
     ESP_LOGI(TAG,
              "Timepanel HUB75 started at %dx%d with brightness %d",
              DISPLAY_WIDTH,
              DISPLAY_HEIGHT,
-             CONFIG_TIMEPANEL_PANEL_BRIGHTNESS);
+             hub75_brightness());
 }

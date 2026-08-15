@@ -52,13 +52,6 @@ config TIMEPANEL_PARCOURS_INTRO_SECONDS
     range 0 120
     default 5
 
-config TIMEPANEL_DEMO_PREVIEW_ENABLED
-    bool "Run the visual demo after startup"
-    default n
-    help
-        Replays the temporary visual demo after the splash screen. Keep this
-        disabled for real controller operation.
-
 config TIMEPANEL_IDLE_SPLASH_SECONDS
     int "DogDog splash idle timeout in seconds"
     range 0 3600

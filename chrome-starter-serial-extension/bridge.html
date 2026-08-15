@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DogDog Starter Bridge</title>
+    <link rel="icon" href="icons/dogdog-32.png">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <div>
+          <h1>DogDog Starter Bridge</h1>
+          <p id="pageStatus">Waiting for a webmelden starter page...</p>
+        </div>
+        <span id="serialStatus" class="status disconnected">Serial disconnected</span>
+      </header>
+
+      <section class="starter">
+        <dl>
+          <div>
+            <dt>Starter</dt>
+            <dd id="starterName">-</dd>
+          </div>
+          <div>
+            <dt>Dog</dt>
+            <dd id="dogName">-</dd>
+          </div>
+          <div>
+            <dt>Line</dt>
+            <dd id="serialLine">-</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section class="controls">
+        <button id="connectButton" type="button">Connect Serial</button>
+        <button id="sendButton" type="button" disabled>Send Current</button>
+        <label>
+          <input id="autoSend" type="checkbox" checked>
+          Auto-send on starter change
+        </label>
+      </section>
+
+      <section>
+        <h2>Log</h2>
+        <pre id="log"></pre>
+      </section>
+    </main>
+
+    <script src="bridge.js"></script>
+  </body>
+</html>

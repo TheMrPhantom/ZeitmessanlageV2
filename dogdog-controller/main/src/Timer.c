@@ -146,10 +146,6 @@ void Timer_Task(void *params)
                         {
                             timepanel_send_dis();
                         }
-                        else
-                        {
-                            timepanel_send_stop(timeElapsedLocal);
-                        }
 
                         SevenSegmentDisplay toSend;
                         toSend.type = SEVEN_SEGMENT_STORE_TO_HISTORY;
@@ -177,10 +173,6 @@ void Timer_Task(void *params)
                     if (isDis)
                     {
                         timepanel_send_dis();
-                    }
-                    else
-                    {
-                        timepanel_send_stop(timeElapsedLocal);
                     }
 
                     if (!IS_THS_MODE)

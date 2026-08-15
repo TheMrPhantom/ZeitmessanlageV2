@@ -52,7 +52,11 @@
 #include "Sensor.h"
 #include "HornTimer.h"
 #include "TimepanelClient.h"
+#include "PcSerial.h"
 #include "sdkconfig.h"
+#include "esp_random.h"
+#include <inttypes.h>
+#include <sys/time.h>
 
 QueueHandle_t sensorInterruptQueue;
 QueueHandle_t buttonInterruptQueue;
@@ -75,6 +79,106 @@ int station_id = 0;
 int controller_id = 0;
 int start_id = 0;
 int stop_id = 0;
+
+#if CONFIG_TIMEPANEL_TEST_TIMER_SEQUENCE
+static int64_t current_time_us(void)
+{
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    return (int64_t)now.tv_sec * 1000000LL + now.tv_usec;
+}
+
+static void send_timer_test_trigger(bool is_start, int64_t timestamp_us)
+{
+    TimerTrigger trigger = {
+        .is_start = is_start,
+        .timestamp = timestamp_us,
+        .is_final_time = !is_start,
+    };
+
+    if (xQueueSend(triggerQueue, &trigger, pdMS_TO_TICKS(250)) != pdTRUE)
+    {
+        ESP_LOGW(TAG, "Temporary timer test trigger queue is full");
+    }
+}
+
+static uint32_t random_timer_test_run_ms(void)
+{
+    const uint32_t configured_min_ms = CONFIG_TIMEPANEL_TEST_TIMER_RUN_MS;
+    const uint32_t configured_max_ms = CONFIG_TIMEPANEL_TEST_TIMER_RUN_MAX_MS;
+    const uint32_t min_ms = configured_min_ms < configured_max_ms
+                                ? configured_min_ms
+                                : configured_max_ms;
+    const uint32_t max_ms = configured_min_ms < configured_max_ms
+                                ? configured_max_ms
+                                : configured_min_ms;
+    const uint32_t span_ms = max_ms - min_ms + 1;
+
+    return min_ms + (esp_random() % span_ms);
+}
+
+static void timepanel_test_timer_sequence_task(void *params)
+{
+    (void)params;
+
+    ESP_LOGW(TAG,
+             "Temporary timer test enabled: start in %d ms, %d repetitions, runs %d..%d ms, gap %d ms",
+             CONFIG_TIMEPANEL_TEST_TIMER_START_DELAY_MS,
+             CONFIG_TIMEPANEL_TEST_TIMER_REPETITIONS,
+             CONFIG_TIMEPANEL_TEST_TIMER_RUN_MS,
+             CONFIG_TIMEPANEL_TEST_TIMER_RUN_MAX_MS,
+             CONFIG_TIMEPANEL_TEST_TIMER_GAP_MS);
+
+    vTaskDelay(pdMS_TO_TICKS(CONFIG_TIMEPANEL_TEST_TIMER_START_DELAY_MS));
+
+    for (int repetition = 0;
+         repetition < CONFIG_TIMEPANEL_TEST_TIMER_REPETITIONS;
+         repetition++)
+    {
+        const uint32_t run_ms = random_timer_test_run_ms();
+        const int64_t start_timestamp_us = current_time_us();
+        send_timer_test_trigger(true, start_timestamp_us);
+        ESP_LOGW(TAG,
+                 "Temporary timer test run %d/%d sent start trigger, stopping after %" PRIu32 " ms",
+                 repetition + 1,
+                 CONFIG_TIMEPANEL_TEST_TIMER_REPETITIONS,
+                 run_ms);
+
+        vTaskDelay(pdMS_TO_TICKS(run_ms));
+
+        const int64_t stop_timestamp_us =
+            start_timestamp_us + (int64_t)run_ms * 1000LL;
+        send_timer_test_trigger(false, stop_timestamp_us);
+        ESP_LOGW(TAG,
+                 "Temporary timer test run %d/%d sent stop trigger at %" PRId64 " ms",
+                 repetition + 1,
+                 CONFIG_TIMEPANEL_TEST_TIMER_REPETITIONS,
+                 (stop_timestamp_us - start_timestamp_us) / 1000);
+
+        if (repetition + 1 < CONFIG_TIMEPANEL_TEST_TIMER_REPETITIONS)
+        {
+            vTaskDelay(pdMS_TO_TICKS(CONFIG_TIMEPANEL_TEST_TIMER_GAP_MS));
+        }
+    }
+
+    vTaskDelete(NULL);
+}
+
+static void start_timepanel_test_timer_sequence(void)
+{
+    const BaseType_t result =
+        xTaskCreate(timepanel_test_timer_sequence_task,
+                    "timepanel_test",
+                    3072,
+                    NULL,
+                    6,
+                    NULL);
+    if (result != pdPASS)
+    {
+        ESP_LOGW(TAG, "Temporary timer test task could not be started");
+    }
+}
+#endif
 
 void app_main(void)
 {
@@ -162,6 +266,7 @@ void app_main(void)
     xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 4048, NULL, 9, NULL);
     xTaskCreatePinnedToCore(Seven_Segment_Task, "Seven_Segment_Task", 16096, NULL, 8, &sevenSegmentTask, 1);
     xTaskCreate(Buzzer_Task, "Buzzer_Task", 4048, NULL, 7, NULL);
+    xTaskCreate(Pc_Serial_Task, "Pc_Serial_Task", 4096, NULL, 6, NULL);
 
     if (!config_is_lora_controller)
     {
@@ -174,6 +279,10 @@ void app_main(void)
 
     xTaskCreate(Button_Input_Task, "Button_Input_Task", 8192, NULL, 8, NULL);
     xTaskCreate(Button_Task, "Button_Task", 8192, NULL, 3, &buttonTask);
+
+#if CONFIG_TIMEPANEL_TEST_TIMER_SEQUENCE
+    start_timepanel_test_timer_sequence();
+#endif
 
     if (clock_initialized == pdTRUE)
     {

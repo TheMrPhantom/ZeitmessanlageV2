@@ -17,15 +17,19 @@ RunnerState g_runner_state{};
 std::atomic<int> g_screen_mode{static_cast<int>(ScreenMode::StartupSplash)};
 std::atomic<int64_t> g_screen_started_us{0};
 std::atomic<int64_t> g_last_activity_us{0};
+std::atomic<int64_t> g_power_status_icon_until_us{0};
 std::atomic<int64_t> g_parcours_duration_ms{TIMER_SECONDS * 1000LL};
 std::atomic_bool g_frizzles_reset_requested{true};
 std::atomic<uint32_t> g_runner_revision{0};
 
-alignas(4) std::array<uint8_t, DISPLAY_STRIDE_BYTES * DISPLAY_HEIGHT>
+EXT_RAM_BSS_ATTR alignas(4)
+std::array<uint8_t, DISPLAY_STRIDE_BYTES * DISPLAY_HEIGHT>
     g_lvgl_draw_buffer{};
-alignas(4) std::array<uint8_t, DISPLAY_STRIDE_BYTES * DISPLAY_HEIGHT>
+EXT_RAM_BSS_ATTR alignas(4)
+std::array<uint8_t, DISPLAY_STRIDE_BYTES * DISPLAY_HEIGHT>
     g_canvas_buffer{};
-std::array<RgbPixel, DISPLAY_WIDTH * FRIZZLES_HEIGHT> g_frizzles_buffer{};
-std::array<RgbPixel, DISPLAY_WIDTH * FRIZZLES_HEIGHT>
+EXT_RAM_BSS_ATTR std::array<RgbPixel, DISPLAY_WIDTH * FRIZZLES_HEIGHT>
+    g_frizzles_buffer{};
+EXT_RAM_BSS_ATTR std::array<RgbPixel, DISPLAY_WIDTH * FRIZZLES_HEIGHT>
     g_frizzles_blur_buffer{};
 

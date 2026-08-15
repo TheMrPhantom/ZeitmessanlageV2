@@ -1,27 +1,5 @@
 #include "timepanel_common.h"
 
-namespace {
-
-struct RunnerPreview {
-    const char *first_name;
-    const char *last_name;
-    const char *dog_name;
-    const char *time_text;
-    int faults;
-    int refusals;
-};
-
-constexpr RunnerPreview STARTUP_PREVIEW{
-    .first_name = "Justin",
-    .last_name = "Schiel",
-    .dog_name = "Joy",
-    .time_text = "37,93",
-    .faults = 1,
-    .refusals = 0,
-};
-
-} // namespace
-
 void format_run_time(int elapsed_ms, char *buffer, size_t buffer_size)
 {
     elapsed_ms = std::max(0, elapsed_ms);
@@ -82,17 +60,20 @@ void mark_runner_changed(int64_t now_us)
 
 void initialize_runner_state()
 {
-    copy_text(g_runner_state.first_name, STARTUP_PREVIEW.first_name);
-    copy_text(g_runner_state.last_name, STARTUP_PREVIEW.last_name);
-    copy_text(g_runner_state.dog_name, STARTUP_PREVIEW.dog_name);
-    copy_text(g_runner_state.pending_first_name, STARTUP_PREVIEW.first_name);
-    copy_text(g_runner_state.pending_last_name, STARTUP_PREVIEW.last_name);
-    copy_text(g_runner_state.pending_dog_name, STARTUP_PREVIEW.dog_name);
-    copy_text(g_runner_state.time_text, STARTUP_PREVIEW.time_text);
-    normalize_run_time_text(g_runner_state.time_text);
-    g_runner_state.faults = STARTUP_PREVIEW.faults;
-    g_runner_state.refusals = STARTUP_PREVIEW.refusals;
+    g_runner_state.first_name.fill('\0');
+    g_runner_state.last_name.fill('\0');
+    g_runner_state.dog_name.fill('\0');
+    g_runner_state.pending_first_name.fill('\0');
+    g_runner_state.pending_last_name.fill('\0');
+    g_runner_state.pending_dog_name.fill('\0');
+    format_run_time(0, g_runner_state.time_text.data(),
+                    g_runner_state.time_text.size());
+    g_runner_state.faults = 0;
+    g_runner_state.refusals = 0;
+    g_runner_state.running = false;
+    g_runner_state.disqualified = false;
     g_runner_state.value_color = RUN_WHITE;
+    g_runner_state.whoosh.type = RunnerWhooshType::None;
 }
 
 RunnerSnapshot runner_snapshot(int64_t now_us)
@@ -186,9 +167,12 @@ RunnerSnapshot runner_snapshot(int64_t now_us)
     g_runner_state.dog_name = g_runner_state.pending_dog_name;
     g_runner_state.timer_started_us =
         now_us - static_cast<int64_t>(offset_ms) * 1000;
+    g_runner_state.faults = 0;
+    g_runner_state.refusals = 0;
     g_runner_state.running = true;
     g_runner_state.disqualified = false;
     g_runner_state.value_color = RUN_WHITE;
+    g_runner_state.whoosh.type = RunnerWhooshType::None;
     if (g_runner_mutex != nullptr) {
         xSemaphoreGive(g_runner_mutex);
     }

@@ -218,7 +218,6 @@ void timepanel_send_stop(int64_t elapsed_ms)
         elapsed_ms = 0;
     }
 
-    elapsed_ms = elapsed_ms - (elapsed_ms % 10);
     TimepanelU32Payload payload = {
         .value = (uint32_t)elapsed_ms,
     };

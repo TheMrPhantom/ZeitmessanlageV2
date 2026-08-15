@@ -18,6 +18,7 @@ idf_component_register(
         esp_event
         esp_netif
         esp_wifi
+        esp_driver_usb_serial_jtag
         nvs_flash
         esp_lvgl_port
         esphome__esp-hub75

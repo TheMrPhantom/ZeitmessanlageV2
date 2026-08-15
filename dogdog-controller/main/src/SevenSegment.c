@@ -13,6 +13,7 @@
 #include "Keyboard.h"
 #include "GPIOPins.h"
 #include "LoraNetwork.h"
+#include "TimepanelClient.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -68,6 +69,69 @@ extern int controller_id;
 extern int start_id;
 extern int stop_id;
 
+static long display_time_ms(long time_ms)
+{
+    if (time_ms < 0)
+    {
+        return 0;
+    }
+
+    return time_ms - (time_ms % 10);
+}
+
+static long displayed_time_text_to_ms(const char *time_text)
+{
+    if (time_text == NULL)
+    {
+        return 0;
+    }
+
+    long seconds = 0;
+    long hundredths = 0;
+    int decimal_digits = 0;
+    bool after_decimal_separator = false;
+
+    for (const char *c = time_text; *c != '\0'; c++)
+    {
+        if (*c >= '0' && *c <= '9')
+        {
+            if (!after_decimal_separator)
+            {
+                seconds = seconds * 10 + (*c - '0');
+            }
+            else if (decimal_digits < 2)
+            {
+                hundredths = hundredths * 10 + (*c - '0');
+                decimal_digits++;
+            }
+        }
+        else if (*c == '.' || *c == ',')
+        {
+            after_decimal_separator = true;
+        }
+    }
+
+    while (decimal_digits < 2)
+    {
+        hundredths *= 10;
+        decimal_digits++;
+    }
+
+    return seconds * 1000 + hundredths * 10;
+}
+
+static long displayed_top_label_time_ms(void)
+{
+    long displayed_time_ms = 0;
+
+    lvgl_port_lock(-1);
+    char *time_text = lv_label_get_text(top_label);
+    displayed_time_ms = displayed_time_text_to_ms(time_text);
+    lvgl_port_unlock();
+
+    return displayed_time_ms;
+}
+
 void Seven_Segment_Task(void *params)
 {
     setupSevenSegment();
@@ -95,6 +159,7 @@ void Seven_Segment_Task(void *params)
 
             case SEVEN_SEGMENT_STORE_TO_HISTORY:
                 // Implement storing to history
+                toDisplay.time = display_time_ms(toDisplay.time);
                 setMilliseconds(toDisplay.time);
                 add_to_history();
                 remove_vorlaeufig();
@@ -106,7 +171,12 @@ void Seven_Segment_Task(void *params)
                 break;
             case SEVEN_SEGMENT_TEMP_TIME:
                 // Implement temporary time display
+                toDisplay.time = display_time_ms(toDisplay.time);
                 setMilliseconds(toDisplay.time);
+                if (!isDis)
+                {
+                    timepanel_send_stop(displayed_top_label_time_ms());
+                }
                 add_vorlaeufig();
                 break;
             case SEVEN_SEGMENT_SENSOR_STATUS:
@@ -555,7 +625,7 @@ void setup_pc_programm_screen()
 
 void setMilliseconds(long timeToSet)
 {
-    timeToSet = timeToSet - timeToSet % 10; // Round down to nearest 10 ms
+    timeToSet = display_time_ms(timeToSet);
     last_displayed_time_ms = timeToSet;
     float sec = timeToSet / 1000.0f;
     char numberString[8]; // Enough for "9999.99\0"
@@ -614,6 +684,8 @@ void add_to_history()
     lvgl_port_lock(-1);
     // get time text from top label
     char *time_text = lv_label_get_text(top_label);
+    long timepanel_time_ms = displayed_time_text_to_ms(time_text);
+    bool send_timepanel_stop = !isDis;
     // get faults and refusal from their labels
     char *fault_text = lv_label_get_text(faults);
     char *refusal_text = lv_label_get_text(refusals);
@@ -729,6 +801,11 @@ void add_to_history()
     }
 
     lvgl_port_unlock();
+
+    if (send_timepanel_stop)
+    {
+        timepanel_send_stop(timepanel_time_ms);
+    }
 }
 
 void draw_history_element(HistoryEntry *entry, int index)

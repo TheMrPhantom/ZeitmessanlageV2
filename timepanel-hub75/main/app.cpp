@@ -115,55 +115,10 @@ void button_task(void *)
     }
 }
 
-void runner_demo_preview_task(void *)
-{
-    vTaskDelay(pdMS_TO_TICKS(STARTUP_SPLASH_DURATION_MS + 500));
-
-    apply_runner_command_reset("Justin", "Schiel", "Joy");
-    vTaskDelay(pdMS_TO_TICKS(2000));
-
-    apply_runner_command_start(400);
-    vTaskDelay(pdMS_TO_TICKS(2800));
-
-    apply_runner_command_refusal(1);
-    vTaskDelay(pdMS_TO_TICKS(2600));
-
-    apply_runner_command_fault(1);
-    vTaskDelay(pdMS_TO_TICKS(2600));
-
-    apply_runner_command_dis();
-    vTaskDelay(pdMS_TO_TICKS(3200));
-
-    apply_runner_command_reset("Max", "Mustermann", "Kira");
-    vTaskDelay(pdMS_TO_TICKS(2000));
-
-    apply_runner_command_start(0);
-    vTaskDelay(pdMS_TO_TICKS(14500));
-
-    apply_runner_command_stop(14500);
-    vTaskDelete(nullptr);
-}
-
-void start_runner_demo_preview_task()
-{
-    if (!RUNNER_DEMO_PREVIEW_ENABLED) {
-        return;
-    }
-
-    const BaseType_t result = xTaskCreate(runner_demo_preview_task,
-                                         "runner_demo",
-                                         3072,
-                                         nullptr,
-                                         3,
-                                         nullptr);
-    if (result != pdPASS) {
-        ESP_LOGW(TAG, "Runner demo preview task could not be started");
-    }
-}
-
 void ui_task(void *)
 {
     int last_static_mode = -1;
+    bool last_power_status_icon_visible = false;
 
     while (true) {
         const ScreenMode mode = static_cast<ScreenMode>(
@@ -172,6 +127,7 @@ void ui_task(void *)
         const int64_t started_us =
             g_screen_started_us.load(std::memory_order_acquire);
         const int64_t elapsed_ms = (now_us - started_us) / 1000;
+        const bool status_icon_visible = power_status_icon_visible(now_us);
 
         if (idle_splash_due(mode, now_us, started_us)) {
             g_screen_started_us.store(now_us, std::memory_order_release);
@@ -184,18 +140,15 @@ void ui_task(void *)
 
         switch (mode) {
         case ScreenMode::StartupSplash:
-            if (elapsed_ms >= STARTUP_SPLASH_DURATION_MS) {
-                switch_to_runner_preview();
-                last_static_mode = -1;
-            } else {
-                if (last_static_mode !=
-                    static_cast<int>(ScreenMode::StartupSplash)) {
-                    render_startup_splash_screen();
-                    last_static_mode =
-                        static_cast<int>(ScreenMode::StartupSplash);
-                }
-                vTaskDelay(pdMS_TO_TICKS(100));
+            if (last_static_mode !=
+                    static_cast<int>(ScreenMode::StartupSplash) ||
+                last_power_status_icon_visible != status_icon_visible) {
+                render_startup_splash_screen();
+                last_static_mode =
+                    static_cast<int>(ScreenMode::StartupSplash);
+                last_power_status_icon_visible = status_icon_visible;
             }
+            vTaskDelay(pdMS_TO_TICKS(status_icon_visible ? 100 : 250));
             break;
 
         case ScreenMode::RunnerPreview:
@@ -256,19 +209,23 @@ void ui_task(void *)
             break;
 
         case ScreenMode::ParcoursEnded:
-            if (last_static_mode != static_cast<int>(ScreenMode::ParcoursEnded)) {
+            if (last_static_mode != static_cast<int>(ScreenMode::ParcoursEnded) ||
+                last_power_status_icon_visible != status_icon_visible) {
                 render_ended_screen();
                 last_static_mode = static_cast<int>(ScreenMode::ParcoursEnded);
+                last_power_status_icon_visible = status_icon_visible;
             }
-            vTaskDelay(pdMS_TO_TICKS(100));
+            vTaskDelay(pdMS_TO_TICKS(status_icon_visible ? 100 : 250));
             break;
 
         case ScreenMode::IdleSplash:
-            if (last_static_mode != static_cast<int>(ScreenMode::IdleSplash)) {
+            if (last_static_mode != static_cast<int>(ScreenMode::IdleSplash) ||
+                last_power_status_icon_visible != status_icon_visible) {
                 render_startup_splash_screen();
                 last_static_mode = static_cast<int>(ScreenMode::IdleSplash);
+                last_power_status_icon_visible = status_icon_visible;
             }
-            vTaskDelay(pdMS_TO_TICKS(250));
+            vTaskDelay(pdMS_TO_TICKS(status_icon_visible ? 100 : 250));
             break;
         }
     }

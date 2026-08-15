@@ -477,6 +477,71 @@ uint32_t splash_logo_color(char pixel)
     }
 }
 
+bool power_status_icon_visible(int64_t now_us)
+{
+    const int64_t visible_until_us =
+        g_power_status_icon_until_us.load(std::memory_order_acquire);
+    return visible_until_us > 0 && now_us < visible_until_us;
+}
+
+uint32_t power_status_icon_color()
+{
+    return hub75_brightness() >= 255 ? 0x18ff5a : 0xff2424;
+}
+
+void draw_power_status_icon_shape(lv_layer_t *layer,
+                                  int x,
+                                  int y,
+                                  lv_color_t color)
+{
+    canvas_rect(layer, x + 3, y, 1, 5, color);
+    canvas_rect(layer, x + 7, y + 1, 1, 4, color);
+    canvas_rect(layer, x + 2, y + 5, 8, 1, color);
+    canvas_rect(layer, x + 2, y + 6, 1, 4, color);
+    canvas_rect(layer, x + 9, y + 6, 1, 4, color);
+    canvas_rect(layer, x + 3, y + 10, 6, 1, color);
+    canvas_rect(layer, x + 4, y + 11, 4, 1, color);
+    canvas_rect(layer, x + 5, y + 12, 2, 2, color);
+}
+
+void draw_power_status_icon_shape_direct(int x, int y, lv_color_t color)
+{
+    canvas_rect_direct(x + 3, y, 1, 5, color);
+    canvas_rect_direct(x + 7, y + 1, 1, 4, color);
+    canvas_rect_direct(x + 2, y + 5, 8, 1, color);
+    canvas_rect_direct(x + 2, y + 6, 1, 4, color);
+    canvas_rect_direct(x + 9, y + 6, 1, 4, color);
+    canvas_rect_direct(x + 3, y + 10, 6, 1, color);
+    canvas_rect_direct(x + 4, y + 11, 4, 1, color);
+    canvas_rect_direct(x + 5, y + 12, 2, 2, color);
+}
+
+void draw_power_status_icon(lv_layer_t *layer, int64_t now_us)
+{
+    if (!power_status_icon_visible(now_us)) {
+        return;
+    }
+
+    const lv_color_t color = lv_color_hex(power_status_icon_color());
+    const int x = DISPLAY_WIDTH - 10;
+    const int y = 1;
+
+    draw_power_status_icon_shape(layer, x, y, color);
+}
+
+void draw_power_status_icon_direct(int64_t now_us)
+{
+    if (!power_status_icon_visible(now_us)) {
+        return;
+    }
+
+    const lv_color_t color = lv_color_hex(power_status_icon_color());
+    const int x = DISPLAY_WIDTH - 10;
+    const int y = 1;
+
+    draw_power_status_icon_shape_direct(x, y, color);
+}
+
 void draw_splash_logo_direct(int x, int y)
 {
     for (size_t row = 0; row < DOGDOG_LOGO_BITMAP.size(); ++row) {

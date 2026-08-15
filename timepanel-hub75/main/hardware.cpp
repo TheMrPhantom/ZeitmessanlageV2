@@ -1,4 +1,5 @@
 #include "timepanel_common.h"
+#include "driver/usb_serial_jtag.h"
 
 namespace {
 
@@ -27,6 +28,9 @@ constexpr int FHT40_MEASUREMENT_DELAY_MS = 25;
 constexpr int FHT40_READ_RETRY_DELAY_MS = 5;
 constexpr int FHT40_READ_ATTEMPTS = 3;
 constexpr int FHT40_I2C_TIMEOUT_MS = 50;
+constexpr int USB_CONNECTION_SETTLE_MS = 25;
+constexpr uint8_t FULL_PANEL_BRIGHTNESS = 255;
+int s_hub75_brightness = CONFIG_TIMEPANEL_PANEL_BRIGHTNESS;
 
 #ifdef CONFIG_TIMEPANEL_HUB75_DOUBLE_BUFFER
 constexpr bool HUB75_DOUBLE_BUFFER_ENABLED = true;
@@ -43,7 +47,44 @@ constexpr bool SENSOR_I2C_INTERNAL_PULLUPS = false;
 #if CONFIG_TIMEPANEL_SENSOR_ENABLED
 constexpr int SENSOR_LOG_INTERVAL_MS =
     CONFIG_TIMEPANEL_SENSOR_LOG_INTERVAL_SECONDS * 1000;
+
+bool is_external_memory_gpio(int gpio)
+{
+#if CONFIG_IDF_TARGET_ESP32S3 && CONFIG_SPIRAM
+    if (gpio >= 26 && gpio <= 32) {
+        return true;
+    }
+#if CONFIG_SPIRAM_MODE_OCT
+    if (gpio >= 33 && gpio <= 37) {
+        return true;
+    }
 #endif
+#endif
+    return false;
+}
+
+bool sensor_i2c_conflicts_with_external_memory()
+{
+    return is_external_memory_gpio(CONFIG_TIMEPANEL_SENSOR_I2C_SDA_GPIO) ||
+           is_external_memory_gpio(CONFIG_TIMEPANEL_SENSOR_I2C_SCL_GPIO);
+}
+#endif
+
+uint8_t choose_hub75_brightness()
+{
+    vTaskDelay(pdMS_TO_TICKS(USB_CONNECTION_SETTLE_MS));
+
+    const bool usb_host_connected = usb_serial_jtag_is_connected();
+    const uint8_t brightness = usb_host_connected
+                                   ? CONFIG_TIMEPANEL_PANEL_BRIGHTNESS
+                                   : FULL_PANEL_BRIGHTNESS;
+
+    ESP_LOGI(TAG,
+             "USB Serial/JTAG host %s; using HUB75 brightness %u",
+             usb_host_connected ? "detected" : "not detected",
+             static_cast<unsigned>(brightness));
+    return brightness;
+}
 
 } // namespace
 
@@ -63,7 +104,7 @@ void hub75_flush_callback(lv_display_t *display,
                          Hub75ColorOrder::RGB,
                          false);
 
-    if (lv_display_flush_is_last(display)) {
+    if (HUB75_DOUBLE_BUFFER_ENABLED && lv_display_flush_is_last(display)) {
         g_hub75->flip_buffer();
     }
 
@@ -72,6 +113,8 @@ void hub75_flush_callback(lv_display_t *display,
 
 void initialize_hub75()
 {
+    s_hub75_brightness = choose_hub75_brightness();
+
     Hub75Config config{};
     config.panel_width = SINGLE_PANEL_WIDTH;
     config.panel_height = SINGLE_PANEL_HEIGHT;
@@ -85,7 +128,7 @@ void initialize_hub75()
     config.output_clock_speed = Hub75ClockSpeed::HZ_20M;
     config.min_refresh_rate = 80;
     config.double_buffer = HUB75_DOUBLE_BUFFER_ENABLED;
-    config.brightness = CONFIG_TIMEPANEL_PANEL_BRIGHTNESS;
+    config.brightness = s_hub75_brightness;
 
     g_hub75 = std::make_unique<Hub75Driver>(config);
     if (!g_hub75->begin()) {
@@ -93,7 +136,14 @@ void initialize_hub75()
         abort();
     }
     g_hub75->clear();
-    g_hub75->flip_buffer();
+    if (HUB75_DOUBLE_BUFFER_ENABLED) {
+        g_hub75->flip_buffer();
+    }
+}
+
+int hub75_brightness()
+{
+    return s_hub75_brightness;
 }
 
 void initialize_lvgl()
@@ -209,6 +259,14 @@ struct SensorMutexLock {
 void initialize_environment_sensor()
 {
 #if CONFIG_TIMEPANEL_SENSOR_ENABLED
+    if (sensor_i2c_conflicts_with_external_memory()) {
+        ESP_LOGW(TAG,
+                 "FHT40 disabled: GPIO%d/GPIO%d conflict with ESP32-S3 flash/PSRAM pins while PSRAM is enabled",
+                 CONFIG_TIMEPANEL_SENSOR_I2C_SDA_GPIO,
+                 CONFIG_TIMEPANEL_SENSOR_I2C_SCL_GPIO);
+        return;
+    }
+
     if (g_sensor_mutex == nullptr) {
         g_sensor_mutex = xSemaphoreCreateMutex();
         if (g_sensor_mutex == nullptr) {
