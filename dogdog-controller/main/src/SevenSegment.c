@@ -472,7 +472,7 @@ esp_err_t app_lvgl_init(void)
     return ESP_OK;
 }
 
-void show_firmware_upgrade_screen(void)
+static void show_firmware_status_screen(const char *text)
 {
     ESP_ERROR_CHECK_WITHOUT_ABORT(app_lcd_init());
     ESP_ERROR_CHECK_WITHOUT_ABORT(app_lvgl_init());
@@ -484,12 +484,22 @@ void show_firmware_upgrade_screen(void)
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
 
     lv_obj_t *label = lv_label_create(screen);
-    lv_label_set_text(label, "Firmware Upgrade");
+    lv_label_set_text(label, text);
     lv_obj_set_style_text_font(label, &lv_font_montserrat_38, 0);
     lv_obj_set_style_text_color(label, lv_color_hex(0x000000), 0);
     lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
     lv_refr_now(NULL);
     lvgl_port_unlock();
+}
+
+void show_firmware_check_screen(void)
+{
+    show_firmware_status_screen("Checking Firmware");
+}
+
+void show_firmware_upgrade_screen(void)
+{
+    show_firmware_status_screen("Firmware Upgrade");
 }
 
 void setupSevenSegment()

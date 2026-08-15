@@ -9,8 +9,11 @@ namespace {
 void timepanel_ota_status(dogdog_ota_event_t event, void *)
 {
     switch (event) {
+    case DOGDOG_OTA_EVENT_CHECKING:
     case DOGDOG_OTA_EVENT_WIFI_FOUND:
     case DOGDOG_OTA_EVENT_CONNECTING:
+        render_firmware_check_screen();
+        break;
     case DOGDOG_OTA_EVENT_UPDATING:
     case DOGDOG_OTA_EVENT_RESTARTING_FOR_UPDATE:
         render_firmware_upgrade_screen();

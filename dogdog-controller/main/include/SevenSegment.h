@@ -45,6 +45,7 @@ void increase_refusals();
 void inrease_fault();
 
 void setupSevenSegment();
+void show_firmware_check_screen(void);
 void show_firmware_upgrade_screen(void);
 
 void setup_timing_screen();

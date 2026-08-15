@@ -88,7 +88,10 @@ static void controller_ota_status(dogdog_ota_event_t event, void *user_ctx)
     switch (event)
     {
     case DOGDOG_OTA_EVENT_WIFI_FOUND:
+    case DOGDOG_OTA_EVENT_CHECKING:
     case DOGDOG_OTA_EVENT_CONNECTING:
+        show_firmware_check_screen();
+        break;
     case DOGDOG_OTA_EVENT_UPDATING:
     case DOGDOG_OTA_EVENT_RESTARTING_FOR_UPDATE:
         show_firmware_upgrade_screen();

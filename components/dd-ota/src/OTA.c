@@ -712,6 +712,8 @@ esp_err_t dogdog_ota_check_and_update_ex(const dogdog_ota_config_t *config)
         .retries = 0,
     };
 
+    notify_status(&context, DOGDOG_OTA_EVENT_CHECKING);
+
     esp_err_t err = initialize_wifi(&context);
     if (err != ESP_OK) {
         notify_status(&context, DOGDOG_OTA_EVENT_FAILED);
