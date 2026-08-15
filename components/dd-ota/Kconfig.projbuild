@@ -53,15 +53,21 @@ menu "DogDog OTA"
     config DOGDOG_OTA_ENABLE_PARTIAL_HTTP_DOWNLOAD
         bool "Enable partial HTTP download"
         depends on DOGDOG_OTA_ENABLED
-        default y
+        default n
         help
-            Keeps the TLS receive buffer smaller while downloading firmware.
+            Disable this by default for OTA images on noisy or weak Wi-Fi links:
+            the partial-download path can be much slower because it issues many
+            small incremental reads. Enable only when the device has a very
+            constrained memory budget and the network is known to be reliable.
 
     config DOGDOG_OTA_HTTP_REQUEST_SIZE
         int "Partial HTTP request size"
         depends on DOGDOG_OTA_ENABLE_PARTIAL_HTTP_DOWNLOAD
-        range 1024 16384
-        default 4096
+        range 8192 131072
+        default 65536
+        help
+            When partial HTTP downloads are enabled, use a much larger chunk to
+            avoid the tiny read loop that causes very low throughput.
 
     config DOGDOG_OTA_TASK_STACK_SIZE
         int "DogDog OTA worker task stack size"

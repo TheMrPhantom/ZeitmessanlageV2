@@ -443,31 +443,7 @@ static int64_t utc_epoch_from_calendar(int year, int month, int day,
 
 static int64_t local_utc_offset_seconds(void)
 {
-    time_t now = time(NULL);
-    if (now == (time_t)-1) {
-        return 2 * 60 * 60;
-    }
-
-    struct tm utc_tm = {0};
-    struct tm local_tm = {0};
-    if (gmtime_r(&now, &utc_tm) == NULL || localtime_r(&now, &local_tm) == NULL) {
-        return 2 * 60 * 60;
-    }
-
-    const int64_t utc_epoch = utc_epoch_from_calendar(utc_tm.tm_year + 1900,
-                                                      utc_tm.tm_mon + 1,
-                                                      utc_tm.tm_mday,
-                                                      utc_tm.tm_hour,
-                                                      utc_tm.tm_min,
-                                                      utc_tm.tm_sec);
-    const int64_t local_epoch = utc_epoch_from_calendar(local_tm.tm_year + 1900,
-                                                        local_tm.tm_mon + 1,
-                                                        local_tm.tm_mday,
-                                                        local_tm.tm_hour,
-                                                        local_tm.tm_min,
-                                                        local_tm.tm_sec);
-    const int64_t observed_offset = local_epoch - utc_epoch;
-    return observed_offset != 0 ? observed_offset : (2 * 60 * 60);
+    return 2 * 60 * 60;
 }
 
 static bool app_build_timestamp(const esp_app_desc_t *desc,
@@ -613,6 +589,8 @@ static esp_err_t probe_ota_update_available(const char *device_name,
         .url = firmware_url,
         .timeout_ms = CONFIG_DOGDOG_OTA_RECV_TIMEOUT_MS,
         .keep_alive_enable = true,
+        .buffer_size = 4096,
+        .keep_alive_enable = true,
 #if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
         .crt_bundle_attach = esp_crt_bundle_attach,
 #endif
@@ -741,6 +719,7 @@ static esp_err_t perform_ota(const char *device_name,
     }
 
     size_t last_logged_bytes = 0;
+    const TickType_t start_ticks = xTaskGetTickCount();
     while (true) {
         err = esp_https_ota_perform(ota_handle);
         if (err != ESP_ERR_HTTPS_OTA_IN_PROGRESS) {
@@ -750,9 +729,12 @@ static esp_err_t perform_ota(const char *device_name,
         const size_t bytes_read = esp_https_ota_get_image_len_read(ota_handle);
         if (bytes_read != last_logged_bytes) {
             last_logged_bytes = bytes_read;
+            const uint32_t elapsed_ms = (uint32_t)pdTICKS_TO_MS(xTaskGetTickCount() - start_ticks);
+            const uint32_t bytes_per_second = elapsed_ms > 0 ? (uint32_t)((bytes_read * 1000ULL) / elapsed_ms) : 0;
             ESP_LOGI(TAG,
-                     "OTA download in progress: %zu bytes received",
-                     bytes_read);
+                     "OTA download in progress: %zu bytes received (%lu B/s)",
+                     bytes_read,
+                     (unsigned long)bytes_per_second);
         }
     }
 
