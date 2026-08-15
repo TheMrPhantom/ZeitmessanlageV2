@@ -62,4 +62,14 @@ menu "DogDog OTA"
         depends on DOGDOG_OTA_ENABLE_PARTIAL_HTTP_DOWNLOAD
         range 1024 16384
         default 4096
+
+    config DOGDOG_OTA_TASK_STACK_SIZE
+        int "DogDog OTA worker task stack size"
+        depends on DOGDOG_OTA_ENABLED
+        range 8192 32768
+        default 24576
+        help
+            HTTPS OTA uses significantly more stack than ESP-IDF's main task.
+            The boot probe runs in this temporary task and app_main waits for
+            it to finish or reboot.
 endmenu

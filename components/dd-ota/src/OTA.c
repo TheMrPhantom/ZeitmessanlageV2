@@ -21,6 +21,7 @@
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
 #include "sdkconfig.h"
@@ -30,8 +31,12 @@ static const char *TAG = "DogDogOTA";
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
 #define DOGDOG_OTA_SKIP_ONCE_MARKER 0xdd075a11U
+#define DOGDOG_OTA_UPDATE_PENDING_MARKER 0xdd075a12U
+#ifndef CONFIG_DOGDOG_OTA_TASK_STACK_SIZE
+#define CONFIG_DOGDOG_OTA_TASK_STACK_SIZE 24576
+#endif
 
-RTC_DATA_ATTR static uint32_t s_skip_ota_once_marker = 0;
+RTC_DATA_ATTR static uint32_t s_ota_marker = 0;
 
 typedef struct dogdog_ota_context {
     EventGroupHandle_t event_group;
@@ -40,9 +45,16 @@ typedef struct dogdog_ota_context {
     int retries;
 } dogdog_ota_context_t;
 
+typedef struct dogdog_ota_task_args {
+    dogdog_ota_config_t config;
+    esp_err_t result;
+    SemaphoreHandle_t done;
+} dogdog_ota_task_args_t;
+
 static esp_netif_t *s_wifi_netif = NULL;
 static esp_event_handler_instance_t s_wifi_instance = NULL;
 static esp_event_handler_instance_t s_ip_instance = NULL;
+static bool s_ota_wifi_shutting_down = false;
 
 static void notify_status(dogdog_ota_context_t *context,
                           dogdog_ota_event_t event)
@@ -63,20 +75,50 @@ static const char *device_name_from_config(const dogdog_ota_config_t *config)
 
 static bool consume_skip_once_marker(void)
 {
-    if (s_skip_ota_once_marker != DOGDOG_OTA_SKIP_ONCE_MARKER) {
+    if (s_ota_marker != DOGDOG_OTA_SKIP_ONCE_MARKER) {
         return false;
     }
 
-    s_skip_ota_once_marker = 0;
+    s_ota_marker = 0;
     ESP_LOGI(TAG, "Skipping OTA probe once after OTA restart marker");
+    return true;
+}
+
+bool dogdog_ota_update_pending(void)
+{
+    return s_ota_marker == DOGDOG_OTA_UPDATE_PENDING_MARKER;
+}
+
+static bool consume_update_pending_marker(void)
+{
+    if (s_ota_marker != DOGDOG_OTA_UPDATE_PENDING_MARKER) {
+        return false;
+    }
+
+    s_ota_marker = 0;
+    ESP_LOGI(TAG, "Resuming pending OTA update");
     return true;
 }
 
 static void restart_with_skip_once_marker(void)
 {
-    s_skip_ota_once_marker = DOGDOG_OTA_SKIP_ONCE_MARKER;
+    s_ota_marker = DOGDOG_OTA_SKIP_ONCE_MARKER;
+    s_ota_wifi_shutting_down = true;
     ESP_LOGI(TAG, "Restarting after OTA probe, next boot skips OTA once");
     vTaskDelay(pdMS_TO_TICKS(1000));
+    esp_restart();
+}
+
+static void restart_with_update_pending_marker(dogdog_ota_context_t *context,
+                                               int delay_ms)
+{
+    s_ota_marker = DOGDOG_OTA_UPDATE_PENDING_MARKER;
+    s_ota_wifi_shutting_down = true;
+    notify_status(context, DOGDOG_OTA_EVENT_RESTARTING_FOR_UPDATE);
+    ESP_LOGI(TAG, "Restarting into OTA-only boot path");
+    if (delay_ms > 0) {
+        vTaskDelay(pdMS_TO_TICKS(delay_ms));
+    }
     esp_restart();
 }
 
@@ -100,6 +142,10 @@ static void wifi_event_handler(void *arg,
 
     if (event_base == WIFI_EVENT &&
         event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        if (s_ota_wifi_shutting_down) {
+            ESP_LOGI(TAG, "OTA Wi-Fi disconnected during planned restart");
+            return;
+        }
         if (context->retries < CONFIG_DOGDOG_OTA_CONNECT_RETRIES) {
             context->retries++;
             ESP_LOGI(TAG,
@@ -122,6 +168,8 @@ static void wifi_event_handler(void *arg,
 
 static esp_err_t initialize_wifi(dogdog_ota_context_t *context)
 {
+    s_ota_wifi_shutting_down = false;
+
     ESP_RETURN_ON_ERROR(init_nvs(), TAG, "NVS init failed");
 
     esp_err_t err = esp_netif_init();
@@ -431,6 +479,13 @@ esp_err_t dogdog_ota_check_and_update_ex(const dogdog_ota_config_t *config)
     if (consume_skip_once_marker()) {
         return ESP_OK;
     }
+    const bool resume_pending_update = consume_update_pending_marker();
+    const bool restart_before_update =
+        !resume_pending_update && config != NULL && config->restart_before_update;
+    const int restart_delay_ms =
+        config != NULL && config->restart_delay_ms > 0
+            ? config->restart_delay_ms
+            : 1500;
 
     dogdog_ota_context_t context = {
         .event_group = NULL,
@@ -446,21 +501,28 @@ esp_err_t dogdog_ota_check_and_update_ex(const dogdog_ota_config_t *config)
         return err;
     }
 
-    err = scan_for_ota_network();
-    if (err == ESP_ERR_NOT_FOUND) {
-        cleanup_wifi(&context);
-        return ESP_OK;
+    if (!resume_pending_update) {
+        err = scan_for_ota_network();
+        if (err == ESP_ERR_NOT_FOUND) {
+            cleanup_wifi(&context);
+            return ESP_OK;
+        }
+        if (err != ESP_OK) {
+            notify_status(&context, DOGDOG_OTA_EVENT_FAILED);
+            cleanup_wifi(&context);
+            return err;
+        }
+        notify_status(&context, DOGDOG_OTA_EVENT_WIFI_FOUND);
     }
-    if (err != ESP_OK) {
-        notify_status(&context, DOGDOG_OTA_EVENT_FAILED);
-        cleanup_wifi(&context);
-        return err;
-    }
-    notify_status(&context, DOGDOG_OTA_EVENT_WIFI_FOUND);
 
     err = connect_to_ota_network(&context);
     if (err == ESP_OK) {
-        err = perform_ota(device_name_from_config(config), &context);
+        if (restart_before_update) {
+            notify_status(&context, DOGDOG_OTA_EVENT_UPDATING);
+            restart_with_update_pending_marker(&context, restart_delay_ms);
+        } else {
+            err = perform_ota(device_name_from_config(config), &context);
+        }
     }
 
     if (err != ESP_OK) {
@@ -480,8 +542,54 @@ esp_err_t dogdog_ota_check_and_update(const char *device_name)
         .device_name = device_name,
         .status_cb = NULL,
         .user_ctx = NULL,
+        .restart_before_update = false,
+        .restart_delay_ms = 0,
     };
     return dogdog_ota_check_and_update_ex(&config);
+}
+
+static void dogdog_ota_worker_task(void *arg)
+{
+    dogdog_ota_task_args_t *args = (dogdog_ota_task_args_t *)arg;
+    args->result = dogdog_ota_check_and_update_ex(&args->config);
+    xSemaphoreGive(args->done);
+    vTaskDelete(NULL);
+}
+
+esp_err_t dogdog_ota_check_and_update_in_task(const dogdog_ota_config_t *config,
+                                              uint32_t stack_size)
+{
+    dogdog_ota_task_args_t args = {
+        .config = {0},
+        .result = ESP_FAIL,
+        .done = xSemaphoreCreateBinary(),
+    };
+    if (args.done == NULL) {
+        ESP_LOGE(TAG, "OTA worker semaphore allocation failed");
+        return ESP_ERR_NO_MEM;
+    }
+
+    if (config != NULL) {
+        args.config = *config;
+    }
+
+    const uint32_t effective_stack_size =
+        stack_size > 0 ? stack_size : CONFIG_DOGDOG_OTA_TASK_STACK_SIZE;
+    const BaseType_t created = xTaskCreate(dogdog_ota_worker_task,
+                                           "dogdog_ota",
+                                           effective_stack_size,
+                                           &args,
+                                           6,
+                                           NULL);
+    if (created != pdPASS) {
+        vSemaphoreDelete(args.done);
+        ESP_LOGE(TAG, "OTA worker task allocation failed");
+        return ESP_ERR_NO_MEM;
+    }
+
+    xSemaphoreTake(args.done, portMAX_DELAY);
+    vSemaphoreDelete(args.done);
+    return args.result;
 }
 
 void ota_task(void *pvParameters)

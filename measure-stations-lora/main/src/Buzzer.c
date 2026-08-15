@@ -136,15 +136,11 @@ void Buzzer_Task(void *params)
             }
             else if (input == Buzzer_INDICATE_OTA)
             {
-                sound(sound_a, 1000);
-                vTaskDelay(pdMS_TO_TICKS(500));
-                sound(sound_a, 1000);
-                vTaskDelay(pdMS_TO_TICKS(500));
-                sound(sound_a, 1000);
-                vTaskDelay(pdMS_TO_TICKS(500));
-                sound(sound_a, 1000);
-                vTaskDelay(pdMS_TO_TICKS(500));
-                sound(sound_a, 1000);
+                sound(sound_a, 120);
+                vTaskDelay(pdMS_TO_TICKS(80));
+                sound(sound_a, 120);
+                vTaskDelay(pdMS_TO_TICKS(80));
+                sound(sound_a, 260);
             }
         }
     }

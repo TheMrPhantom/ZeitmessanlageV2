@@ -90,6 +90,7 @@ static void controller_ota_status(dogdog_ota_event_t event, void *user_ctx)
     case DOGDOG_OTA_EVENT_WIFI_FOUND:
     case DOGDOG_OTA_EVENT_CONNECTING:
     case DOGDOG_OTA_EVENT_UPDATING:
+    case DOGDOG_OTA_EVENT_RESTARTING_FOR_UPDATE:
         show_firmware_upgrade_screen();
         break;
     default:
@@ -199,6 +200,17 @@ static void start_timepanel_test_timer_sequence(void)
 
 void app_main(void)
 {
+    if (dogdog_ota_update_pending())
+    {
+        const dogdog_ota_config_t pending_ota_config = {
+            .device_name = "dogdog-controller",
+            .status_cb = NULL,
+            .user_ctx = NULL,
+            .restart_before_update = false,
+            .restart_delay_ms = 0,
+        };
+        ESP_ERROR_CHECK_WITHOUT_ABORT(dogdog_ota_check_and_update_in_task(&pending_ota_config, 0));
+    }
 
     // Initialize LoRa
     nvs_flash_init();
@@ -206,8 +218,10 @@ void app_main(void)
         .device_name = "dogdog-controller",
         .status_cb = controller_ota_status,
         .user_ctx = NULL,
+        .restart_before_update = true,
+        .restart_delay_ms = 1800,
     };
-    ESP_ERROR_CHECK_WITHOUT_ABORT(dogdog_ota_check_and_update_ex(&ota_config));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(dogdog_ota_check_and_update_in_task(&ota_config, 0));
 
     gpio_install_isr_service(0);
     InitLoraHandlers(HandleReceivedPacket);

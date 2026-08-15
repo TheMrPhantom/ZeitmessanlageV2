@@ -76,6 +76,18 @@ void start_isr_service_tast(void *params)
 void app_main(void)
 {
     const char *TAG = "MAIN";
+    if (dogdog_ota_update_pending())
+    {
+        const dogdog_ota_config_t pending_ota_config = {
+            .device_name = "measure-stations-lora",
+            .status_cb = NULL,
+            .user_ctx = NULL,
+            .restart_before_update = false,
+            .restart_delay_ms = 0,
+        };
+        ESP_ERROR_CHECK_WITHOUT_ABORT(dogdog_ota_check_and_update_in_task(&pending_ota_config, 0));
+    }
+
     ESP_LOGI(TAG, "Starting...");
     nvs_flash_init();
 
@@ -152,8 +164,10 @@ void app_main(void)
         .device_name = "measure-stations-lora",
         .status_cb = measure_station_ota_status,
         .user_ctx = NULL,
+        .restart_before_update = true,
+        .restart_delay_ms = 1200,
     };
-    ESP_ERROR_CHECK_WITHOUT_ABORT(dogdog_ota_check_and_update_ex(&ota_config));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(dogdog_ota_check_and_update_in_task(&ota_config, 0));
 
     // gpio_install_isr_service(0);
 
