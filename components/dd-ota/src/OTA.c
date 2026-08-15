@@ -740,14 +740,20 @@ static esp_err_t perform_ota(const char *device_name,
         }
     }
 
+    size_t last_logged_bytes = 0;
     while (true) {
         err = esp_https_ota_perform(ota_handle);
         if (err != ESP_ERR_HTTPS_OTA_IN_PROGRESS) {
             break;
         }
-        ESP_LOGD(TAG,
-                 "OTA image bytes read: %d",
-                 esp_https_ota_get_image_len_read(ota_handle));
+
+        const size_t bytes_read = esp_https_ota_get_image_len_read(ota_handle);
+        if (bytes_read != last_logged_bytes) {
+            last_logged_bytes = bytes_read;
+            ESP_LOGI(TAG,
+                     "OTA download in progress: %zu bytes received",
+                     bytes_read);
+        }
     }
 
     if (err != ESP_OK) {
@@ -762,6 +768,7 @@ static esp_err_t perform_ota(const char *device_name,
         return ESP_ERR_INVALID_SIZE;
     }
 
+    ESP_LOGI(TAG, "OTA image transfer complete, finalizing update");
     err = esp_https_ota_finish(ota_handle);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "OTA finish failed: %s", esp_err_to_name(err));
