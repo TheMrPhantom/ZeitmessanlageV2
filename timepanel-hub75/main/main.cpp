@@ -1,5 +1,26 @@
 #include "timepanel_common.h"
 
+extern "C" {
+#include "OTA.h"
+}
+
+namespace {
+
+void timepanel_ota_status(dogdog_ota_event_t event, void *)
+{
+    switch (event) {
+    case DOGDOG_OTA_EVENT_WIFI_FOUND:
+    case DOGDOG_OTA_EVENT_CONNECTING:
+    case DOGDOG_OTA_EVENT_UPDATING:
+        render_firmware_upgrade_screen();
+        break;
+    default:
+        break;
+    }
+}
+
+} // namespace
+
 extern "C" void app_main(void)
 {
     const int64_t now_us = esp_timer_get_time();
@@ -17,6 +38,14 @@ extern "C" void app_main(void)
 
     initialize_hub75();
     initialize_lvgl();
+
+    const dogdog_ota_config_t ota_config = {
+        .device_name = "timepanel-hub75",
+        .status_cb = timepanel_ota_status,
+        .user_ctx = nullptr,
+    };
+    ESP_ERROR_CHECK_WITHOUT_ABORT(dogdog_ota_check_and_update_ex(&ota_config));
+
     initialize_environment_sensor();
     log_environment_temperature(read_environment_sensor());
     start_environment_sensor_log_task();

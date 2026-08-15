@@ -1,0 +1,19 @@
+services:
+  ota-relay:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      DATA_DIR: /data
+      GITHUB_OWNER: TheMrPhantom
+      GITHUB_REPO: ZeitmessanlageV2
+      GITHUB_RELEASE_TAG: latest
+      WEBHOOK_TOKEN: ${WEBHOOK_TOKEN:?set WEBHOOK_TOKEN}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+    volumes:
+      - ota-relay-data:/data
+
+volumes:
+  ota-relay-data:

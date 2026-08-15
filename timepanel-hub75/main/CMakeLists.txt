@@ -24,6 +24,7 @@ idf_component_register(
         esphome__esp-hub75
         lvgl
         timepanel-protocol
+        dd-ota
 )
 
 target_compile_features(${COMPONENT_LIB} PUBLIC cxx_std_20)

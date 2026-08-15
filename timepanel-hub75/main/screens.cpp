@@ -44,6 +44,24 @@ void render_canvas(void (*draw)(lv_layer_t *))
     lvgl_port_unlock();
 }
 
+void render_firmware_upgrade_screen()
+{
+    render_canvas([](lv_layer_t *layer) {
+        const char text[] = "Firmware Upgrade";
+        const lv_font_t *font = font_18();
+        const lv_point_t size = measure_text(text, font);
+        const int y = std::max(0, static_cast<int>((DISPLAY_HEIGHT - size.y) / 2));
+        draw_canvas_label(layer,
+                          0,
+                          y,
+                          text,
+                          font,
+                          lv_color_hex(0xffffff),
+                          LV_TEXT_ALIGN_CENTER,
+                          DISPLAY_WIDTH);
+    });
+}
+
 void render_runner_preview_screen(int64_t now_us)
 {
     const RunnerSnapshot snapshot = runner_snapshot(now_us);

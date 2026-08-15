@@ -348,6 +348,11 @@ void inrease_fault()
 
 esp_err_t app_lcd_init(void)
 {
+    if (lcd_panel != NULL && lcd_io != NULL)
+    {
+        return ESP_OK;
+    }
+
     esp_err_t ret = ESP_OK;
 
     // Configure LCD backlight GPIO
@@ -433,6 +438,11 @@ void lvgl_touch_cb(lv_indev_drv_t *drv, lv_indev_data_t *data)
 
 esp_err_t app_lvgl_init(void)
 {
+    if (lvgl_disp != NULL)
+    {
+        return ESP_OK;
+    }
+
     // Initialize LVGL
     lvgl_port_cfg_t lvgl_cfg = {
         .task_priority = 4,
@@ -460,6 +470,26 @@ esp_err_t app_lvgl_init(void)
     lvgl_disp = lvgl_port_add_disp(&disp_cfg);
 
     return ESP_OK;
+}
+
+void show_firmware_upgrade_screen(void)
+{
+    ESP_ERROR_CHECK_WITHOUT_ABORT(app_lcd_init());
+    ESP_ERROR_CHECK_WITHOUT_ABORT(app_lvgl_init());
+
+    lvgl_port_lock(-1);
+    lv_obj_t *screen = lv_scr_act();
+    lv_obj_clean(screen);
+    lv_obj_set_style_bg_color(screen, lv_color_white(), 0);
+    lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
+
+    lv_obj_t *label = lv_label_create(screen);
+    lv_label_set_text(label, "Firmware Upgrade");
+    lv_obj_set_style_text_font(label, &lv_font_montserrat_38, 0);
+    lv_obj_set_style_text_color(label, lv_color_hex(0x000000), 0);
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
+    lv_refr_now(NULL);
+    lvgl_port_unlock();
 }
 
 void setupSevenSegment()
@@ -496,6 +526,7 @@ void setupSevenSegment()
 void setup_splashscreen()
 {
     splash_screen = lv_scr_act();
+    lv_obj_clean(splash_screen);
     lv_obj_set_style_bg_color(splash_screen, lv_color_white(), 0);
     lv_obj_set_style_bg_opa(splash_screen, LV_OPA_COVER, 0);
 

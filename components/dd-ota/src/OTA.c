@@ -1,350 +1,494 @@
 #define LOG_LOCAL_LEVEL ESP_LOG_INFO
 #include "OTA.h"
 
-#include "esp_wifi.h"
-#include "esp_system.h"
-#include "esp_https_ota.h"
-#include "esp_event.h"
-#include "esp_log.h"
-#include "esp_ota_ops.h"
-#include "esp_http_client.h"
-#if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
-#include "esp_crt_bundle.h"
-#endif
-#include "esp_pm.h"
-#include "nvs_flash.h"
-#include "lwip/err.h"
-#include "lwip/sys.h"
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 
-static char *TAG = "OTA";
-// FreeRTOS event group to signal when we are connected
-static EventGroupHandle_t s_wifi_event_group;
-/* The event group allows multiple bits for each event, but we only care about two events:
- * - we are connected to the AP with an IP
- * - we failed to connect after the maximum amount of retries */
+#include "esp_crt_bundle.h"
+#include "esp_attr.h"
+#include "esp_check.h"
+#include "esp_err.h"
+#include "esp_event.h"
+#include "esp_http_client.h"
+#include "esp_https_ota.h"
+#include "esp_log.h"
+#include "esp_netif.h"
+#include "esp_ota_ops.h"
+#include "esp_system.h"
+#include "esp_wifi.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/event_groups.h"
+#include "freertos/task.h"
+#include "nvs_flash.h"
+#include "sdkconfig.h"
+
+static const char *TAG = "DogDogOTA";
+
 #define WIFI_CONNECTED_BIT BIT0
 #define WIFI_FAIL_BIT BIT1
+#define DOGDOG_OTA_SKIP_ONCE_MARKER 0xdd075a11U
 
-#if CONFIG_ESP_WPA3_SAE_PWE_HUNT_AND_PECK
-#define ESP_WIFI_SAE_MODE WPA3_SAE_PWE_HUNT_AND_PECK
-#define ESP_H2E_IDENTIFIER ""
-#elif CONFIG_ESP_WPA3_SAE_PWE_HASH_TO_ELEMENT
-#define ESP_WIFI_SAE_MODE WPA3_SAE_PWE_HASH_TO_ELEMENT
-#define ESP_H2E_IDENTIFIER CONFIG_ESP_WIFI_PW_ID
-#elif CONFIG_ESP_WPA3_SAE_PWE_BOTH
-#define ESP_WIFI_SAE_MODE WPA3_SAE_PWE_BOTH
-#define ESP_H2E_IDENTIFIER CONFIG_ESP_WIFI_PW_ID
-#endif
+RTC_DATA_ATTR static uint32_t s_skip_ota_once_marker = 0;
 
-/* Event handler for catching system events */
-static void event_handler(void *arg, esp_event_base_t event_base,
-                          int32_t event_id, void *event_data)
+typedef struct dogdog_ota_context {
+    EventGroupHandle_t event_group;
+    dogdog_ota_status_cb_t status_cb;
+    void *user_ctx;
+    int retries;
+} dogdog_ota_context_t;
+
+static esp_netif_t *s_wifi_netif = NULL;
+static esp_event_handler_instance_t s_wifi_instance = NULL;
+static esp_event_handler_instance_t s_ip_instance = NULL;
+
+static void notify_status(dogdog_ota_context_t *context,
+                          dogdog_ota_event_t event)
 {
-    if (event_base == ESP_HTTPS_OTA_EVENT)
-    {
-        switch (event_id)
-        {
-        case ESP_HTTPS_OTA_START:
-            ESP_LOGI(TAG, "OTA started");
-            break;
-        case ESP_HTTPS_OTA_CONNECTED:
-            ESP_LOGI(TAG, "Connected to server");
-            break;
-        case ESP_HTTPS_OTA_GET_IMG_DESC:
-            ESP_LOGI(TAG, "Reading Image Description");
-            break;
-        case ESP_HTTPS_OTA_VERIFY_CHIP_ID:
-            ESP_LOGI(TAG, "Verifying chip id of new image: %d", *(esp_chip_id_t *)event_data);
-            break;
-        case ESP_HTTPS_OTA_DECRYPT_CB:
-            ESP_LOGI(TAG, "Callback to decrypt function");
-            break;
-        case ESP_HTTPS_OTA_WRITE_FLASH:
-            ESP_LOGD(TAG, "Writing to flash: %d written", *(int *)event_data);
-            break;
-        case ESP_HTTPS_OTA_UPDATE_BOOT_PARTITION:
-            ESP_LOGI(TAG, "Boot partition updated. Next Partition: %d", *(esp_partition_subtype_t *)event_data);
-            break;
-        case ESP_HTTPS_OTA_FINISH:
-            ESP_LOGI(TAG, "OTA finish");
-            break;
-        case ESP_HTTPS_OTA_ABORT:
-            ESP_LOGI(TAG, "OTA abort");
-            break;
-        }
-    }
-    else if (event_base == WIFI_EVENT)
-    {
-        switch (event_id)
-        {
-        case WIFI_EVENT_STA_START:
-            ESP_LOGI(TAG, "WIFI_EVENT_STA_START");
-            esp_wifi_connect();
-            break;
-        case WIFI_EVENT_STA_DISCONNECTED:
-            ESP_LOGI(TAG, "WIFI_EVENT_STA_DISCONNECTED");
-            esp_wifi_connect();
-            xEventGroupSetBits(s_wifi_event_group, WIFI_FAIL_BIT);
-            break;
-        }
-    }
-    else if (event_base == IP_EVENT)
-    {
-        switch (event_id)
-        {
-        case IP_EVENT_STA_GOT_IP:
-            ESP_LOGI(TAG, "IP_EVENT_STA_GOT_IP");
-            xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
-            break;
-        }
+    if (context != NULL && context->status_cb != NULL) {
+        context->status_cb(event, context->user_ctx);
     }
 }
 
-// static esp_err_t validate_image_header(esp_app_desc_t *new_app_info)
-// {
-//     if (new_app_info == NULL)
-//     {
-//         return ESP_ERR_INVALID_ARG;
-//     }
-
-//     const esp_partition_t *running = esp_ota_get_running_partition();
-//     esp_app_desc_t running_app_info;
-//     if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK)
-//     {
-//         ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
-//     }
-
-//     if (memcmp(new_app_info->version, running_app_info.version, sizeof(new_app_info->version)) == 0)
-//     {
-//         ESP_LOGW(TAG, "Current running version is the same as a new. We will not continue the update.");
-//         return ESP_FAIL;
-//     }
-
-//     return ESP_OK;
-// }
-
-static esp_err_t _http_client_init_cb(esp_http_client_handle_t http_client)
+static const char *device_name_from_config(const dogdog_ota_config_t *config)
 {
-    esp_err_t err = ESP_OK;
-    /* Uncomment to add custom headers to HTTP request */
-    // err = esp_http_client_set_header(http_client, "Custom-Header", "Value");
+    if (config != NULL && config->device_name != NULL &&
+        config->device_name[0] != '\0') {
+        return config->device_name;
+    }
+    return CONFIG_DOGDOG_OTA_FALLBACK_DEVICE_NAME;
+}
+
+static bool consume_skip_once_marker(void)
+{
+    if (s_skip_ota_once_marker != DOGDOG_OTA_SKIP_ONCE_MARKER) {
+        return false;
+    }
+
+    s_skip_ota_once_marker = 0;
+    ESP_LOGI(TAG, "Skipping OTA probe once after OTA restart marker");
+    return true;
+}
+
+static void restart_with_skip_once_marker(void)
+{
+    s_skip_ota_once_marker = DOGDOG_OTA_SKIP_ONCE_MARKER;
+    ESP_LOGI(TAG, "Restarting after OTA probe, next boot skips OTA once");
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    esp_restart();
+}
+
+static esp_err_t init_nvs(void)
+{
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES ||
+        err == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        ESP_ERROR_CHECK_WITHOUT_ABORT(nvs_flash_erase());
+        err = nvs_flash_init();
+    }
     return err;
 }
 
-static esp_err_t wifi_init_sta()
+static void wifi_event_handler(void *arg,
+                               esp_event_base_t event_base,
+                               int32_t event_id,
+                               void *event_data)
 {
-    s_wifi_event_group = xEventGroupCreate();
+    dogdog_ota_context_t *context = (dogdog_ota_context_t *)arg;
 
-    // Initialize NVS
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
-    {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-
-    ESP_ERROR_CHECK(esp_netif_init());
-
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    esp_netif_create_default_wifi_sta();
-
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-
-    esp_event_handler_instance_t instance_any_id;
-    esp_event_handler_instance_t instance_got_ip;
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
-                                                        ESP_EVENT_ANY_ID,
-                                                        &event_handler,
-                                                        NULL,
-                                                        &instance_any_id));
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT,
-                                                        IP_EVENT_STA_GOT_IP,
-                                                        &event_handler,
-                                                        NULL,
-                                                        &instance_got_ip));
-
-    wifi_config_t wifi_config = {
-        .sta = {
-            .ssid = CONFIG_ESP_WIFI_SSID,
-            .password = CONFIG_ESP_WIFI_PASSWORD,
-            /* Authmode threshold resets to WPA2 as default if password matches WPA2 standards (pasword len => 8).
-             * If you want to connect the device to deprecated WEP/WPA networks, Please set the threshold value
-             * to WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK and set the password with length and format matching to
-             * WIFI_AUTH_WEP/WIFI_AUTH_WPA_PSK standards.
-             */
-            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
-            .sae_pwe_h2e = ESP_WIFI_SAE_MODE,
-            .sae_h2e_identifier = ESP_H2E_IDENTIFIER,
-        },
-    };
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-    ESP_ERROR_CHECK(esp_wifi_start());
-
-    ESP_LOGI(TAG, "wifi_init_sta finished.");
-
-    /* Waiting until either the connection is established (WIFI_CONNECTED_BIT) or connection failed for the maximum
-     * number of re-tries (WIFI_FAIL_BIT). The bits are set by event_handler() (see above) */
-    EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
-                                           WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-                                           pdFALSE,
-                                           pdFALSE,
-                                           portMAX_DELAY);
-
-    /* xEventGroupWaitBits() returns the bits before the call returned, hence we can test which event actually
-     * happened. */
-    if (bits & WIFI_CONNECTED_BIT)
-    {
-        ESP_LOGI(TAG, "connected to ap SSID:%s", CONFIG_ESP_WIFI_SSID);
-        return ESP_OK;
-    }
-    else if (bits & WIFI_FAIL_BIT)
-    {
-        ESP_LOGI(TAG, "Failed to connect to SSID:%s", CONFIG_ESP_WIFI_SSID);
-        return ESP_FAIL;
-    }
-    else
-    {
-        ESP_LOGE(TAG, "UNEXPECTED EVENT");
-        return ESP_FAIL;
+    if (event_base == WIFI_EVENT &&
+        event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        if (context->retries < CONFIG_DOGDOG_OTA_CONNECT_RETRIES) {
+            context->retries++;
+            ESP_LOGI(TAG,
+                     "OTA Wi-Fi disconnected, retry %d/%d",
+                     context->retries,
+                     CONFIG_DOGDOG_OTA_CONNECT_RETRIES);
+            esp_wifi_connect();
+        } else {
+            xEventGroupSetBits(context->event_group, WIFI_FAIL_BIT);
+        }
+    } else if (event_base == IP_EVENT &&
+               event_id == IP_EVENT_STA_GOT_IP) {
+        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
+        ESP_LOGI(TAG, "OTA Wi-Fi connected, got IP " IPSTR,
+                 IP2STR(&event->ip_info.ip));
+        context->retries = 0;
+        xEventGroupSetBits(context->event_group, WIFI_CONNECTED_BIT);
     }
 }
 
-static esp_err_t validate_image_header(esp_app_desc_t *new_app_info)
+static esp_err_t initialize_wifi(dogdog_ota_context_t *context)
 {
-    if (new_app_info == NULL)
-    {
-        return ESP_ERR_INVALID_ARG;
+    ESP_RETURN_ON_ERROR(init_nvs(), TAG, "NVS init failed");
+
+    esp_err_t err = esp_netif_init();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "esp-netif init failed: %s", esp_err_to_name(err));
+        return err;
     }
 
-    const esp_partition_t *running = esp_ota_get_running_partition();
-    esp_app_desc_t running_app_info;
-    if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK)
-    {
-        ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
+    err = esp_event_loop_create_default();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGE(TAG, "event loop init failed: %s", esp_err_to_name(err));
+        return err;
     }
 
-    if (memcmp(new_app_info->version, running_app_info.version, sizeof(new_app_info->version)) == 0)
-    {
-        ESP_LOGI(TAG, "Version available: %s", new_app_info->version);
-        ESP_LOGW(TAG, "No newer version available. We will not continue the update.");
+    context->event_group = xEventGroupCreate();
+    if (context->event_group == NULL) {
+        ESP_LOGE(TAG, "OTA Wi-Fi event group allocation failed");
+        return ESP_ERR_NO_MEM;
+    }
+
+    s_wifi_netif = esp_netif_create_default_wifi_sta();
+    if (s_wifi_netif == NULL) {
+        ESP_LOGE(TAG, "default Wi-Fi netif creation failed");
         return ESP_FAIL;
     }
-    else
-    {
-        ESP_LOGI(TAG, "Newer firmware version available: %s. Updating...", new_app_info->version);
+
+    wifi_init_config_t wifi_config = WIFI_INIT_CONFIG_DEFAULT();
+    err = esp_wifi_init(&wifi_config);
+    if (err != ESP_OK && err != ESP_ERR_WIFI_INIT_STATE) {
+        ESP_LOGE(TAG, "Wi-Fi init failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    ESP_RETURN_ON_ERROR(esp_wifi_set_storage(WIFI_STORAGE_RAM),
+                        TAG,
+                        "Wi-Fi storage config failed");
+    ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA),
+                        TAG,
+                        "Wi-Fi STA mode failed");
+
+    ESP_RETURN_ON_ERROR(esp_event_handler_instance_register(
+                            WIFI_EVENT,
+                            WIFI_EVENT_STA_DISCONNECTED,
+                            wifi_event_handler,
+                            context,
+                            &s_wifi_instance),
+                        TAG,
+                        "Wi-Fi event handler registration failed");
+    ESP_RETURN_ON_ERROR(esp_event_handler_instance_register(
+                            IP_EVENT,
+                            IP_EVENT_STA_GOT_IP,
+                            wifi_event_handler,
+                            context,
+                            &s_ip_instance),
+                        TAG,
+                        "IP event handler registration failed");
+
+    err = esp_wifi_start();
+    if (err != ESP_OK && err != ESP_ERR_WIFI_CONN) {
+        ESP_LOGE(TAG, "Wi-Fi start failed: %s", esp_err_to_name(err));
+        return err;
     }
 
     return ESP_OK;
 }
 
-void ota_task(void *pvParameters)
+static void cleanup_wifi(dogdog_ota_context_t *context)
 {
-    esp_log_level_set("*", ESP_LOG_INFO);
-    ESP_LOGI(TAG, "Starting OTA task");
+    esp_wifi_disconnect();
+    esp_wifi_stop();
 
-    // Set the CPU frequency to 80 Mhz
-    esp_pm_config_t pm_config = {
-        .max_freq_mhz = 80,
-        .min_freq_mhz = 80,
+    if (s_wifi_instance != NULL) {
+        esp_event_handler_instance_unregister(WIFI_EVENT,
+                                              WIFI_EVENT_STA_DISCONNECTED,
+                                              s_wifi_instance);
+        s_wifi_instance = NULL;
+    }
+    if (s_ip_instance != NULL) {
+        esp_event_handler_instance_unregister(IP_EVENT,
+                                              IP_EVENT_STA_GOT_IP,
+                                              s_ip_instance);
+        s_ip_instance = NULL;
+    }
+
+    esp_wifi_deinit();
+
+    if (s_wifi_netif != NULL) {
+        esp_netif_destroy_default_wifi(s_wifi_netif);
+        s_wifi_netif = NULL;
+    }
+
+    if (context != NULL && context->event_group != NULL) {
+        vEventGroupDelete(context->event_group);
+        context->event_group = NULL;
+    }
+}
+
+static esp_err_t scan_for_ota_network(void)
+{
+    wifi_scan_config_t scan_config = {
+        .ssid = (uint8_t *)CONFIG_DOGDOG_OTA_WIFI_SSID,
+        .bssid = NULL,
+        .channel = 0,
+        .show_hidden = true,
     };
-    // On the very cheap power supplies, we had problems with unsuccessful OTA-updates, which
-    // never happened when connected to a good power supply. We suspect that the power supply
-    // is not able to deliver enough power for the ESP32 to perform the OTA update.
-    // Therefore, we set the minimum CPU frequency to 80 MHz to reduce the power consumption.
-    //ESP_ERROR_CHECK(esp_pm_configure(&pm_config));
 
-    ESP_LOGI(TAG, "Trying to connect to WIFI");
-    ESP_ERROR_CHECK(wifi_init_sta());
+    ESP_LOGI(TAG, "Scanning for OTA Wi-Fi '%s'", CONFIG_DOGDOG_OTA_WIFI_SSID);
+    esp_err_t err = esp_wifi_scan_start(&scan_config, true);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "OTA Wi-Fi scan failed: %s", esp_err_to_name(err));
+        return err;
+    }
 
-    ESP_LOGI(TAG, "Connected to WIFI");
-    ESP_LOGI(TAG, "Starting OTA");
+    uint16_t ap_count = 0;
+    err = esp_wifi_scan_get_ap_num(&ap_count);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "OTA Wi-Fi scan result failed: %s", esp_err_to_name(err));
+        return err;
+    }
 
-    esp_err_t ota_finish_err = ESP_OK;
-    esp_http_client_config_t config = {
-        .url = CONFIG_FIRMWARE_URL,
-        .timeout_ms = CONFIG_RECV_TIMEOUT,
+    if (ap_count == 0) {
+        ESP_LOGI(TAG, "OTA Wi-Fi not found, continuing normal boot");
+        return ESP_ERR_NOT_FOUND;
+    }
+
+    ESP_LOGI(TAG, "OTA Wi-Fi found");
+    return ESP_OK;
+}
+
+static esp_err_t connect_to_ota_network(dogdog_ota_context_t *context)
+{
+    wifi_config_t wifi_config = {0};
+    snprintf((char *)wifi_config.sta.ssid,
+             sizeof(wifi_config.sta.ssid),
+             "%s",
+             CONFIG_DOGDOG_OTA_WIFI_SSID);
+    snprintf((char *)wifi_config.sta.password,
+             sizeof(wifi_config.sta.password),
+             "%s",
+             CONFIG_DOGDOG_OTA_WIFI_PASSWORD);
+    wifi_config.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
+
+    ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_STA, &wifi_config),
+                        TAG,
+                        "OTA Wi-Fi config failed");
+
+    xEventGroupClearBits(context->event_group,
+                         WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+    context->retries = 0;
+    notify_status(context, DOGDOG_OTA_EVENT_CONNECTING);
+
+    esp_err_t err = esp_wifi_connect();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "OTA Wi-Fi connect failed immediately: %s",
+                 esp_err_to_name(err));
+        return err;
+    }
+
+    const EventBits_t bits = xEventGroupWaitBits(
+        context->event_group,
+        WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
+        pdFALSE,
+        pdFALSE,
+        pdMS_TO_TICKS(CONFIG_DOGDOG_OTA_CONNECT_TIMEOUT_MS));
+
+    if ((bits & WIFI_CONNECTED_BIT) != 0) {
+        return ESP_OK;
+    }
+
+    ESP_LOGW(TAG, "OTA Wi-Fi connection timed out or failed");
+    return ESP_ERR_TIMEOUT;
+}
+
+static bool same_app_descriptor(const esp_app_desc_t *running,
+                                const esp_app_desc_t *incoming)
+{
+    if (running == NULL || incoming == NULL) {
+        return false;
+    }
+
+    return memcmp(running->version,
+                  incoming->version,
+                  sizeof(running->version)) == 0 &&
+           memcmp(running->project_name,
+                  incoming->project_name,
+                  sizeof(running->project_name)) == 0 &&
+           memcmp(running->date,
+                  incoming->date,
+                  sizeof(running->date)) == 0 &&
+           memcmp(running->time,
+                  incoming->time,
+                  sizeof(running->time)) == 0;
+}
+
+static esp_err_t perform_ota(const char *device_name,
+                             dogdog_ota_context_t *context)
+{
+    char firmware_url[192];
+    const int url_len = snprintf(firmware_url,
+                                 sizeof(firmware_url),
+                                 "%s/firmware/%s.bin",
+                                 CONFIG_DOGDOG_OTA_BASE_URL,
+                                 device_name);
+    if (url_len <= 0 || url_len >= (int)sizeof(firmware_url)) {
+        ESP_LOGE(TAG, "OTA firmware URL too long");
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    ESP_LOGI(TAG, "Starting OTA from %s", firmware_url);
+    notify_status(context, DOGDOG_OTA_EVENT_UPDATING);
+
+    esp_http_client_config_t http_config = {
+        .url = firmware_url,
+        .timeout_ms = CONFIG_DOGDOG_OTA_RECV_TIMEOUT_MS,
         .keep_alive_enable = true,
-    };
 #if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
-    config.crt_bundle_attach = esp_crt_bundle_attach;
+        .crt_bundle_attach = esp_crt_bundle_attach,
 #endif
+    };
 
     esp_https_ota_config_t ota_config = {
-        .http_config = &config,
-        .http_client_init_cb = _http_client_init_cb, // Register a callback to be invoked after esp_http_client is initialized
-#ifdef CONFIG_ENABLE_PARTIAL_HTTP_DOWNLOAD
+        .http_config = &http_config,
+#if CONFIG_DOGDOG_OTA_ENABLE_PARTIAL_HTTP_DOWNLOAD
         .partial_http_download = true,
-        .max_http_request_size = CONFIG_HTTP_REQUEST_SIZE,
+        .max_http_request_size = CONFIG_DOGDOG_OTA_HTTP_REQUEST_SIZE,
 #endif
     };
 
-    esp_https_ota_handle_t https_ota_handle = NULL;
-    esp_err_t err = esp_https_ota_begin(&ota_config, &https_ota_handle);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG, "ESP HTTPS OTA Begin failed");
-        esp_https_ota_abort(https_ota_handle);
-        esp_restart();
+    esp_https_ota_handle_t ota_handle = NULL;
+    esp_err_t err = esp_https_ota_begin(&ota_config, &ota_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "OTA begin failed: %s", esp_err_to_name(err));
+        return err;
     }
 
-    esp_app_desc_t app_desc;
-    err = esp_https_ota_get_img_desc(https_ota_handle, &app_desc);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG, "esp_https_ota_get_img_desc failed");
-        esp_https_ota_abort(https_ota_handle);
-        esp_restart();
-    }
-    err = validate_image_header(&app_desc);
-    if (err != ESP_OK)
-    {
-        ESP_LOGE(TAG, "image header verification failed");
-        esp_https_ota_abort(https_ota_handle);
-        esp_restart();
+    esp_app_desc_t incoming_desc = {0};
+    err = esp_https_ota_get_img_desc(ota_handle, &incoming_desc);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "OTA image description failed: %s", esp_err_to_name(err));
+        esp_https_ota_abort(ota_handle);
+        return err;
     }
 
-    while (1)
-    {
-        err = esp_https_ota_perform(https_ota_handle);
-        if (err != ESP_ERR_HTTPS_OTA_IN_PROGRESS)
-        {
+    esp_app_desc_t running_desc = {0};
+    const esp_partition_t *running_partition = esp_ota_get_running_partition();
+    if (running_partition != NULL &&
+        esp_ota_get_partition_description(running_partition,
+                                          &running_desc) == ESP_OK) {
+        ESP_LOGI(TAG,
+                 "Running firmware: %s %s %s",
+                 running_desc.project_name,
+                 running_desc.date,
+                 running_desc.time);
+        ESP_LOGI(TAG,
+                 "Available firmware: %s %s %s",
+                 incoming_desc.project_name,
+                 incoming_desc.date,
+                 incoming_desc.time);
+
+        if (same_app_descriptor(&running_desc, &incoming_desc)) {
+            ESP_LOGI(TAG, "OTA image is already installed");
+            esp_https_ota_abort(ota_handle);
+            notify_status(context, DOGDOG_OTA_EVENT_NO_UPDATE);
+            return ESP_OK;
+        }
+    }
+
+    while (true) {
+        err = esp_https_ota_perform(ota_handle);
+        if (err != ESP_ERR_HTTPS_OTA_IN_PROGRESS) {
             break;
         }
-        // esp_https_ota_perform returns after every read operation which gives user the ability to
-        // monitor the status of OTA upgrade by calling esp_https_ota_get_image_len_read, which gives length of image
-        // data read so far.
-        ESP_LOGD(TAG, "Image bytes read: %d", esp_https_ota_get_image_len_read(https_ota_handle));
+        ESP_LOGD(TAG,
+                 "OTA image bytes read: %d",
+                 esp_https_ota_get_image_len_read(ota_handle));
     }
 
-    if (esp_https_ota_is_complete_data_received(https_ota_handle) != true)
-    {
-        // the OTA image was not completely received and user can customise the response to this situation.
-        ESP_LOGE(TAG, "Complete data was not received.");
-    }
-    else
-    {
-        ota_finish_err = esp_https_ota_finish(https_ota_handle);
-        if ((err == ESP_OK) && (ota_finish_err == ESP_OK))
-        {
-            ESP_LOGI(TAG, "ESP_HTTPS_OTA upgrade successful. Rebooting ...");
-            vTaskDelay(1000 / portTICK_PERIOD_MS);
-            esp_restart();
-        }
-        else
-        {
-            if (ota_finish_err == ESP_ERR_OTA_VALIDATE_FAILED)
-            {
-                ESP_LOGE(TAG, "Image validation failed, image is corrupted");
-            }
-            ESP_LOGE(TAG, "ESP_HTTPS_OTA upgrade failed 0x%x", ota_finish_err);
-            vTaskDelete(NULL);
-        }
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "OTA download failed: %s", esp_err_to_name(err));
+        esp_https_ota_abort(ota_handle);
+        return err;
     }
 
-    // ota_end:
-    esp_https_ota_abort(https_ota_handle);
-    ESP_LOGE(TAG, "ESP_HTTPS_OTA upgrade failed");
+    if (!esp_https_ota_is_complete_data_received(ota_handle)) {
+        ESP_LOGE(TAG, "OTA image was not completely received");
+        esp_https_ota_abort(ota_handle);
+        return ESP_ERR_INVALID_SIZE;
+    }
+
+    err = esp_https_ota_finish(ota_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "OTA finish failed: %s", esp_err_to_name(err));
+        return err;
+    }
+
+    ESP_LOGI(TAG, "OTA update successful, rebooting");
+    restart_with_skip_once_marker();
+    return ESP_OK;
+}
+
+esp_err_t dogdog_ota_check_and_update_ex(const dogdog_ota_config_t *config)
+{
+#if !CONFIG_DOGDOG_OTA_ENABLED
+    (void)config;
+    return ESP_OK;
+#else
+    if (consume_skip_once_marker()) {
+        return ESP_OK;
+    }
+
+    dogdog_ota_context_t context = {
+        .event_group = NULL,
+        .status_cb = config != NULL ? config->status_cb : NULL,
+        .user_ctx = config != NULL ? config->user_ctx : NULL,
+        .retries = 0,
+    };
+
+    esp_err_t err = initialize_wifi(&context);
+    if (err != ESP_OK) {
+        notify_status(&context, DOGDOG_OTA_EVENT_FAILED);
+        cleanup_wifi(&context);
+        return err;
+    }
+
+    err = scan_for_ota_network();
+    if (err == ESP_ERR_NOT_FOUND) {
+        cleanup_wifi(&context);
+        return ESP_OK;
+    }
+    if (err != ESP_OK) {
+        notify_status(&context, DOGDOG_OTA_EVENT_FAILED);
+        cleanup_wifi(&context);
+        return err;
+    }
+    notify_status(&context, DOGDOG_OTA_EVENT_WIFI_FOUND);
+
+    err = connect_to_ota_network(&context);
+    if (err == ESP_OK) {
+        err = perform_ota(device_name_from_config(config), &context);
+    }
+
+    if (err != ESP_OK) {
+        notify_status(&context, DOGDOG_OTA_EVENT_FAILED);
+        ESP_LOGW(TAG, "OTA check failed: %s",
+                 esp_err_to_name(err));
+    }
+
+    restart_with_skip_once_marker();
+    return err;
+#endif
+}
+
+esp_err_t dogdog_ota_check_and_update(const char *device_name)
+{
+    const dogdog_ota_config_t config = {
+        .device_name = device_name,
+        .status_cb = NULL,
+        .user_ctx = NULL,
+    };
+    return dogdog_ota_check_and_update_ex(&config);
+}
+
+void ota_task(void *pvParameters)
+{
+    const char *device_name = pvParameters != NULL
+                                  ? (const char *)pvParameters
+                                  : CONFIG_DOGDOG_OTA_FALLBACK_DEVICE_NAME;
+    ESP_ERROR_CHECK_WITHOUT_ABORT(dogdog_ota_check_and_update(device_name));
     vTaskDelete(NULL);
 }

@@ -54,6 +54,16 @@ int num_sensors;
 int triggerLevel;
 int *sensorPins;
 
+static void measure_station_ota_status(dogdog_ota_event_t event, void *user_ctx)
+{
+    (void)user_ctx;
+
+    if (event == DOGDOG_OTA_EVENT_WIFI_FOUND)
+    {
+        xQueueSend(buzzerQueue, &(int){Buzzer_INDICATE_OTA}, 0);
+    }
+}
+
 void start_isr_service_tast(void *params)
 {
     TaskHandle_t mainTask = (TaskHandle_t)params;
@@ -63,49 +73,11 @@ void start_isr_service_tast(void *params)
     vTaskDelete(NULL);
 }
 
-// Task that checks for 10 seconds if boot button was pressed to trigger OTA mode
-void ota_check_task(void *params)
-{
-    const int boot_button_gpio = GPIO_NUM_0;
-    gpio_set_direction(boot_button_gpio, GPIO_MODE_INPUT);
-    gpio_pullup_en(boot_button_gpio);
-    gpio_pulldown_dis(boot_button_gpio);
-
-    int pressed_count = 0;
-    for (int i = 0; i < 100; i++)
-    {
-        if (gpio_get_level(boot_button_gpio) == 0) // Assuming active low button
-        {
-            pressed_count++;
-        }
-        else
-        {
-            pressed_count = 0; // reset count if button is released
-        }
-        vTaskDelay(pdMS_TO_TICKS(100)); // Check every 100ms
-    }
-
-    if (pressed_count >= 50) // Button was pressed for at least 5 seconds
-    {
-        ESP_LOGI("OTA_CHECK", "Boot button held for 5 seconds, entering OTA mode");
-        xQueueSend(buzzerQueue, &(int){Buzzer_INDICATE_OTA}, 0); // Indicate OTA mode with buzzer
-        xTaskCreate(ota_task, "ota_task", 16384, NULL, 5, NULL);
-    }
-    else
-    {
-        ESP_LOGI("OTA_CHECK", "Boot button not held long enough, starting normally");
-    }
-
-    vTaskDelete(NULL);
-}
-
 void app_main(void)
 {
     const char *TAG = "MAIN";
     ESP_LOGI(TAG, "Starting...");
     nvs_flash_init();
-
-    xTaskCreate(ota_check_task, "ota_check_task", 4096, NULL, 5, NULL);
 
     // Configure IDs
 
@@ -174,6 +146,15 @@ void app_main(void)
     faultQueue = xQueueCreate(5, sizeof(int));
     sendQueue = xQueueCreate(50, sizeof(char *));
 
+    xTaskCreate(Buzzer_Task, "Buzzer_Task", 8192, NULL, 12, NULL);
+
+    const dogdog_ota_config_t ota_config = {
+        .device_name = "measure-stations-lora",
+        .status_cb = measure_station_ota_status,
+        .user_ctx = NULL,
+    };
+    ESP_ERROR_CHECK_WITHOUT_ABORT(dogdog_ota_check_and_update_ex(&ota_config));
+
     // gpio_install_isr_service(0);
 
     if (is_xrl)
@@ -207,7 +188,6 @@ void app_main(void)
     xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 24, NULL);
     xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 12, NULL);
 
-    xTaskCreate(Buzzer_Task, "Buzzer_Task", 8192, NULL, 12, NULL);
     xTaskCreatePinnedToCore(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 8192 * 2, NULL, 3, &sensorInterruptTaskHandle, 0);
 
     int buzzerType = BUZZER_STARTUP;

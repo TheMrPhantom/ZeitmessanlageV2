@@ -53,6 +53,7 @@
 #include "HornTimer.h"
 #include "TimepanelClient.h"
 #include "PcSerial.h"
+#include "OTA.h"
 #include "sdkconfig.h"
 #include "esp_random.h"
 #include <inttypes.h>
@@ -79,6 +80,22 @@ int station_id = 0;
 int controller_id = 0;
 int start_id = 0;
 int stop_id = 0;
+
+static void controller_ota_status(dogdog_ota_event_t event, void *user_ctx)
+{
+    (void)user_ctx;
+
+    switch (event)
+    {
+    case DOGDOG_OTA_EVENT_WIFI_FOUND:
+    case DOGDOG_OTA_EVENT_CONNECTING:
+    case DOGDOG_OTA_EVENT_UPDATING:
+        show_firmware_upgrade_screen();
+        break;
+    default:
+        break;
+    }
+}
 
 #if CONFIG_TIMEPANEL_TEST_TIMER_SEQUENCE
 static int64_t current_time_us(void)
@@ -185,6 +202,13 @@ void app_main(void)
 
     // Initialize LoRa
     nvs_flash_init();
+    const dogdog_ota_config_t ota_config = {
+        .device_name = "dogdog-controller",
+        .status_cb = controller_ota_status,
+        .user_ctx = NULL,
+    };
+    ESP_ERROR_CHECK_WITHOUT_ABORT(dogdog_ota_check_and_update_ex(&ota_config));
+
     gpio_install_isr_service(0);
     InitLoraHandlers(HandleReceivedPacket);
 

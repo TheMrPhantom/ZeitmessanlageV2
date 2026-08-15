@@ -50,8 +50,30 @@ jobs:
           name: dogdog-controller-bin
           path: dogdog-controller/build/dogdog-controller.bin
 
+  build-timepanel-hub75:
+    if: "github.ref == 'refs/heads/master' || contains(github.event.pull_request.labels.*.name, 'build_and_push')"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: "recursive"
+      - name: esp-idf build for timepanel-hub75
+        uses: espressif/esp-idf-ci-action@v1
+        with:
+          esp_idf_version: v5.5.1
+          target: esp32s3
+          path: "timepanel-hub75"
+          command: idf.py build
+      - name: Upload timepanel-hub75 build output as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: timepanel-hub75-bin
+          path: timepanel-hub75/build/timepanel-hub75.bin
+
   release:
-    needs: [build-measure-stations-lora, build-dogdog-controller]  # Ensures this job runs after all build jobs complete
+    if: github.ref == 'refs/heads/master'
+    needs: [build-measure-stations-lora, build-dogdog-controller, build-timepanel-hub75]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
@@ -69,6 +91,11 @@ jobs:
         with:
           name: dogdog-controller-bin
 
+      - name: Download timepanel-hub75 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: timepanel-hub75-bin
+
       - name: Delete previous 'latest' release (if exists)
         continue-on-error: true  # this prevents workflow failure if tag doesn't exist
         uses: dev-drprasad/delete-tag-and-release@v1.1
@@ -84,5 +111,19 @@ jobs:
           files: |
             measure-stations-lora.bin
             dogdog-controller.bin
+            timepanel-hub75.bin
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify OTA relay
+        env:
+          OTA_WEBHOOK_TOKEN: ${{ secrets.OTA_WEBHOOK_TOKEN }}
+        run: |
+          if [ -z "$OTA_WEBHOOK_TOKEN" ]; then
+            echo "OTA_WEBHOOK_TOKEN is not set; skipping OTA relay notification"
+            exit 0
+          fi
+          curl -fsS -X POST "https://ota.dogdog-zeitmessung.de/webhook/github" \
+            -H "X-DogDog-Token: ${OTA_WEBHOOK_TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d '{"repository":"TheMrPhantom/ZeitmessanlageV2","tag":"latest","run_id":"${{ github.run_id }}"}'
