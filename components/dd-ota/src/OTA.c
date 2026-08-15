@@ -445,13 +445,13 @@ static int64_t local_utc_offset_seconds(void)
 {
     time_t now = time(NULL);
     if (now == (time_t)-1) {
-        return 0;
+        return 2 * 60 * 60;
     }
 
     struct tm utc_tm = {0};
     struct tm local_tm = {0};
     if (gmtime_r(&now, &utc_tm) == NULL || localtime_r(&now, &local_tm) == NULL) {
-        return 0;
+        return 2 * 60 * 60;
     }
 
     const int64_t utc_epoch = utc_epoch_from_calendar(utc_tm.tm_year + 1900,
@@ -466,7 +466,8 @@ static int64_t local_utc_offset_seconds(void)
                                                         local_tm.tm_hour,
                                                         local_tm.tm_min,
                                                         local_tm.tm_sec);
-    return local_epoch - utc_epoch;
+    const int64_t observed_offset = local_epoch - utc_epoch;
+    return observed_offset != 0 ? observed_offset : (2 * 60 * 60);
 }
 
 static bool app_build_timestamp(const esp_app_desc_t *desc,
@@ -506,6 +507,34 @@ static bool app_build_timestamp(const esp_app_desc_t *desc,
     return true;
 }
 
+static void log_build_utc(const char *label, const esp_app_desc_t *desc)
+{
+    if (desc == NULL) {
+        return;
+    }
+
+    int64_t epoch = 0;
+    if (!app_build_timestamp(desc, true, &epoch)) {
+        return;
+    }
+
+    char utc_buf[32] = {0};
+    struct tm tm_utc = {0};
+    const time_t epoch_time = (time_t)epoch;
+    if (gmtime_r(&epoch_time, &tm_utc) == NULL) {
+        return;
+    }
+
+    if (strftime(utc_buf,
+                 sizeof(utc_buf),
+                 "%Y-%m-%d %H:%M:%S UTC",
+                 &tm_utc) == 0) {
+        return;
+    }
+
+    ESP_LOGI(TAG, "%s UTC: %s", label, utc_buf);
+}
+
 static bool same_project_name(const esp_app_desc_t *running,
                               const esp_app_desc_t *incoming)
 {
@@ -543,6 +572,8 @@ static bool should_install_image(const esp_app_desc_t *running,
                  "Firmware compare: running_epoch=%lld incoming_epoch=%lld",
                  (long long)running_timestamp,
                  (long long)incoming_timestamp);
+        log_build_utc("Running firmware", running);
+        log_build_utc("Available firmware", incoming);
 
         if (incoming_timestamp < running_timestamp) {
             ESP_LOGW(TAG,
