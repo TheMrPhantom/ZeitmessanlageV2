@@ -5,7 +5,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "esp_crt_bundle.h"
 #include "esp_attr.h"
@@ -421,7 +423,9 @@ static int month_number(const char *month)
     return 0;
 }
 
-static bool app_build_timestamp(const esp_app_desc_t *desc, int64_t *timestamp)
+static bool app_build_timestamp(const esp_app_desc_t *desc,
+                               bool timestamp_is_utc,
+                               int64_t *timestamp)
 {
     if (desc == NULL || timestamp == NULL) {
         return false;
@@ -447,11 +451,47 @@ static bool app_build_timestamp(const esp_app_desc_t *desc, int64_t *timestamp)
         return false;
     }
 
-    *timestamp = (((((int64_t)year * 12 + month) * 31 + day) * 24 + hour) *
-                      60 +
-                  minute) *
-                     60 +
-                 second;
+    struct tm tm = {0};
+    tm.tm_year = year - 1900;
+    tm.tm_mon = month - 1;
+    tm.tm_mday = day;
+    tm.tm_hour = hour;
+    tm.tm_min = minute;
+    tm.tm_sec = second;
+    tm.tm_isdst = -1;
+
+    char *old_tz = NULL;
+    if (timestamp_is_utc) {
+        old_tz = getenv("TZ");
+        if (setenv("TZ", "UTC", 1) != 0) {
+            return false;
+        }
+        tzset();
+    }
+
+    const time_t epoch = mktime(&tm);
+    if (epoch == (time_t)-1) {
+        if (timestamp_is_utc) {
+            if (old_tz != NULL) {
+                setenv("TZ", old_tz, 1);
+            } else {
+                unsetenv("TZ");
+            }
+            tzset();
+        }
+        return false;
+    }
+
+    if (timestamp_is_utc) {
+        if (old_tz != NULL) {
+            setenv("TZ", old_tz, 1);
+        } else {
+            unsetenv("TZ");
+        }
+        tzset();
+    }
+
+    *timestamp = (int64_t)epoch;
     return true;
 }
 
@@ -486,14 +526,16 @@ static bool should_install_image(const esp_app_desc_t *running,
 
     int64_t running_timestamp = 0;
     int64_t incoming_timestamp = 0;
-    if (app_build_timestamp(running, &running_timestamp) &&
-        app_build_timestamp(incoming, &incoming_timestamp)) {
+    if (app_build_timestamp(running, false, &running_timestamp) &&
+        app_build_timestamp(incoming, true, &incoming_timestamp)) {
         if (incoming_timestamp < running_timestamp) {
-            ESP_LOGW(TAG, "OTA image is older than running firmware, skipping update");
+            ESP_LOGW(TAG,
+                     "OTA image is older than running firmware (UTC compare), skipping update");
             return false;
         }
         if (incoming_timestamp == running_timestamp) {
-            ESP_LOGW(TAG, "OTA image build time matches running firmware, skipping update");
+            ESP_LOGW(TAG,
+                     "OTA image build time matches running firmware (UTC compare), skipping update");
             return false;
         }
     }
