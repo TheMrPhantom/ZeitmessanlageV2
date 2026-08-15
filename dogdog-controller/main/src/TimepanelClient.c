@@ -29,6 +29,7 @@ static uint8_t s_timepanel_mac[6] = {
 static TimepanelCompetitorPayload s_competitor = {0};
 static uint16_t s_faults = 0;
 static uint16_t s_refusals = 0;
+static volatile bool s_parcours_timer_active = false;
 
 static void copy_field(char *target, size_t target_len, const char *source)
 {
@@ -191,6 +192,7 @@ void timepanel_send_reset(void)
 {
     s_faults = 0;
     s_refusals = 0;
+    timepanel_set_parcours_timer_active(false);
     timepanel_send_message(TIMEPANEL_COMMAND_RESET,
                            (const uint8_t *)&s_competitor,
                            sizeof(s_competitor));
@@ -198,6 +200,12 @@ void timepanel_send_reset(void)
 
 void timepanel_send_start(int64_t offset_ms)
 {
+    if (s_parcours_timer_active)
+    {
+        ESP_LOGI(TAG, "Suppressing timepanel start while parcours timer is active");
+        return;
+    }
+
     if (offset_ms < 0)
     {
         offset_ms = 0;
@@ -213,6 +221,12 @@ void timepanel_send_start(int64_t offset_ms)
 
 void timepanel_send_stop(int64_t elapsed_ms)
 {
+    if (s_parcours_timer_active)
+    {
+        ESP_LOGI(TAG, "Suppressing timepanel stop while parcours timer is active");
+        return;
+    }
+
     if (elapsed_ms < 0)
     {
         elapsed_ms = 0;
@@ -273,10 +287,22 @@ void timepanel_send_dis(void)
 
 void timepanel_send_parcours_timer(uint32_t duration_ms)
 {
+    timepanel_set_parcours_timer_active(true);
+
     TimepanelU32Payload payload = {
         .value = duration_ms,
     };
     timepanel_send_message(TIMEPANEL_COMMAND_PARCOURS,
                            (const uint8_t *)&payload,
                            sizeof(payload));
+}
+
+void timepanel_set_parcours_timer_active(bool active)
+{
+    s_parcours_timer_active = active;
+}
+
+bool timepanel_is_parcours_timer_active(void)
+{
+    return s_parcours_timer_active;
 }

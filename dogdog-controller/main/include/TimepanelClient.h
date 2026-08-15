@@ -1,6 +1,7 @@
 #ifndef __TIMEPANEL_CLIENT_H
 #define __TIMEPANEL_CLIENT_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "esp_err.h"
@@ -19,5 +20,7 @@ void timepanel_send_fault_increment(void);
 void timepanel_send_refusal_increment(void);
 void timepanel_send_dis(void);
 void timepanel_send_parcours_timer(uint32_t duration_ms);
+void timepanel_set_parcours_timer_active(bool active);
+bool timepanel_is_parcours_timer_active(void);
 
 #endif
