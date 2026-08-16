@@ -15,6 +15,7 @@
 #include <esp_system.h>
 #include "soc/soc.h"
 #include "LoraNetwork.h"
+#include "OTA.h"
 
 #define IS_THS_MODE (strcmp(pc_programm, "ths") == 0)
 #define IS_SIMPLE_AGILITY_MODE (strcmp(pc_programm, "simple-agility") == 0)
