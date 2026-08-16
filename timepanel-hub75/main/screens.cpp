@@ -44,10 +44,16 @@ void render_canvas(void (*draw)(lv_layer_t *))
     lvgl_port_unlock();
 }
 
-void render_firmware_upgrade_screen()
+void render_firmware_upgrade_screen(int progress_percent)
 {
-    render_canvas([](lv_layer_t *layer) {
-        const char text[] = "Firmware Upgrade";
+    render_canvas([progress_percent](lv_layer_t *layer) {
+        char text[32];
+        if (progress_percent > 0) {
+            snprintf(text, sizeof(text), "Firmware Upgrade %d%%", progress_percent);
+        } else {
+            snprintf(text, sizeof(text), "Firmware Upgrade");
+        }
+
         const lv_font_t *font = font_18();
         const lv_point_t size = measure_text(text, font);
         const int y = std::max(0, static_cast<int>((DISPLAY_HEIGHT - size.y) / 2));

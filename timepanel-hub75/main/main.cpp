@@ -16,11 +16,16 @@ void timepanel_ota_status(dogdog_ota_event_t event, void *)
         break;
     case DOGDOG_OTA_EVENT_UPDATING:
     case DOGDOG_OTA_EVENT_RESTARTING_FOR_UPDATE:
-        render_firmware_upgrade_screen();
+        render_firmware_upgrade_screen(0);
         break;
     default:
         break;
     }
+}
+
+void timepanel_ota_progress(int progress_percent, void *)
+{
+    render_firmware_upgrade_screen(progress_percent);
 }
 
 } // namespace
@@ -31,6 +36,7 @@ extern "C" void app_main(void)
         const dogdog_ota_config_t pending_ota_config = {
             .device_name = "timepanel-hub75",
             .status_cb = nullptr,
+            .progress_cb = nullptr,
             .user_ctx = nullptr,
             .restart_before_update = false,
             .restart_delay_ms = 0,
@@ -58,6 +64,7 @@ extern "C" void app_main(void)
     const dogdog_ota_config_t ota_config = {
         .device_name = "timepanel-hub75",
         .status_cb = timepanel_ota_status,
+        .progress_cb = timepanel_ota_progress,
         .user_ctx = nullptr,
         .restart_before_update = true,
         .restart_delay_ms = 1800,

@@ -21,10 +21,12 @@ typedef enum dogdog_ota_event {
 } dogdog_ota_event_t;
 
 typedef void (*dogdog_ota_status_cb_t)(dogdog_ota_event_t event, void *user_ctx);
+typedef void (*dogdog_ota_progress_cb_t)(int progress_percent, void *user_ctx);
 
 typedef struct dogdog_ota_config {
     const char *device_name;
     dogdog_ota_status_cb_t status_cb;
+    dogdog_ota_progress_cb_t progress_cb;
     void *user_ctx;
     bool restart_before_update;
     int restart_delay_ms;

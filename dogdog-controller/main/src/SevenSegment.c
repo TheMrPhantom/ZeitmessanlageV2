@@ -678,9 +678,15 @@ void show_firmware_check_screen(void)
     show_firmware_status_screen("Checking Firmware");
 }
 
-void show_firmware_upgrade_screen(void)
+void show_firmware_upgrade_screen(int progress_percent)
 {
-    show_firmware_status_screen("Firmware Upgrade");
+    char text[64];
+    if (progress_percent > 0) {
+        snprintf(text, sizeof(text), "Firmware Upgrade %d%%", progress_percent);
+    } else {
+        snprintf(text, sizeof(text), "Firmware Upgrade");
+    }
+    show_firmware_status_screen(text);
 }
 
 void setupSevenSegment()

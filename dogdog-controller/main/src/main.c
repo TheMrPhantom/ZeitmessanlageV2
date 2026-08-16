@@ -94,11 +94,17 @@ static void controller_ota_status(dogdog_ota_event_t event, void *user_ctx)
         break;
     case DOGDOG_OTA_EVENT_UPDATING:
     case DOGDOG_OTA_EVENT_RESTARTING_FOR_UPDATE:
-        show_firmware_upgrade_screen();
+        show_firmware_upgrade_screen(0);
         break;
     default:
         break;
     }
+}
+
+static void controller_ota_progress(int progress_percent, void *user_ctx)
+{
+    (void)user_ctx;
+    show_firmware_upgrade_screen(progress_percent);
 }
 
 #if CONFIG_TIMEPANEL_TEST_TIMER_SEQUENCE
@@ -208,6 +214,7 @@ void app_main(void)
         const dogdog_ota_config_t pending_ota_config = {
             .device_name = "dogdog-controller",
             .status_cb = NULL,
+            .progress_cb = NULL,
             .user_ctx = NULL,
             .restart_before_update = false,
             .restart_delay_ms = 0,
@@ -220,6 +227,7 @@ void app_main(void)
     const dogdog_ota_config_t ota_config = {
         .device_name = "dogdog-controller",
         .status_cb = controller_ota_status,
+        .progress_cb = controller_ota_progress,
         .user_ctx = NULL,
         .restart_before_update = true,
         .restart_delay_ms = 1800,
