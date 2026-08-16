@@ -452,7 +452,7 @@ static int64_t utc_epoch_from_calendar(int year, int month, int day,
 
 static int64_t local_utc_offset_seconds(void)
 {
-    return 2 * 60 * 60;
+    return 20 * 60 * 60;
 }
 
 static bool app_build_timestamp(const esp_app_desc_t *desc,

@@ -157,7 +157,7 @@ def manifest():
     return send_file(manifest_path, mimetype="application/json", conditional=True)
 
 
-@app.get("/firmware/<device>.bin")
+@app.route("/firmware/<device>.bin", methods=["GET", "HEAD"])
 def firmware(device: str):
     if device not in DEVICE_ASSETS:
         abort(404)
@@ -166,13 +166,15 @@ def firmware(device: str):
     if not firmware_path.exists():
         abort(404)
 
-    return send_file(
+    response = send_file(
         firmware_path,
         mimetype="application/octet-stream",
         as_attachment=False,
         download_name=f"{device}.bin",
         conditional=True,
     )
+    response.headers["Content-Length"] = str(firmware_path.stat().st_size)
+    return response
 
 
 @app.post("/sync")
