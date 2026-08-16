@@ -1,5 +1,33 @@
 #include "timepanel_common.h"
 
+namespace {
+
+int g_firmware_upgrade_progress_percent = 0;
+
+void render_firmware_upgrade_canvas(lv_layer_t *layer)
+{
+    char text[32];
+    if (g_firmware_upgrade_progress_percent > 0) {
+        snprintf(text, sizeof(text), "Firmware Upgrade %d%%", g_firmware_upgrade_progress_percent);
+    } else {
+        snprintf(text, sizeof(text), "Firmware Upgrade");
+    }
+
+    const lv_font_t *font = font_18();
+    const lv_point_t size = measure_text(text, font);
+    const int y = std::max(0, static_cast<int>((DISPLAY_HEIGHT - size.y) / 2));
+    draw_canvas_label(layer,
+                      0,
+                      y,
+                      text,
+                      font,
+                      lv_color_hex(0xffffff),
+                      LV_TEXT_ALIGN_CENTER,
+                      DISPLAY_WIDTH);
+}
+
+} // namespace
+
 void render_startup_splash_screen()
 {
     if (!lvgl_port_lock(1000)) {
@@ -46,26 +74,8 @@ void render_canvas(void (*draw)(lv_layer_t *))
 
 void render_firmware_upgrade_screen(int progress_percent)
 {
-    render_canvas([progress_percent](lv_layer_t *layer) {
-        char text[32];
-        if (progress_percent > 0) {
-            snprintf(text, sizeof(text), "Firmware Upgrade %d%%", progress_percent);
-        } else {
-            snprintf(text, sizeof(text), "Firmware Upgrade");
-        }
-
-        const lv_font_t *font = font_18();
-        const lv_point_t size = measure_text(text, font);
-        const int y = std::max(0, static_cast<int>((DISPLAY_HEIGHT - size.y) / 2));
-        draw_canvas_label(layer,
-                          0,
-                          y,
-                          text,
-                          font,
-                          lv_color_hex(0xffffff),
-                          LV_TEXT_ALIGN_CENTER,
-                          DISPLAY_WIDTH);
-    });
+    g_firmware_upgrade_progress_percent = progress_percent;
+    render_canvas(render_firmware_upgrade_canvas);
 }
 
 void render_firmware_check_screen()
