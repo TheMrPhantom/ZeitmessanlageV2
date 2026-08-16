@@ -66,6 +66,7 @@ int history_index = 0;
 bool isDis = false;
 static bool dis_preview_active = false;
 static bool dis_preview_previous_state = false;
+static bool g_ota_ui_override_active = false;
 static long last_displayed_time_ms = 0;
 extern bool sensors_active;
 
@@ -325,6 +326,11 @@ void Seven_Segment_Task(void *params)
         SevenSegmentDisplay toDisplay;
         if (xQueueReceive(sevenSegmentQueue, &toDisplay, portMAX_DELAY))
         {
+            if (g_ota_ui_override_active && toDisplay.type != SEVEN_SEGMENT_OTA_STATUS)
+            {
+                continue;
+            }
+
             switch (toDisplay.type)
             {
             case SEVEN_SEGMENT_NETWORK_FAULT:
@@ -656,6 +662,7 @@ esp_err_t app_lvgl_init(void)
 
 static void show_firmware_status_screen(const char *text)
 {
+    g_ota_ui_override_active = true;
     ESP_ERROR_CHECK_WITHOUT_ABORT(app_lcd_init());
     ESP_ERROR_CHECK_WITHOUT_ABORT(app_lvgl_init());
 
@@ -682,19 +689,24 @@ void show_firmware_check_screen(void)
 void show_firmware_upgrade_screen(const dogdog_ota_progress_t *progress)
 {
     char text[128];
-    if (progress != NULL && progress->bytes_received > 0) {
+    if (progress != NULL) {
         if (progress->total_size > 0 && progress->progress_percent >= 0) {
+            const double received_mb = (double)progress->bytes_received / (1024.0 * 1024.0);
+            const double total_mb = (double)progress->total_size / (1024.0 * 1024.0);
             snprintf(text,
                      sizeof(text),
-                     "Firmware Upgrade %d%%\n%zu/%zu bytes",
+                     "Firmware Upgrade %d%%\n%.1f/%.1f MB",
                      progress->progress_percent,
-                     progress->bytes_received,
-                     progress->total_size);
-        } else {
+                     received_mb,
+                     total_mb);
+        } else if (progress->bytes_received >= 0) {
+            const double received_mb = (double)progress->bytes_received / (1024.0 * 1024.0);
             snprintf(text,
                      sizeof(text),
-                     "Firmware Upgrade\n%zu bytes",
-                     progress->bytes_received);
+                     "Firmware Upgrade\n%.1f MB",
+                     received_mb);
+        } else {
+            snprintf(text, sizeof(text), "Firmware Upgrade");
         }
     } else {
         snprintf(text, sizeof(text), "Firmware Upgrade");

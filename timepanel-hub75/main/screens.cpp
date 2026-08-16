@@ -7,19 +7,24 @@ const dogdog_ota_progress_t *g_firmware_upgrade_progress = nullptr;
 void render_firmware_upgrade_canvas(lv_layer_t *layer)
 {
     char text[64];
-    if (g_firmware_upgrade_progress != nullptr && g_firmware_upgrade_progress->bytes_received > 0) {
+    if (g_firmware_upgrade_progress != nullptr) {
         if (g_firmware_upgrade_progress->total_size > 0 && g_firmware_upgrade_progress->progress_percent >= 0) {
+            const double received_mb = (double)g_firmware_upgrade_progress->bytes_received / (1024.0 * 1024.0);
+            const double total_mb = (double)g_firmware_upgrade_progress->total_size / (1024.0 * 1024.0);
             snprintf(text,
                      sizeof(text),
-                     "Firmware Upgrade %d%%\n%zu/%zu bytes",
+                     "Firmware Upgrade %d%%\n%.1f/%.1f MB",
                      g_firmware_upgrade_progress->progress_percent,
-                     g_firmware_upgrade_progress->bytes_received,
-                     g_firmware_upgrade_progress->total_size);
-        } else {
+                     received_mb,
+                     total_mb);
+        } else if (g_firmware_upgrade_progress->bytes_received >= 0) {
+            const double received_mb = (double)g_firmware_upgrade_progress->bytes_received / (1024.0 * 1024.0);
             snprintf(text,
                      sizeof(text),
-                     "Firmware Upgrade\n%zu bytes",
-                     g_firmware_upgrade_progress->bytes_received);
+                     "Firmware Upgrade\n%.1f MB",
+                     received_mb);
+        } else {
+            snprintf(text, sizeof(text), "Firmware Upgrade");
         }
     } else {
         snprintf(text, sizeof(text), "Firmware Upgrade");
@@ -86,7 +91,9 @@ void render_canvas(void (*draw)(lv_layer_t *))
 
 void render_firmware_upgrade_screen(const dogdog_ota_progress_t *progress)
 {
-    g_firmware_upgrade_progress = progress;
+    if (progress != nullptr) {
+        g_firmware_upgrade_progress = progress;
+    }
     render_canvas(render_firmware_upgrade_canvas);
 }
 

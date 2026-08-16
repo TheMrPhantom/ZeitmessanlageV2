@@ -106,6 +106,8 @@ enum class ScreenMode : int {
     ParcoursWhoosh = 5,
     ParcoursEnded = 6,
     IdleSplash = 7,
+    FirmwareCheck = 8,
+    FirmwareUpdate = 9,
 };
 
 enum class RunnerWhooshType : uint8_t {

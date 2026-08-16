@@ -151,6 +151,22 @@ void ui_task(void *)
             vTaskDelay(pdMS_TO_TICKS(status_icon_visible ? 100 : 250));
             break;
 
+        case ScreenMode::FirmwareCheck:
+            if (last_static_mode != static_cast<int>(ScreenMode::FirmwareCheck)) {
+                render_firmware_check_screen();
+                last_static_mode = static_cast<int>(ScreenMode::FirmwareCheck);
+            }
+            vTaskDelay(pdMS_TO_TICKS(100));
+            break;
+
+        case ScreenMode::FirmwareUpdate:
+            if (last_static_mode != static_cast<int>(ScreenMode::FirmwareUpdate)) {
+                last_static_mode = static_cast<int>(ScreenMode::FirmwareUpdate);
+            }
+            render_firmware_upgrade_screen(nullptr);
+            vTaskDelay(pdMS_TO_TICKS(50));
+            break;
+
         case ScreenMode::RunnerPreview:
             render_runner_preview_screen(now_us);
             last_static_mode = static_cast<int>(ScreenMode::RunnerPreview);

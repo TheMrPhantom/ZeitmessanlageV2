@@ -12,10 +12,24 @@ void timepanel_ota_status(dogdog_ota_event_t event, void *)
     case DOGDOG_OTA_EVENT_CHECKING:
     case DOGDOG_OTA_EVENT_WIFI_FOUND:
     case DOGDOG_OTA_EVENT_CONNECTING:
+        g_screen_mode.store(static_cast<int>(ScreenMode::FirmwareCheck),
+                            std::memory_order_release);
         render_firmware_check_screen();
         break;
-    case DOGDOG_OTA_EVENT_UPDATING:
+    case DOGDOG_OTA_EVENT_UPDATING: {
+        static const dogdog_ota_progress_t initial_progress = {
+            .progress_percent = 0,
+            .bytes_received = 0,
+            .total_size = 0,
+        };
+        g_screen_mode.store(static_cast<int>(ScreenMode::FirmwareUpdate),
+                            std::memory_order_release);
+        render_firmware_upgrade_screen(&initial_progress);
+        break;
+    }
     case DOGDOG_OTA_EVENT_RESTARTING_FOR_UPDATE:
+        g_screen_mode.store(static_cast<int>(ScreenMode::FirmwareUpdate),
+                            std::memory_order_release);
         render_firmware_upgrade_screen(nullptr);
         break;
     default:
@@ -25,6 +39,10 @@ void timepanel_ota_status(dogdog_ota_event_t event, void *)
 
 void timepanel_ota_progress(const dogdog_ota_progress_t *progress, void *)
 {
+    if (progress != nullptr) {
+        g_screen_mode.store(static_cast<int>(ScreenMode::FirmwareUpdate),
+                            std::memory_order_release);
+    }
     render_firmware_upgrade_screen(progress);
 }
 

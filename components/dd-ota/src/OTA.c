@@ -35,6 +35,7 @@ static const char *TAG = "DogDogOTA";
 #define DOGDOG_OTA_SKIP_ONCE_MARKER 0xdd075a11U
 #define DOGDOG_OTA_UPDATE_PENDING_MARKER 0xdd075a12U
 #define DOGDOG_OTA_MARKER_XOR 0xffffffffU
+#define DOGDOG_OTA_PROGRESS_UPDATE_STEP_BYTES (100U * 1024U)
 #ifndef CONFIG_DOGDOG_OTA_TASK_STACK_SIZE
 #define CONFIG_DOGDOG_OTA_TASK_STACK_SIZE 24576
 #endif
@@ -452,7 +453,7 @@ static int64_t utc_epoch_from_calendar(int year, int month, int day,
 
 static int64_t local_utc_offset_seconds(void)
 {
-    return 20 * 60 * 60;
+    return 2 * 60 * 60;
 }
 
 static bool app_build_timestamp(const esp_app_desc_t *desc,
@@ -730,6 +731,7 @@ static esp_err_t perform_ota(const char *device_name,
     }
 
     size_t last_logged_bytes = 0;
+    size_t last_reported_bytes = 0;
     int last_reported_percent = -1;
     const TickType_t start_ticks = xTaskGetTickCount();
     while (true) {
@@ -739,7 +741,9 @@ static esp_err_t perform_ota(const char *device_name,
         }
 
         const size_t bytes_read = esp_https_ota_get_image_len_read(ota_handle);
-        if (bytes_read != last_logged_bytes) {
+        const size_t downloaded_since_last_report = bytes_read - last_logged_bytes;
+        if (downloaded_since_last_report >= DOGDOG_OTA_PROGRESS_UPDATE_STEP_BYTES ||
+            bytes_read == 0) {
             last_logged_bytes = bytes_read;
             const uint32_t elapsed_ms = (uint32_t)pdTICKS_TO_MS(xTaskGetTickCount() - start_ticks);
             const uint32_t bytes_per_second = elapsed_ms > 0 ? (uint32_t)((bytes_read * 1000ULL) / elapsed_ms) : 0;
@@ -758,9 +762,32 @@ static esp_err_t perform_ota(const char *device_name,
                 progress.progress_percent = (int)((bytes_read * 100ULL) / total_size);
             }
 
-            if (total_size == 0 || progress.progress_percent > last_reported_percent) {
-                last_reported_percent = progress.progress_percent > 0 ? progress.progress_percent : 0;
+            const bool size_known = total_size > 0;
+            const bool percent_advanced = size_known && progress.progress_percent > last_reported_percent;
+            const bool reached_update_step = bytes_read - last_reported_bytes >= DOGDOG_OTA_PROGRESS_UPDATE_STEP_BYTES;
+            if (reached_update_step || (!size_known && bytes_read > 0)) {
+                last_reported_bytes = bytes_read;
+                if (size_known && progress.progress_percent > last_reported_percent) {
+                    last_reported_percent = progress.progress_percent;
+                }
                 notify_progress(context, &progress);
+            }
+        }
+    }
+
+    if (last_reported_bytes != 0 || (total_size > 0 && total_size > 0)) {
+        const size_t final_bytes = esp_https_ota_get_image_len_read(ota_handle);
+        if (final_bytes > last_reported_bytes || total_size > 0) {
+            dogdog_ota_progress_t final_progress = {
+                .progress_percent = -1,
+                .bytes_received = final_bytes,
+                .total_size = total_size,
+            };
+            if (total_size > 0) {
+                final_progress.progress_percent = (int)((final_bytes * 100ULL) / total_size);
+            }
+            if (final_progress.progress_percent >= 0 || final_bytes > 0) {
+                notify_progress(context, &final_progress);
             }
         }
     }

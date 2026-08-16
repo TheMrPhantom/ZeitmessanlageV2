@@ -27,6 +27,10 @@ typedef struct SevenSegmentDisplay
     int startFault;            // 1 = Bad Signal; 2 = Fault
     int stopFault;             // 1 = Bad Signal; 2 = Fault
     SensorStatus sensorStatus; // Used for SEVEN_SEGMENT_SENSOR_STATUS
+    int progress_percent;
+    size_t bytes_received;
+    size_t total_size;
+    bool ota_ui_override;
 } SevenSegmentDisplay;
 
 typedef struct HistoryEntry
@@ -90,6 +94,7 @@ void reset_btn_event_cb(lv_event_t *e);
 #define SEVEN_SEGMENT_DIS_PREVIEW 11
 #define SEVEN_SEGMENT_DIS_PREVIEW_REVERT 12
 #define SEVEN_SEGMENT_DIS_PREVIEW_CONFIRM 13
+#define SEVEN_SEGMENT_OTA_STATUS 14
 
 /* LCD size */
 #define LCD_H_RES (480)

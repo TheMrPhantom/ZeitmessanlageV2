@@ -85,19 +85,57 @@ static void controller_ota_status(dogdog_ota_event_t event, void *user_ctx)
 {
     (void)user_ctx;
 
+    SevenSegmentDisplay ota_display = {
+        .time = 0,
+        .type = SEVEN_SEGMENT_OTA_STATUS,
+        .startFault = 0,
+        .stopFault = 0,
+        .sensorStatus = {0},
+        .progress_percent = -1,
+        .bytes_received = 0,
+        .total_size = 0,
+        .ota_ui_override = false,
+    };
+
     switch (event)
     {
     case DOGDOG_OTA_EVENT_WIFI_FOUND:
     case DOGDOG_OTA_EVENT_CHECKING:
     case DOGDOG_OTA_EVENT_CONNECTING:
-        show_firmware_check_screen();
+        ota_display.ota_ui_override = true;
+        ota_display.progress_percent = -1;
         break;
     case DOGDOG_OTA_EVENT_UPDATING:
+        ota_display.ota_ui_override = true;
+        ota_display.progress_percent = 0;
+        ota_display.bytes_received = 0;
+        ota_display.total_size = 0;
+        break;
     case DOGDOG_OTA_EVENT_RESTARTING_FOR_UPDATE:
-        show_firmware_upgrade_screen(NULL);
+        ota_display.ota_ui_override = true;
+        ota_display.progress_percent = -1;
+        ota_display.bytes_received = 0;
+        ota_display.total_size = 0;
         break;
     default:
-        break;
+        return;
+    }
+
+    if (sevenSegmentQueue != NULL) {
+        xQueueSend(sevenSegmentQueue, &ota_display, pdMS_TO_TICKS(100));
+    } else {
+        if (event == DOGDOG_OTA_EVENT_WIFI_FOUND ||
+            event == DOGDOG_OTA_EVENT_CHECKING ||
+            event == DOGDOG_OTA_EVENT_CONNECTING) {
+            show_firmware_check_screen();
+        } else {
+            static const dogdog_ota_progress_t initial_progress = {
+                .progress_percent = 0,
+                .bytes_received = 0,
+                .total_size = 0,
+            };
+            show_firmware_upgrade_screen(&initial_progress);
+        }
     }
 }
 
@@ -105,7 +143,27 @@ static void controller_ota_progress(const dogdog_ota_progress_t *progress,
                                    void *user_ctx)
 {
     (void)user_ctx;
-    show_firmware_upgrade_screen(progress);
+
+    if (progress == NULL || sevenSegmentQueue == NULL) {
+        if (progress != NULL) {
+            show_firmware_upgrade_screen(progress);
+        }
+        return;
+    }
+
+    SevenSegmentDisplay ota_display = {
+        .time = 0,
+        .type = SEVEN_SEGMENT_OTA_STATUS,
+        .startFault = 0,
+        .stopFault = 0,
+        .sensorStatus = {0},
+        .progress_percent = progress->progress_percent,
+        .bytes_received = progress->bytes_received,
+        .total_size = progress->total_size,
+        .ota_ui_override = true,
+    };
+
+    xQueueSend(sevenSegmentQueue, &ota_display, pdMS_TO_TICKS(100));
 }
 
 #if CONFIG_TIMEPANEL_TEST_TIMER_SEQUENCE
@@ -210,12 +268,16 @@ static void start_timepanel_test_timer_sequence(void)
 
 void app_main(void)
 {
+    ESP_ERROR_CHECK_WITHOUT_ABORT(app_lcd_init());
+    ESP_ERROR_CHECK_WITHOUT_ABORT(app_lvgl_init());
+    show_firmware_upgrade_screen(NULL);
+
     if (dogdog_ota_update_pending())
     {
         const dogdog_ota_config_t pending_ota_config = {
             .device_name = "dogdog-controller",
-            .status_cb = NULL,
-            .progress_cb = NULL,
+            .status_cb = controller_ota_status,
+            .progress_cb = controller_ota_progress,
             .user_ctx = NULL,
             .restart_before_update = false,
             .restart_delay_ms = 0,
