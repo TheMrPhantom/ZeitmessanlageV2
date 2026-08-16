@@ -74,10 +74,11 @@ static void notify_status(dogdog_ota_context_t *context,
     }
 }
 
-static void notify_progress(dogdog_ota_context_t *context, int progress_percent)
+static void notify_progress(dogdog_ota_context_t *context,
+                           const dogdog_ota_progress_t *progress)
 {
-    if (context != NULL && context->progress_cb != NULL) {
-        context->progress_cb(progress_percent, context->user_ctx);
+    if (context != NULL && context->progress_cb != NULL && progress != NULL) {
+        context->progress_cb(progress, context->user_ctx);
     }
 }
 
@@ -657,46 +658,6 @@ static esp_err_t probe_ota_update_available(const char *device_name,
     return ESP_OK;
 }
 
-static size_t get_ota_content_length(const char *firmware_url)
-{
-    esp_http_client_config_t http_config = {
-        .url = firmware_url,
-        .timeout_ms = CONFIG_DOGDOG_OTA_RECV_TIMEOUT_MS,
-        .keep_alive_enable = true,
-#if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
-        .crt_bundle_attach = esp_crt_bundle_attach,
-#endif
-    };
-
-    esp_http_client_handle_t client = esp_http_client_init(&http_config);
-    if (client == NULL) {
-        return 0;
-    }
-
-    size_t content_length = 0;
-    esp_err_t err = esp_http_client_set_method(client, HTTP_METHOD_HEAD);
-    if (err == ESP_OK) {
-        err = esp_http_client_open(client, 0);
-    }
-    if (err == ESP_OK) {
-        const int status = esp_http_client_get_status_code(client);
-        if (status >= 200 && status < 300) {
-            const int64_t header_length = esp_http_client_get_content_length(client);
-            if (header_length > 0) {
-                content_length = (size_t)header_length;
-            }
-        }
-        esp_http_client_close(client);
-    }
-    esp_http_client_cleanup(client);
-
-    if (content_length == 0) {
-        ESP_LOGW(TAG, "OTA content-length unavailable for %s; progress is best effort", firmware_url);
-    }
-
-    return content_length;
-}
-
 static esp_err_t perform_ota(const char *device_name,
                              dogdog_ota_context_t *context)
 {
@@ -708,7 +669,7 @@ static esp_err_t perform_ota(const char *device_name,
         return err;
     }
 
-    const size_t total_size = get_ota_content_length(firmware_url);
+    const size_t total_size = 0;
 
     ESP_LOGI(TAG, "Starting OTA from %s", firmware_url);
     notify_status(context, DOGDOG_OTA_EVENT_UPDATING);
@@ -787,12 +748,19 @@ static esp_err_t perform_ota(const char *device_name,
                      bytes_read,
                      (unsigned long)bytes_per_second);
 
+            dogdog_ota_progress_t progress = {
+                .progress_percent = -1,
+                .bytes_received = bytes_read,
+                .total_size = total_size,
+            };
+
             if (total_size > 0) {
-                const int progress_percent = (int)((bytes_read * 100ULL) / total_size);
-                if (progress_percent > last_reported_percent) {
-                    last_reported_percent = progress_percent;
-                    notify_progress(context, progress_percent);
-                }
+                progress.progress_percent = (int)((bytes_read * 100ULL) / total_size);
+            }
+
+            if (total_size == 0 || progress.progress_percent > last_reported_percent) {
+                last_reported_percent = progress.progress_percent > 0 ? progress.progress_percent : 0;
+                notify_progress(context, &progress);
             }
         }
     }

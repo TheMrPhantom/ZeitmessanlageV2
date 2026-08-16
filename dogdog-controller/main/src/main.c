@@ -94,17 +94,18 @@ static void controller_ota_status(dogdog_ota_event_t event, void *user_ctx)
         break;
     case DOGDOG_OTA_EVENT_UPDATING:
     case DOGDOG_OTA_EVENT_RESTARTING_FOR_UPDATE:
-        show_firmware_upgrade_screen(0);
+        show_firmware_upgrade_screen(NULL);
         break;
     default:
         break;
     }
 }
 
-static void controller_ota_progress(int progress_percent, void *user_ctx)
+static void controller_ota_progress(const dogdog_ota_progress_t *progress,
+                                   void *user_ctx)
 {
     (void)user_ctx;
-    show_firmware_upgrade_screen(progress_percent);
+    show_firmware_upgrade_screen(progress);
 }
 
 #if CONFIG_TIMEPANEL_TEST_TIMER_SEQUENCE

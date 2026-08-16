@@ -2,13 +2,25 @@
 
 namespace {
 
-int g_firmware_upgrade_progress_percent = 0;
+const dogdog_ota_progress_t *g_firmware_upgrade_progress = nullptr;
 
 void render_firmware_upgrade_canvas(lv_layer_t *layer)
 {
-    char text[32];
-    if (g_firmware_upgrade_progress_percent > 0) {
-        snprintf(text, sizeof(text), "Firmware Upgrade %d%%", g_firmware_upgrade_progress_percent);
+    char text[64];
+    if (g_firmware_upgrade_progress != nullptr && g_firmware_upgrade_progress->bytes_received > 0) {
+        if (g_firmware_upgrade_progress->total_size > 0 && g_firmware_upgrade_progress->progress_percent >= 0) {
+            snprintf(text,
+                     sizeof(text),
+                     "Firmware Upgrade %d%%\n%zu/%zu bytes",
+                     g_firmware_upgrade_progress->progress_percent,
+                     g_firmware_upgrade_progress->bytes_received,
+                     g_firmware_upgrade_progress->total_size);
+        } else {
+            snprintf(text,
+                     sizeof(text),
+                     "Firmware Upgrade\n%zu bytes",
+                     g_firmware_upgrade_progress->bytes_received);
+        }
     } else {
         snprintf(text, sizeof(text), "Firmware Upgrade");
     }
@@ -72,9 +84,9 @@ void render_canvas(void (*draw)(lv_layer_t *))
     lvgl_port_unlock();
 }
 
-void render_firmware_upgrade_screen(int progress_percent)
+void render_firmware_upgrade_screen(const dogdog_ota_progress_t *progress)
 {
-    g_firmware_upgrade_progress_percent = progress_percent;
+    g_firmware_upgrade_progress = progress;
     render_canvas(render_firmware_upgrade_canvas);
 }
 

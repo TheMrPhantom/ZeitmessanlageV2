@@ -46,7 +46,7 @@ void inrease_fault();
 
 void setupSevenSegment();
 void show_firmware_check_screen(void);
-void show_firmware_upgrade_screen(int progress_percent);
+void show_firmware_upgrade_screen(const dogdog_ota_progress_t *progress);
 
 void setup_timing_screen();
 void setup_splashscreen();

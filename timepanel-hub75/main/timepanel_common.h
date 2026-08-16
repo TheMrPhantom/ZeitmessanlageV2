@@ -318,7 +318,7 @@ void render_parcours_ended(lv_layer_t *layer);
 
 void render_startup_splash_screen();
 void render_firmware_check_screen();
-void render_firmware_upgrade_screen(int progress_percent);
+void render_firmware_upgrade_screen(const dogdog_ota_progress_t *progress);
 void render_runner_preview_screen(int64_t now_us);
 void render_intro_screen(int64_t elapsed_ms);
 void render_start_whoosh_screen(int64_t elapsed_ms);

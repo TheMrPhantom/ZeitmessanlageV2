@@ -16,16 +16,16 @@ void timepanel_ota_status(dogdog_ota_event_t event, void *)
         break;
     case DOGDOG_OTA_EVENT_UPDATING:
     case DOGDOG_OTA_EVENT_RESTARTING_FOR_UPDATE:
-        render_firmware_upgrade_screen(0);
+        render_firmware_upgrade_screen(nullptr);
         break;
     default:
         break;
     }
 }
 
-void timepanel_ota_progress(int progress_percent, void *)
+void timepanel_ota_progress(const dogdog_ota_progress_t *progress, void *)
 {
-    render_firmware_upgrade_screen(progress_percent);
+    render_firmware_upgrade_screen(progress);
 }
 
 } // namespace

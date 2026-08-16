@@ -678,11 +678,23 @@ void show_firmware_check_screen(void)
     show_firmware_status_screen("Checking Firmware");
 }
 
-void show_firmware_upgrade_screen(int progress_percent)
+void show_firmware_upgrade_screen(const dogdog_ota_progress_t *progress)
 {
-    char text[64];
-    if (progress_percent > 0) {
-        snprintf(text, sizeof(text), "Firmware Upgrade %d%%", progress_percent);
+    char text[128];
+    if (progress != NULL && progress->bytes_received > 0) {
+        if (progress->total_size > 0 && progress->progress_percent >= 0) {
+            snprintf(text,
+                     sizeof(text),
+                     "Firmware Upgrade %d%%\n%zu/%zu bytes",
+                     progress->progress_percent,
+                     progress->bytes_received,
+                     progress->total_size);
+        } else {
+            snprintf(text,
+                     sizeof(text),
+                     "Firmware Upgrade\n%zu bytes",
+                     progress->bytes_received);
+        }
     } else {
         snprintf(text, sizeof(text), "Firmware Upgrade");
     }
