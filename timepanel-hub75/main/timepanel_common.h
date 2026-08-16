@@ -26,6 +26,9 @@
 #include "esp_lvgl_port.h"
 #include "hub75.h"
 #include "lvgl.h"
+extern "C" {
+#include "OTA.h"
+}
 
 inline constexpr char TAG[] = "timepanel_hub75";
 
