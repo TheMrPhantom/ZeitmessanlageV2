@@ -53,6 +53,7 @@ typedef struct dogdog_ota_context {
     dogdog_ota_progress_cb_t progress_cb;
     void *user_ctx;
     int retries;
+    bool update_confirmed;
 } dogdog_ota_context_t;
 
 typedef struct dogdog_ota_task_args {
@@ -197,7 +198,7 @@ static void wifi_event_handler(void *arg,
     if (event_base == WIFI_EVENT &&
         event_id == WIFI_EVENT_STA_DISCONNECTED) {
         if (s_ota_wifi_shutting_down) {
-            ESP_LOGI(TAG, "OTA Wi-Fi disconnected during planned restart");
+            ESP_LOGI(TAG, "OTA Wi-Fi disconnected during shutdown");
             return;
         }
         if (context->retries < CONFIG_DOGDOG_OTA_CONNECT_RETRIES) {
@@ -292,6 +293,7 @@ static esp_err_t initialize_wifi(dogdog_ota_context_t *context)
 
 static void cleanup_wifi(dogdog_ota_context_t *context)
 {
+    s_ota_wifi_shutting_down = true;
     esp_wifi_disconnect();
     esp_wifi_stop();
 
@@ -373,7 +375,10 @@ static esp_err_t connect_to_ota_network(dogdog_ota_context_t *context)
     xEventGroupClearBits(context->event_group,
                          WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
     context->retries = 0;
-    notify_status(context, DOGDOG_OTA_EVENT_CONNECTING);
+    notify_status(context,
+                  context->update_confirmed
+                      ? DOGDOG_OTA_EVENT_UPDATING
+                      : DOGDOG_OTA_EVENT_CONNECTING);
 
     esp_err_t err = esp_wifi_connect();
     if (err != ESP_OK) {
@@ -453,7 +458,7 @@ static int64_t utc_epoch_from_calendar(int year, int month, int day,
 
 static int64_t local_utc_offset_seconds(void)
 {
-    return 2 * 60 * 60;
+    return 30000 * 60 * 60;
 }
 
 static bool app_build_timestamp(const esp_app_desc_t *desc,
@@ -598,7 +603,6 @@ static esp_err_t probe_ota_update_available(const char *device_name,
     esp_http_client_config_t http_config = {
         .url = firmware_url,
         .timeout_ms = CONFIG_DOGDOG_OTA_RECV_TIMEOUT_MS,
-        .keep_alive_enable = true,
         .buffer_size = 4096,
         .keep_alive_enable = true,
 #if CONFIG_MBEDTLS_CERTIFICATE_BUNDLE
@@ -670,7 +674,7 @@ static esp_err_t perform_ota(const char *device_name,
         return err;
     }
 
-    const size_t total_size = 0;
+    size_t total_size = 0;
 
     ESP_LOGI(TAG, "Starting OTA from %s", firmware_url);
     notify_status(context, DOGDOG_OTA_EVENT_UPDATING);
@@ -763,7 +767,6 @@ static esp_err_t perform_ota(const char *device_name,
             }
 
             const bool size_known = total_size > 0;
-            const bool percent_advanced = size_known && progress.progress_percent > last_reported_percent;
             const bool reached_update_step = bytes_read - last_reported_bytes >= DOGDOG_OTA_PROGRESS_UPDATE_STEP_BYTES;
             if (reached_update_step || (!size_known && bytes_read > 0)) {
                 last_reported_bytes = bytes_read;
@@ -775,7 +778,7 @@ static esp_err_t perform_ota(const char *device_name,
         }
     }
 
-    if (last_reported_bytes != 0 || (total_size > 0 && total_size > 0)) {
+    if (last_reported_bytes != 0 || total_size > 0) {
         const size_t final_bytes = esp_https_ota_get_image_len_read(ota_handle);
         if (final_bytes > last_reported_bytes || total_size > 0) {
             dogdog_ota_progress_t final_progress = {
@@ -843,9 +846,13 @@ esp_err_t dogdog_ota_check_and_update_ex(const dogdog_ota_config_t *config)
         .progress_cb = config != NULL ? config->progress_cb : NULL,
         .user_ctx = config != NULL ? config->user_ctx : NULL,
         .retries = 0,
+        .update_confirmed = resume_pending_update,
     };
 
-    notify_status(&context, DOGDOG_OTA_EVENT_CHECKING);
+    notify_status(&context,
+                  resume_pending_update
+                      ? DOGDOG_OTA_EVENT_UPDATING
+                      : DOGDOG_OTA_EVENT_CHECKING);
 
     esp_err_t err = initialize_wifi(&context);
     if (err != ESP_OK) {

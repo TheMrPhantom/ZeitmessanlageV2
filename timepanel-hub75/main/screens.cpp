@@ -6,41 +6,53 @@ const dogdog_ota_progress_t *g_firmware_upgrade_progress = nullptr;
 
 void render_firmware_upgrade_canvas(lv_layer_t *layer)
 {
-    char text[64];
+    char progress_text[32] = "";
     if (g_firmware_upgrade_progress != nullptr) {
         if (g_firmware_upgrade_progress->total_size > 0 && g_firmware_upgrade_progress->progress_percent >= 0) {
             const double received_mb = (double)g_firmware_upgrade_progress->bytes_received / (1024.0 * 1024.0);
             const double total_mb = (double)g_firmware_upgrade_progress->total_size / (1024.0 * 1024.0);
-            snprintf(text,
-                     sizeof(text),
-                     "Firmware Upgrade %d%%\n%.1f/%.1f MB",
+            snprintf(progress_text,
+                     sizeof(progress_text),
+                     "%d%% %.1f/%.1f MB",
                      g_firmware_upgrade_progress->progress_percent,
                      received_mb,
                      total_mb);
-        } else if (g_firmware_upgrade_progress->bytes_received >= 0) {
+        } else if (g_firmware_upgrade_progress->bytes_received > 0) {
             const double received_mb = (double)g_firmware_upgrade_progress->bytes_received / (1024.0 * 1024.0);
-            snprintf(text,
-                     sizeof(text),
-                     "Firmware Upgrade\n%.1f MB",
+            snprintf(progress_text,
+                     sizeof(progress_text),
+                     "%.1f MB",
                      received_mb);
-        } else {
-            snprintf(text, sizeof(text), "Firmware Upgrade");
         }
-    } else {
-        snprintf(text, sizeof(text), "Firmware Upgrade");
     }
 
-    const lv_font_t *font = font_18();
-    const lv_point_t size = measure_text(text, font);
-    const int y = std::max(0, static_cast<int>((DISPLAY_HEIGHT - size.y) / 2));
+    const char title[] = "Firmware Upgrade";
+    const lv_font_t *title_font = font_16();
+    const lv_font_t *progress_font = font_12();
+    const lv_point_t title_size = measure_text(title, title_font);
+    const int title_y = std::max(0, static_cast<int>((DISPLAY_HEIGHT - title_size.y) / 2) - 6);
     draw_canvas_label(layer,
                       0,
-                      y,
-                      text,
-                      font,
+                      title_y,
+                      title,
+                      title_font,
                       lv_color_hex(0xffffff),
                       LV_TEXT_ALIGN_CENTER,
                       DISPLAY_WIDTH);
+
+    if (progress_text[0] != '\0') {
+        const lv_point_t progress_size = measure_text(progress_text, progress_font);
+        const int progress_y = std::max(title_y + title_size.y - 1,
+                                        DISPLAY_HEIGHT - progress_size.y - 1);
+        draw_canvas_label(layer,
+                          0,
+                          progress_y,
+                          progress_text,
+                          progress_font,
+                          lv_color_hex(0xb8dfff),
+                          LV_TEXT_ALIGN_CENTER,
+                          DISPLAY_WIDTH);
+    }
 }
 
 } // namespace
