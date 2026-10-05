@@ -100,7 +100,7 @@ DogDogPacket *create_dogdog_packet_from_request_final_time_information(uint8_t r
 
 bool requires_ack(DogDogPacket *packet);
 void confirm_station_alive(DogDogPacket *packet);
-void populate_sensor_status(SensorStatus *sensorStatus, PacketTypeSensorState *sensor_state, uint8_t station_id, bool is_trigger);
+bool populate_sensor_status(SensorStatus *sensorStatus, PacketTypeSensorState *sensor_state, uint8_t station_id, bool is_trigger);
 void log_dogdog_packet(DogDogPacket *packet);
 
 static void IRAM_ATTR lora_module_rx_isr(void *arg);

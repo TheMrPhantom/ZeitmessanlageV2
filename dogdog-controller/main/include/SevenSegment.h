@@ -22,7 +22,7 @@
 
 typedef struct SevenSegmentDisplay
 {
-    int time;
+    int64_t time;
     int type;
     int startFault;            // 1 = Bad Signal; 2 = Fault
     int stopFault;             // 1 = Bad Signal; 2 = Fault
@@ -67,8 +67,8 @@ void draw_connection_status(int start_alive, int end_alive);
 void add_to_history();
 void draw_history_element(HistoryEntry *entry, int index);
 /* Adapt to LCD */
-void setMilliseconds(long timeToSet);
-void setSeconds(long timeToSet);
+void setMilliseconds(int64_t timeToSet);
+void setSeconds(int64_t timeToSet);
 void displayFault(int start, int stop);
 void add_reset_button();
 void del_reset_button();

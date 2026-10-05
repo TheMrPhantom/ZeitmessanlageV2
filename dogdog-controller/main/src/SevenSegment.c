@@ -8,6 +8,7 @@
 #include "esp_log.h"
 #include <stdio.h>
 #include <string.h>
+#include <inttypes.h>
 #include "KeyValue.h"
 #include "Buzzer.h"
 #include "freertos/semphr.h"
@@ -67,7 +68,7 @@ bool isDis = false;
 static bool dis_preview_active = false;
 static bool dis_preview_previous_state = false;
 static bool g_ota_ui_override_active = false;
-static long last_displayed_time_ms = 0;
+static int64_t last_displayed_time_ms = 0;
 extern bool sensors_active;
 
 extern char *pc_programm;
@@ -75,7 +76,7 @@ extern int controller_id;
 extern int start_id;
 extern int stop_id;
 
-static long display_time_ms(long time_ms)
+static int64_t display_time_ms(int64_t time_ms)
 {
     if (time_ms < 0)
     {
@@ -85,15 +86,15 @@ static long display_time_ms(long time_ms)
     return time_ms - (time_ms % 10);
 }
 
-static long displayed_time_text_to_ms(const char *time_text)
+static int64_t displayed_time_text_to_ms(const char *time_text)
 {
     if (time_text == NULL)
     {
         return 0;
     }
 
-    long seconds = 0;
-    long hundredths = 0;
+    int64_t seconds = 0;
+    int64_t hundredths = 0;
     int decimal_digits = 0;
     bool after_decimal_separator = false;
 
@@ -103,6 +104,10 @@ static long displayed_time_text_to_ms(const char *time_text)
         {
             if (!after_decimal_separator)
             {
+                if (seconds > (INT64_MAX / 1000 - (*c - '0')) / 10)
+                {
+                    return INT64_MAX;
+                }
                 seconds = seconds * 10 + (*c - '0');
             }
             else if (decimal_digits < 2)
@@ -123,12 +128,16 @@ static long displayed_time_text_to_ms(const char *time_text)
         decimal_digits++;
     }
 
+    if (seconds > (INT64_MAX - hundredths * 10) / 1000)
+    {
+        return INT64_MAX;
+    }
     return seconds * 1000 + hundredths * 10;
 }
 
-static long displayed_top_label_time_ms(void)
+static int64_t displayed_top_label_time_ms(void)
 {
-    long displayed_time_ms = 0;
+    int64_t displayed_time_ms = 0;
 
     lvgl_port_lock(-1);
     char *time_text = lv_label_get_text(top_label);
@@ -328,6 +337,10 @@ void Seven_Segment_Task(void *params)
         {
             if (g_ota_ui_override_active && toDisplay.type != SEVEN_SEGMENT_OTA_STATUS)
             {
+                if (toDisplay.type == SEVEN_SEGMENT_SENSOR_STATUS)
+                {
+                    free(toDisplay.sensorStatus.status);
+                }
                 continue;
             }
 
@@ -876,16 +889,15 @@ void setup_pc_programm_screen()
     lv_obj_align(ths_label, LV_ALIGN_CENTER, 0, 0);
 }
 
-void setMilliseconds(long timeToSet)
+void setMilliseconds(int64_t timeToSet)
 {
     timeToSet = display_time_ms(timeToSet);
     last_displayed_time_ms = timeToSet;
-    float sec = timeToSet / 1000.0f;
-    char numberString[8]; // Enough for "9999.99\0"
-    numberString[7] = 0x00;
+    char numberString[32];
 
     // Always show two decimals, regardless of value
-    snprintf(numberString, sizeof(numberString), "%.2f", sec);
+    snprintf(numberString, sizeof(numberString), "%" PRId64 ".%02" PRId64,
+             timeToSet / 1000, (timeToSet % 1000) / 10);
 
     // TODO: Show milliseconds
     lvgl_port_lock(-1);
@@ -902,26 +914,15 @@ void setMilliseconds(long timeToSet)
     lvgl_port_unlock();
 }
 
-void setSeconds(long timeToSet)
+void setSeconds(int64_t timeToSet)
 {
-
-    int minutes = timeToSet / 60;
-    int seconds = timeToSet % 60;
-    char numberString[6];
-    numberString[5] = 0x00;
-
-    int len = snprintf(NULL, 0, "%02d:%02d", minutes, seconds);
-    char *longResult = malloc(len + 1);
-    if (!longResult)
+    if (timeToSet < 0)
     {
-        ESP_LOGE(SEVEN_SEGMENT_TAG, "Failed to allocate memory for longResult");
-        return;
+        timeToSet = 0;
     }
-    snprintf(longResult, len + 1, "%02d:%02d", minutes, seconds);
-
-    strncpy(numberString, longResult, 5);
-    ESP_LOGI(SEVEN_SEGMENT_TAG, "Setting time: %s, %s", numberString, longResult);
-    free(longResult);
+    char numberString[32];
+    snprintf(numberString, sizeof(numberString), "%02" PRId64 ":%02" PRId64,
+             timeToSet / 60, timeToSet % 60);
 
     lvgl_port_lock(-1);
     // add_reset_button();
@@ -932,12 +933,18 @@ void setSeconds(long timeToSet)
     lvgl_port_unlock();
 }
 
+static void print_serial_finish_time(void)
+{
+    printf("e%05" PRId64 ".%02" PRId64 "\n",
+           last_displayed_time_ms / 1000, (last_displayed_time_ms % 1000) / 10);
+}
+
 void add_to_history()
 {
     lvgl_port_lock(-1);
     // get time text from top label
     char *time_text = lv_label_get_text(top_label);
-    long timepanel_time_ms = displayed_time_text_to_ms(time_text);
+    int64_t timepanel_time_ms = displayed_time_text_to_ms(time_text);
     bool send_timepanel_stop = !isDis;
     // get faults and refusal from their labels
     char *fault_text = lv_label_get_text(faults);
@@ -955,15 +962,7 @@ void add_to_history()
                 // the programm is simple-agility
                 // output the message: 'e00024,65\n' (the time 24,65s padded to 5 digits with leading zeros)
                 // time text is the time in seconds with 2 decimals and comma as decimal separator
-                char padded_time[9]; // 8 digits + null terminator
-                // fill padded time with zeros
-                memset(padded_time, '0', 8);
-                int length = strlen(time_text);
-                // copy time text to padded time from the end
-                memcpy(padded_time + 8 - length, time_text, length);
-                padded_time[8] = 0x00; // null terminator
-
-                printf("e%s\n", padded_time);
+                print_serial_finish_time();
             }
             else
             {
@@ -998,15 +997,7 @@ void add_to_history()
             // the programm is simple-agility
             // output the message: 'e00024,65\n' (the time 24,65s padded to 5 digits with leading zeros)
             // time text is the time in seconds with 2 decimals and comma as decimal separator
-            char padded_time[9]; // 8 digits + null terminator
-            // fill padded time with zeros
-            memset(padded_time, '0', 8);
-            int length = strlen(time_text);
-            // copy time text to padded time from the end
-            memcpy(padded_time + 8 - length, time_text, length);
-            padded_time[8] = 0x00; // null terminator
-
-            printf("e%s\n", padded_time);
+            print_serial_finish_time();
         }
         else
         {
@@ -1275,6 +1266,11 @@ void draw_sensor_status(bool *sensor_connected_left, bool *sensor_connected_righ
 
 void draw_sensor_status_single(int sensor, bool *status, int num, bool is_trigger)
 {
+    if (num > 64 || (num > 0 && status == NULL))
+    {
+        ESP_LOGW(SEVEN_SEGMENT_TAG, "Ignoring invalid sensor display state");
+        return;
+    }
     lv_obj_t *sensor_box = NULL;
     if (sensor == SENSOR_START)
     {

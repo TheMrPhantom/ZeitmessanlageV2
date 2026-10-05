@@ -127,7 +127,7 @@ void Sensor_Interrupt_Task(void *params)
 
                         lastTriggerTime = (int)pdTICKS_TO_MS(xTaskGetTickCount());
                         ESP_LOGI(TAG, "Interrupt of Pin: %i", pinNumber);
-                        TimerTrigger timerTriggerCause;
+                        TimerTrigger timerTriggerCause = {0};
 
                         timeval_t current_time;
                         gettimeofday(&current_time, NULL);

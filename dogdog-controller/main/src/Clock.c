@@ -14,6 +14,10 @@ static void IRAM_ATTR rtc_sqw_isr_handler(void *arg)
 BaseType_t init_external_clock()
 {
     timePrintQueue = xQueueCreate(10, sizeof(int64_t));
+    if (timePrintQueue == NULL)
+    {
+        return pdFALSE;
+    }
 
     i2c_master_bus_handle_t *bus_handle =
         (i2c_master_bus_handle_t *)malloc(sizeof(i2c_master_bus_handle_t));
@@ -30,7 +34,11 @@ BaseType_t init_external_clock()
         .glitch_ignore_cnt = 7,
         .flags.enable_internal_pullup = true,
     };
-    i2c_new_master_bus(&i2c_mst_config, bus_handle);
+    if (i2c_new_master_bus(&i2c_mst_config, bus_handle) != ESP_OK)
+    {
+        free(bus_handle);
+        return pdFALSE;
+    }
     rtc_handle_t *rtc_handle = ds3231_init(bus_handle);
     if (!rtc_handle)
     {
@@ -40,7 +48,7 @@ BaseType_t init_external_clock()
     }
 
     // Enable the square wave output on the DS3231
-    // 1. Set the square wave frequency (e.g., 1000Hz)
+    // Register value 0 selects 1 Hz despite the vendor enum's historical name.
     ds3231_square_wave_freq_set(rtc_handle, RTC_SQUARE_WAVE_FREQ_1000HZ);
     // 2. Set the output to square wave mode (not interrupt)
     ds3231_interrupt_square_wave_control_flag_set(rtc_handle, 0); // 0 = Square Wave
@@ -60,6 +68,10 @@ BaseType_t init_external_clock()
 
     gpio_config(&interrupt_pin_enable);
 
+    // Preserve the existing clock epoch when the first square-wave pulse arrives.
+    timeval_t initial_time;
+    gettimeofday(&initial_time, NULL);
+    rtc_time = TIME_US(initial_time);
     gpio_isr_handler_add(RTC_SQW, rtc_sqw_isr_handler, (void *)rtc_handle);
     return pdTRUE;
 }

@@ -28,6 +28,11 @@ void HandleReceivedPacket(DogDogPacket *packet)
     case LORA_TIME_SYNC:
     {
         PacketTypeTimeSync *time_sync = create_time_sync_information(packet);
+        if (time_sync == NULL)
+        {
+            ESP_LOGW(pcTaskGetName(NULL), "Invalid time sync or insufficient memory");
+            break;
+        }
         // ESP_LOGI(pcTaskGetName(NULL), "Time sync packet received: %" PRId64, time_sync->timestamp);
 
         taskENTER_CRITICAL(&timesync_spinlock);
@@ -120,6 +125,11 @@ void HandleReceivedPacket(DogDogPacket *packet)
     case LORA_ACK:
     {
         PacketTypeAck *ack = create_ack_information(packet);
+        if (ack == NULL)
+        {
+            ESP_LOGW(pcTaskGetName(NULL), "Invalid ACK or insufficient memory");
+            break;
+        }
         ESP_LOGI(pcTaskGetName(NULL), "ACK received for station: %d packet: %d", ack->station_id, ack->packet_id);
         xQueueSend(ackQueue, ack, 0);
         free(ack);

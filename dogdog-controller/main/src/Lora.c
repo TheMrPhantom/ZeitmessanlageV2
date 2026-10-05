@@ -23,9 +23,6 @@ extern portMUX_TYPE timesync_spinlock;
 uint8_t last_start_trigger = 255;
 uint8_t last_stop_trigger = 255;
 
-extern int64_t timerTime;
-extern bool timerIsRunning;
-
 extern int controller_id;
 extern int start_id;
 extern int stop_id;
@@ -108,6 +105,21 @@ void LoraStartupTask(void *pvParameters)
     vTaskDelete(NULL);
 }
 
+static void queue_sensor_status(PacketTypeSensorState *state, uint8_t source_station, bool is_trigger)
+{
+    SevenSegmentDisplay display = {.type = SEVEN_SEGMENT_SENSOR_STATUS};
+    if (!populate_sensor_status(&display.sensorStatus, state, source_station, is_trigger))
+    {
+        ESP_LOGW(pcTaskGetName(NULL), "Unable to create sensor status display");
+        return;
+    }
+    // The display owns the allocation only after the queue accepted it.
+    if (xQueueSend(sevenSegmentQueue, &display, 0) != pdTRUE)
+    {
+        free(display.sensorStatus.status);
+    }
+}
+
 void HandleReceivedPacket(DogDogPacket *packet)
 {
     // Handle the received packet based on its type
@@ -135,23 +147,14 @@ void HandleReceivedPacket(DogDogPacket *packet)
         timeval_t current_time;
         gettimeofday(&current_time, NULL);
 
-        if (!timerIsRunning)
+        int64_t now_us = TIME_US(current_time);
+        if (timerTriggerCause.timestamp <= 0 ||
+            (timerTriggerCause.timestamp > now_us && timerTriggerCause.timestamp - now_us > 20000000) ||
+            (timerTriggerCause.timestamp <= now_us && now_us - timerTriggerCause.timestamp > 20000000))
         {
-            if (TIME_US(current_time) - timerTriggerCause.timestamp < -20000000 || TIME_US(current_time) - timerTriggerCause.timestamp > 20000000)
-            {
-                ESP_LOGW(pcTaskGetName(NULL), "Received trigger with timestamp too far from current time. Current time: %lld, trigger time: %lld", TIME_US(current_time), timerTriggerCause.timestamp);
-                free(trigger);
-                break;
-            }
-        }
-        else
-        {
-            if (timerTriggerCause.timestamp - timerTime < 0)
-            {
-                ESP_LOGW(pcTaskGetName(NULL), "Received trigger with timestamp before timer start time. Timer start time: %lld, trigger time: %lld", timerTime, timerTriggerCause.timestamp);
-                free(trigger);
-                break;
-            }
+            ESP_LOGW(pcTaskGetName(NULL), "Received trigger with timestamp too far from current time. Current time: %lld, trigger time: %lld", now_us, timerTriggerCause.timestamp);
+            free(trigger);
+            break;
         }
 
         if (packet->station_id == start_id)
@@ -181,13 +184,7 @@ void HandleReceivedPacket(DogDogPacket *packet)
 
         confirm_station_alive(packet);
 
-        SensorStatus sensorStatus;
-        populate_sensor_status(&sensorStatus, &trigger->sensor_state, packet->station_id, true);
-
-        SevenSegmentDisplay toSend;
-        toSend.type = SEVEN_SEGMENT_SENSOR_STATUS;
-        toSend.sensorStatus = sensorStatus;
-        xQueueSend(sevenSegmentQueue, &toSend, 0);
+        queue_sensor_status(&trigger->sensor_state, packet->station_id, true);
 
         queue_ack_for_packet(packet);
 
@@ -251,13 +248,7 @@ void HandleReceivedPacket(DogDogPacket *packet)
         // Process sensor state information
         confirm_station_alive(packet);
 
-        SensorStatus sensorStatus;
-        populate_sensor_status(&sensorStatus, sensor_state, packet->station_id, false);
-
-        SevenSegmentDisplay toSend;
-        toSend.type = SEVEN_SEGMENT_SENSOR_STATUS;
-        toSend.sensorStatus = sensorStatus;
-        xQueueSend(sevenSegmentQueue, &toSend, 0);
+        queue_sensor_status(sensor_state, packet->station_id, false);
 
         free(sensor_state);
         break;
@@ -265,6 +256,11 @@ void HandleReceivedPacket(DogDogPacket *packet)
     case LORA_ACK:
     {
         PacketTypeAck *ack = create_ack_information(packet);
+        if (ack == NULL)
+        {
+            ESP_LOGW(pcTaskGetName(NULL), "Invalid ACK or insufficient memory");
+            break;
+        }
         ESP_LOGI(pcTaskGetName(NULL), "ACK received for station: %d packet: %d", ack->station_id, ack->packet_id);
         xQueueSend(ackQueue, ack, 0);
         free(ack);

@@ -32,7 +32,6 @@ extern QueueHandle_t sevenSegmentQueue;
 extern QueueHandle_t buzzerQueue;
 extern TaskHandle_t sevenSegmentTask;
 extern QueueHandle_t loraSendQueue;
-extern QueueHandle_t timeQueue;
 
 extern int stop_id;
 static const char *TAG = "BUTTON_INPUT";
@@ -373,16 +372,11 @@ void Button_Input_Task(void *params)
                 dis_feedback_shown = false;
             }
 
-            if (lastTriggerTime != 0)
+            // Let the timer task own all 64-bit timer state, including restarts.
+            int command = TIMER_RESTART_LAST_TRIGGER;
+            if (xQueueSend(resetQueue, &command, 0) != pdTRUE)
             {
-                startTimer(lastTriggerTime);
-                int64_t x = -1;
-                xQueueSend(timeQueue, &x, 0);
-                ESP_LOGI(TAG, "Restarted timer from last trigger timestamp: %" PRId64, lastTriggerTime);
-            }
-            else
-            {
-                ESP_LOGW(TAG, "DIS long press ignored because no trigger timestamp is available");
+                ESP_LOGW(TAG, "Could not queue timer restart");
             }
         }
     }

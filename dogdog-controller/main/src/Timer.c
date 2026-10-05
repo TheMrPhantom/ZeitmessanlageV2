@@ -11,6 +11,7 @@
 #include "GPIOPins.h"
 #include "HornTimer.h"
 #include "TimepanelClient.h"
+#include "esp_timer.h"
 
 extern QueueHandle_t sevenSegmentQueue;
 
@@ -32,6 +33,14 @@ int resetCause = 0;
 bool timerIsRunning = false;
 extern bool sensors_active;
 static int64_t last_horn_broadcast_time = 0;
+static int64_t timer_monotonic_start_us = 0;
+static int64_t timer_initial_elapsed_us = 0;
+
+static int64_t running_elapsed_us(void)
+{
+    // Wall-clock corrections must not change an ongoing run's displayed duration.
+    return timer_initial_elapsed_us + esp_timer_get_time() - timer_monotonic_start_us;
+}
 
 void startTimer(int64_t timestamp)
 {
@@ -47,6 +56,8 @@ void startTimer(int64_t timestamp)
         ESP_LOGW(TIMER_TAG, "Negative elapsed time detected: %lld", elapsed_time);
         elapsed_time = 0; // Reset to zero if negative
     }
+    timer_initial_elapsed_us = elapsed_time;
+    timer_monotonic_start_us = esp_timer_get_time();
 
     horn_timer_broadcast_elapsed_us(elapsed_time);
     timepanel_send_start(elapsed_time / 1000);
@@ -61,15 +72,8 @@ void startTimer(int64_t timestamp)
             // time text is the time in seconds with 2 decimals and comma as decimal separator
 
             int64_t elapsed_time_ms = elapsed_time / 1000;
-
-            float time_float = elapsed_time_ms / 1000.0f;
-
-            char padded_time[10]; // 8 digits + null terminator
-            // fill padded time with zeros
-            snprintf(padded_time, sizeof(padded_time), "s%08.2f", time_float);
-            padded_time[6] = ','; // replace decimal point with comma
-
-            printf("%s\n", padded_time);
+            printf("s%05" PRId64 ",%02" PRId64 "\n",
+                   elapsed_time_ms / 1000, (elapsed_time_ms % 1000) / 10);
         }
 
         xQueueSend(buzzerQueue, &(int){BUZZER_TRIGGER}, 0);
@@ -114,6 +118,23 @@ void Timer_Task(void *params)
             if (selectedQueue == triggerQueue)
             {
                 xQueueReceive(triggerQueue, &timerTriggerCause, 0);
+                timeval_t now;
+                gettimeofday(&now, NULL);
+                int64_t now_us = TIME_US(now);
+                if (timerTriggerCause.timestamp <= 0 ||
+                    (timerTriggerCause.timestamp > now_us && timerTriggerCause.timestamp - now_us > 20000000) ||
+                    ((timerIsRunning || timerTriggerCause.is_final_time) && timerTriggerCause.timestamp < timerTime) ||
+                    (timerTriggerCause.is_final_time && timerTime == 0))
+                {
+                    ESP_LOGW(TIMER_TAG, "Ignoring invalid or stale trigger timestamp: %" PRId64, timerTriggerCause.timestamp);
+                    continue;
+                }
+                if ((timerIsRunning || timerTriggerCause.is_final_time) &&
+                    timerTriggerCause.timestamp - timerTime > running_elapsed_us() + 20000000)
+                {
+                    ESP_LOGW(TIMER_TAG, "Ignoring trigger from an incompatible clock epoch");
+                    continue;
+                }
                 lastTriggerTime = timerTriggerCause.timestamp;
                 ESP_LOGI(TIMER_TAG, "Received trigger! From start? -> %d", timerTriggerCause.is_start);
                 ESP_LOGI(TIMER_TAG, "Trigger is final time? -> %d", timerTriggerCause.is_final_time);
@@ -126,7 +147,7 @@ void Timer_Task(void *params)
                         is_start_hurdle = timerTriggerCause.is_start;
 
                         startTimer(timerTriggerCause.timestamp);
-                        int x = -1;
+                        int64_t x = -1;
                         xQueueSend(timeQueue, &x, 0);
                         ESP_LOGI(TIMER_TAG, "Started timer");
                     }
@@ -200,11 +221,27 @@ void Timer_Task(void *params)
             else if (selectedQueue == resetQueue)
             {
                 xQueueReceive(resetQueue, &resetCause, 0);
+                if (resetCause == TIMER_RESTART_LAST_TRIGGER)
+                {
+                    if (lastTriggerTime > 0)
+                    {
+                        startTimer(lastTriggerTime);
+                        int64_t restarted = -1;
+                        xQueueSend(timeQueue, &restarted, 0);
+                        ESP_LOGI(TIMER_TAG, "Restarted timer from last trigger timestamp: %" PRId64, lastTriggerTime);
+                    }
+                    else
+                    {
+                        ESP_LOGW(TIMER_TAG, "Cannot restart without a trigger timestamp");
+                    }
+                    continue;
+                }
                 stopTimer();
+                timerTime = 0;
                 horn_timer_broadcast_reset();
                 timepanel_send_reset();
 
-                int x = -2;
+                int64_t x = -2;
                 xQueueSend(timeQueue, &x, 0);
 
                 SevenSegmentDisplay toSend;
@@ -217,9 +254,7 @@ void Timer_Task(void *params)
 
         if (timerIsRunning)
         {
-            timeval_t current_time;
-            gettimeofday(&current_time, NULL);
-            int64_t elapsed_time = TIME_US(current_time) - timerTime;
+            int64_t elapsed_time = running_elapsed_us();
 
             if (elapsed_time < 0)
             {

@@ -268,6 +268,7 @@ static void start_timepanel_test_timer_sequence(void)
 
 void app_main(void)
 {
+    ESP_LOGI(TAG, "Reset reason: %d", (int)esp_reset_reason());
     ESP_ERROR_CHECK_WITHOUT_ABORT(app_lcd_init());
     ESP_ERROR_CHECK_WITHOUT_ABORT(app_lvgl_init());
     show_firmware_upgrade_screen(NULL);
