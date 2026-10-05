@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 #include "led_strip.h"
 #include "esp_log.h"
 #include "esp_err.h"
@@ -18,10 +19,13 @@ bool led_on_off = false;
 int number_of_leds = 0;
 float brightness = 1;
 bool is_initialized = false;
+static SemaphoreHandle_t led_mutex;
 
 void init_led(int num_leds)
 {
     ESP_LOGI(TAG, "Initializing LED strip");
+    led_mutex = xSemaphoreCreateMutex();
+    ESP_ERROR_CHECK(led_mutex != NULL ? ESP_OK : ESP_ERR_NO_MEM);
     number_of_leds = num_leds;
     // LED strip general initialization, according to your led board design
     led_strip_config_t strip_config = {
@@ -54,18 +58,18 @@ void set_led(uint8_t led, uint8_t r, uint8_t g, uint8_t b)
 {
 
     // ESP_LOGI(TAG, "Start blinking LED strip");
-    if (!is_initialized)
+    if (!is_initialized || led >= number_of_leds)
     {
         ESP_LOGW(TAG, "LED strip not initialized");
         return;
     }
     /* Set the LED pixel using RGB from 0 (0%) to 255 (100%) for each color */
+    xSemaphoreTake(led_mutex, portMAX_DELAY);
     ESP_LOGI(TAG, "Set LED %d to color R:%d G:%d B:%d", led, r, g, b);
-    vTaskDelay(pdMS_TO_TICKS(1));
-    ESP_ERROR_CHECK(led_strip_set_pixel(led_handle, led, r * brightness, g * brightness, b * brightness));
-    vTaskDelay(pdMS_TO_TICKS(1));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(led_strip_set_pixel(led_handle, led, r * brightness, g * brightness, b * brightness));
     /* Refresh the strip to send data */
-    ESP_ERROR_CHECK(led_strip_refresh(led_handle));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(led_strip_refresh(led_handle));
+    xSemaphoreGive(led_mutex);
 }
 
 void set_all_leds(uint8_t r, uint8_t g, uint8_t b)
@@ -75,10 +79,12 @@ void set_all_leds(uint8_t r, uint8_t g, uint8_t b)
         ESP_LOGW(TAG, "LED strip not initialized");
         return;
     }
+    xSemaphoreTake(led_mutex, portMAX_DELAY);
     for (int i = 0; i < number_of_leds; i++)
     {
-        ESP_ERROR_CHECK(led_strip_set_pixel(led_handle, i, r, g, b));
+        ESP_ERROR_CHECK_WITHOUT_ABORT(led_strip_set_pixel(led_handle, i, r, g, b));
     }
     /* Refresh the strip to send data */
-    ESP_ERROR_CHECK(led_strip_refresh(led_handle));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(led_strip_refresh(led_handle));
+    xSemaphoreGive(led_mutex);
 }

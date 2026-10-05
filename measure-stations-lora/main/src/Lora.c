@@ -1,6 +1,7 @@
 #include "LoraNetwork.h"
 #include "esp_log.h"
 #include "LED.h"
+#include "Sensor.h"
 
 extern QueueHandle_t loraSendQueue;
 extern QueueHandle_t localReceiveTimestampQueue;
@@ -17,8 +18,7 @@ extern portMUX_TYPE timesync_spinlock;
 
 extern TaskHandle_t sensorInterruptTaskHandle;
 bool is_time_synced = false;
-extern uint8_t station_id;
-extern int64_t last_release_timestamp;
+extern int station_id;
 
 void HandleReceivedPacket(DogDogPacket *packet)
 {
@@ -35,9 +35,10 @@ void HandleReceivedPacket(DogDogPacket *packet)
         }
         // ESP_LOGI(pcTaskGetName(NULL), "Time sync packet received: %" PRId64, time_sync->timestamp);
 
-        taskENTER_CRITICAL(&timesync_spinlock);
         timeval_t tv_current;
         gettimeofday(&tv_current, NULL);
+        // Only copy shared values while interrupts are disabled.
+        taskENTER_CRITICAL(&timesync_spinlock);
         timesync_current_time = TIME_US(tv_current);
         timesync_received_time = packet->local_time_received;
         timesync_processing_time = timesync_current_time - timesync_received_time;
@@ -46,6 +47,7 @@ void HandleReceivedPacket(DogDogPacket *packet)
 
         // Normal operation again
         taskEXIT_CRITICAL(&timesync_spinlock);
+        free(time_sync);
 
         if (!is_time_synced)
         {
@@ -105,7 +107,7 @@ void HandleReceivedPacket(DogDogPacket *packet)
         xQueueSend(loraSendQueue, &ack_packet, portMAX_DELAY);
 
         PacketTypeFinalTime final_time;
-        final_time.timestamp = last_release_timestamp;
+        final_time.timestamp = get_last_release_timestamp();
         DogDogPacket *final_time_packet = create_dogdog_packet_from_final_time_information(&final_time);
         if (!final_time_packet)
         {

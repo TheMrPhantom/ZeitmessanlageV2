@@ -98,9 +98,9 @@ void LoraStartupTask(void *pvParameters)
     BaseType_t ack_task_created = xTaskCreate(LoraAckSendTask, "LoraAckSendTask", 4048, NULL, 23, NULL);
     ESP_ERROR_CHECK(ack_task_created == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
-    xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 23, NULL);
-    xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 23, NULL);
-    xTaskCreate(LoraSyncTask, "LoraSyncTask", 4048, NULL, 8, NULL);
+    ESP_ERROR_CHECK(xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 23, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 23, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(xTaskCreate(LoraSyncTask, "LoraSyncTask", 4048, NULL, 8, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
     vTaskDelete(NULL);
 }
@@ -280,12 +280,10 @@ void LoraSyncTask(void *pvParameters)
         gettimeofday(&timestamp, NULL);
         time_sync.timestamp = TIME_US(timestamp);
         DogDogPacket *packet = create_dogdog_packet_from_time_sync_information(&time_sync);
-        if (!packet)
+        if (send_dogdog_packet(packet) != pdTRUE)
         {
-            ESP_LOGE(pcTaskGetName(NULL), "Failed to allocate DogDogPacket for time sync");
-            continue;
+            ESP_LOGW(pcTaskGetName(NULL), "Unable to queue time sync");
         }
-        xQueueSend(loraSendQueue, &packet, portMAX_DELAY);
 
         vTaskDelay(pdMS_TO_TICKS(10000));
     }

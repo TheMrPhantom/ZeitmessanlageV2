@@ -90,14 +90,15 @@ void Sensor_Interrupt_Task(void *params)
     ESP_LOGI(TAG, "Setting up Sensors");
     gettimeofday(&last_start_trigger_time, NULL);
     gettimeofday(&last_sensor_stop_time, NULL);
+    sensorStatusQueue = xQueueCreate(1, sizeof(int));
+    ESP_ERROR_CHECK(sensorStatusQueue != NULL ? ESP_OK : ESP_ERR_NO_MEM);
     init_Sensor_Pins();
-    sensorStatusQueue = xQueueCreate(1, sizeof(char *));
 
     int is_lora_controller = getValue("is_lora_controller");
     if (is_lora_controller == 0)
     {
         ESP_LOGI(TAG, "Controller is cable based: Starting Sensor Interrupt Task");
-        xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 4048, NULL, 1, NULL);
+        ESP_ERROR_CHECK(xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 4048, NULL, 1, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
     }
     else
     {
@@ -260,7 +261,10 @@ void sendSensorStatus(int triggeredPin, int pinToCheck)
     {
         toDisplay.sensorStatus.status[i] = pinState == 1 || toDisplay.sensorStatus.is_trigger ? false : true;
     }
-    xQueueSend(sevenSegmentQueue, &toDisplay, 0);
+    if (xQueueSend(sevenSegmentQueue, &toDisplay, 0) != pdTRUE)
+    {
+        free(toDisplay.sensorStatus.status);
+    }
 
     int is_start = pinToCheck == TRIGGER_PIN_1 ? SENSOR_START : SENSOR_STOP;
     is_start = is_start == 0 ? START_ALIVE : STOP_ALIVE;

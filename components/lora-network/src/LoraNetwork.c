@@ -487,10 +487,16 @@ void log_dogdog_packet(DogDogPacket *packet)
 
 BaseType_t send_dogdog_packet(DogDogPacket *packet)
 {
-    if (packet != NULL)
+    if (packet == NULL)
     {
-        return xQueueSend(loraSendQueue, &packet, 0);
+        return pdFAIL;
     }
+    if (loraSendQueue != NULL && xQueueSend(loraSendQueue, &packet, 0) == pdTRUE)
+    {
+        return pdTRUE;
+    }
+    free(packet->payload);
+    free(packet);
     return pdFAIL;
 }
 
@@ -542,7 +548,7 @@ void init_lora(void)
     localReceiveTimestampQueue = xQueueCreate(40, sizeof(int64_t));
     pending_ack_mutex = xSemaphoreCreateMutex();
     ESP_ERROR_CHECK(loraSendQueue && loraInterruptQueue && localReceiveTimestampQueue && pending_ack_mutex ? ESP_OK : ESP_ERR_NO_MEM);
-    xTaskCreate(LoraInterruptTask, "LoraInterruptTask", 8192, NULL, 24, NULL);
+    ESP_ERROR_CHECK(xTaskCreate(LoraInterruptTask, "LoraInterruptTask", 8192, NULL, 24, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
     LoRaInit();
     int8_t txPowerInDbm = 22;
     uint32_t frequencyInHz = 868000000;
@@ -571,7 +577,7 @@ void init_lora(void)
     LoRaConfig(spreadingFactor, bandwidth, codingRate, preambleLength, payloadLen, crcOn, invertIrq);
     ackQueue = xQueueCreate(40, sizeof(PacketTypeAck));
     ESP_ERROR_CHECK(ackQueue != NULL ? ESP_OK : ESP_ERR_NO_MEM);
-    xTaskCreate(AckDispatchTask, "AckDispatchTask", 4048, NULL, 24, NULL);
+    ESP_ERROR_CHECK(xTaskCreate(AckDispatchTask, "AckDispatchTask", 4048, NULL, 24, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 }
 
 int create_bytes_from_dogdog_packet(DogDogPacket *packet, uint8_t *buf, size_t buf_len)

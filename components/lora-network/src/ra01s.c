@@ -364,6 +364,11 @@ bool LoRaSend(uint8_t *pData, int16_t len, uint8_t mode)
 	uint16_t irqStatus;
 	bool rv = false;
 
+	if (pData == NULL || len <= 0 || len > 255)
+	{
+		return false;
+	}
+
 	if (txActive == false)
 	{
 		txActive = true;
@@ -381,10 +386,17 @@ bool LoRaSend(uint8_t *pData, int16_t len, uint8_t mode)
 
 		if (mode & SX126x_TXMODE_SYNC)
 		{
+			const TickType_t started = xTaskGetTickCount();
 			irqStatus = GetIrqStatus();
 			while ((!(irqStatus & SX126X_IRQ_TX_DONE)) && (!(irqStatus & SX126X_IRQ_TIMEOUT)))
 			{
-				delay(1);
+				// The radio has a 500 ms timeout; also bound the wait if its IRQ is lost.
+				if (xTaskGetTickCount() - started >= pdMS_TO_TICKS(1000))
+				{
+					ESP_LOGW(TAG, "Transmit completion timed out");
+					break;
+				}
+				vTaskDelay(1);
 				irqStatus = GetIrqStatus();
 			}
 			if (debugPrint)

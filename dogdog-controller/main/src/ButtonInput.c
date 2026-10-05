@@ -210,7 +210,10 @@ void Button_Input_Task(void *params)
                     if (IS_THS_MODE && sensors_active)
                     {
                         DogDogPacket *request_final_time = create_dogdog_packet_from_request_final_time_information(stop_id);
-                        xQueueSend(loraSendQueue, &request_final_time, portMAX_DELAY);
+                        if (send_dogdog_packet(request_final_time) != pdTRUE)
+                        {
+                            ESP_LOGW(TAG, "Unable to queue final time request");
+                        }
 
                         glow_state_t glow_state;
                         glow_state.state = 1;

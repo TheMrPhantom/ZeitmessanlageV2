@@ -105,6 +105,7 @@ void log_dogdog_packet(DogDogPacket *packet);
 
 static void IRAM_ATTR lora_module_rx_isr(void *arg);
 
+// Consumes the packet on success or failure; callers must not access it afterward.
 BaseType_t send_dogdog_packet(DogDogPacket *packet);
 void init_lora(void);
 void LoraReceiveTask(void *pvParameters);

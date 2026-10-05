@@ -643,6 +643,10 @@ esp_err_t app_lvgl_init(void)
     {
         return ESP_OK;
     }
+    if (lcd_io == NULL || lcd_panel == NULL)
+    {
+        return ESP_ERR_INVALID_STATE;
+    }
 
     // Initialize LVGL
     lvgl_port_cfg_t lvgl_cfg = {
@@ -658,7 +662,8 @@ esp_err_t app_lvgl_init(void)
     lvgl_port_display_cfg_t disp_cfg = {
         .io_handle = lcd_io,
         .panel_handle = lcd_panel,
-        .buffer_size = LCD_H_RES * LCD_DRAW_BUFF_HEIGHT * sizeof(uint16_t),
+        // The port expects pixels and multiplies by sizeof(lv_color_t) itself.
+        .buffer_size = LCD_H_RES * LCD_DRAW_BUFF_HEIGHT,
         .double_buffer = LCD_DRAW_BUFF_DOUBLE,
         .hres = LCD_H_RES,
         .vres = LCD_V_RES,
@@ -670,14 +675,17 @@ esp_err_t app_lvgl_init(void)
         .flags = {.buff_dma = true}};
     lvgl_disp = lvgl_port_add_disp(&disp_cfg);
 
-    return ESP_OK;
+    return lvgl_disp != NULL ? ESP_OK : ESP_ERR_NO_MEM;
 }
 
 static void show_firmware_status_screen(const char *text)
 {
     g_ota_ui_override_active = true;
-    ESP_ERROR_CHECK_WITHOUT_ABORT(app_lcd_init());
-    ESP_ERROR_CHECK_WITHOUT_ABORT(app_lvgl_init());
+    if (app_lcd_init() != ESP_OK || app_lvgl_init() != ESP_OK)
+    {
+        ESP_LOGE(SEVEN_SEGMENT_TAG, "Unable to initialize firmware status display");
+        return;
+    }
 
     lvgl_port_lock(-1);
     lv_obj_t *screen = lv_scr_act();
@@ -1191,12 +1199,14 @@ void cleanup_lcd_resources()
     if (lcd_panel)
     {
         esp_lcd_panel_del(lcd_panel);
+        lcd_panel = NULL;
     }
     if (lcd_io)
     {
         esp_lcd_panel_io_del(lcd_io);
+        lcd_io = NULL;
     }
-    spi_bus_free(LCD_SPI_NUM);
+    spi_bus_free(LCD_SPI_HOST);
 }
 
 void draw_connection_status(int start_alive, int end_alive)

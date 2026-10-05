@@ -61,6 +61,7 @@
 
 QueueHandle_t sensorInterruptQueue;
 QueueHandle_t buttonInterruptQueue;
+QueueHandle_t buttonQueue;
 QueueHandle_t resetQueue;
 QueueHandle_t triggerQueue;
 QueueHandle_t sevenSegmentQueue;
@@ -268,9 +269,15 @@ static void start_timepanel_test_timer_sequence(void)
 
 void app_main(void)
 {
-    ESP_LOGI(TAG, "Reset reason: %d", (int)esp_reset_reason());
-    ESP_ERROR_CHECK_WITHOUT_ABORT(app_lcd_init());
-    ESP_ERROR_CHECK_WITHOUT_ABORT(app_lvgl_init());
+    esp_reset_reason_t reset_reason = esp_reset_reason();
+    if (reset_reason == ESP_RST_PANIC || reset_reason == ESP_RST_INT_WDT ||
+        reset_reason == ESP_RST_TASK_WDT || reset_reason == ESP_RST_WDT || reset_reason == ESP_RST_BROWNOUT)
+    {
+        // Keep crash diagnostics visible even with the normal ERROR-only log level.
+        ESP_LOGE(TAG, "Previous reset reason: %d", (int)reset_reason);
+    }
+    ESP_ERROR_CHECK(app_lcd_init());
+    ESP_ERROR_CHECK(app_lvgl_init());
     show_firmware_upgrade_screen(NULL);
 
     if (dogdog_ota_update_pending())
@@ -304,7 +311,8 @@ void app_main(void)
     ESP_LOGI(TAG, "Starting...");
 
     sensorInterruptQueue = xQueueCreate(1, sizeof(int));
-    buttonInterruptQueue = xQueueCreate(1, sizeof(int));
+    buttonInterruptQueue = xQueueCreate(1, sizeof(sensor_interrupt_t));
+    buttonQueue = xQueueCreate(15, sizeof(glow_state_t));
     resetQueue = xQueueCreate(1, sizeof(int));
     triggerQueue = xQueueCreate(1, sizeof(TimerTrigger));
     networkFaultQueue = xQueueCreate(2, sizeof(StationConnectivityStatus));
@@ -313,8 +321,10 @@ void app_main(void)
     sendQueue = xQueueCreate(50, sizeof(char *));
     buzzerQueue = xQueueCreate(10, sizeof(int));
     triggerAndResetQueue = xQueueCreateSet(2);
-    xQueueAddToSet(triggerQueue, triggerAndResetQueue);
-    xQueueAddToSet(resetQueue, triggerAndResetQueue);
+    ESP_ERROR_CHECK(sensorInterruptQueue && buttonInterruptQueue && buttonQueue && resetQueue && triggerQueue &&
+                    networkFaultQueue && sevenSegmentQueue && timeQueue && sendQueue && buzzerQueue && triggerAndResetQueue ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(xQueueAddToSet(triggerQueue, triggerAndResetQueue) == pdPASS ? ESP_OK : ESP_FAIL);
+    ESP_ERROR_CHECK(xQueueAddToSet(resetQueue, triggerAndResetQueue) == pdPASS ? ESP_OK : ESP_FAIL);
 
     increaseKey("startups");
 
@@ -375,23 +385,26 @@ void app_main(void)
     init_keyboard();
     init_glow_pins();
 
-    xTaskCreate(Timer_Task, "Timer_Task", 4048, NULL, 12, NULL);
-    xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 4048, NULL, 9, NULL);
-    xTaskCreatePinnedToCore(Seven_Segment_Task, "Seven_Segment_Task", 16096, NULL, 8, &sevenSegmentTask, 1);
-    xTaskCreate(Buzzer_Task, "Buzzer_Task", 4048, NULL, 7, NULL);
-    xTaskCreate(Pc_Serial_Task, "Pc_Serial_Task", 4096, NULL, 6, NULL);
+    ESP_ERROR_CHECK(xTaskCreate(Button_Task, "Button_Task", 8192, NULL, 3, &buttonTask) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+
+    ESP_ERROR_CHECK(xTaskCreate(Timer_Task, "Timer_Task", 4048, NULL, 12, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 4048, NULL, 9, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(xTaskCreatePinnedToCore(Seven_Segment_Task, "Seven_Segment_Task", 16096,
+                                          NULL, 8, &sevenSegmentTask, 1) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(xTaskCreate(Buzzer_Task, "Buzzer_Task", 4048, NULL, 7, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(xTaskCreate(Pc_Serial_Task, "Pc_Serial_Task", 4096, NULL, 6, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
     if (!config_is_lora_controller)
     {
-        xTaskCreatePinnedToCore(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 4048, NULL, 23, NULL, 0);
+        ESP_ERROR_CHECK(xTaskCreatePinnedToCore(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 4048,
+                                              NULL, 23, NULL, 0) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
     }
     else
     {
-        xTaskCreate(LoraStartupTask, "LoraStartupTask", 4048, NULL, 10, NULL);
+        ESP_ERROR_CHECK(xTaskCreate(LoraStartupTask, "LoraStartupTask", 4048, NULL, 10, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
     }
 
-    xTaskCreate(Button_Input_Task, "Button_Input_Task", 8192, NULL, 8, NULL);
-    xTaskCreate(Button_Task, "Button_Task", 8192, NULL, 3, &buttonTask);
+    ESP_ERROR_CHECK(xTaskCreate(Button_Input_Task, "Button_Input_Task", 8192, NULL, 8, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
 #if CONFIG_TIMEPANEL_TEST_TIMER_SEQUENCE
     start_timepanel_test_timer_sequence();
@@ -399,6 +412,6 @@ void app_main(void)
 
     if (clock_initialized == pdTRUE)
     {
-        xTaskCreate(ClockTask, "ClockTask", 4048, NULL, 24, NULL);
+        ESP_ERROR_CHECK(xTaskCreate(ClockTask, "ClockTask", 4048, NULL, 24, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
     }
 }

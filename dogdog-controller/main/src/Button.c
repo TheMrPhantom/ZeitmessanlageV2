@@ -16,7 +16,7 @@ const int sensorGlowPins[] = {BUTTON_GLOW_GPIO_TYPE_ACTIVATE,
                               BUTTON_GLOW_GPIO_TYPE_REFUSAL,
                               BUTTON_GLOW_GPIO_TYPE_RESET};
 
-QueueHandle_t buttonQueue;
+extern QueueHandle_t buttonQueue;
 extern bool sensors_active;
 bool active_glowing = false;
 timeval_t last_glow;
@@ -27,7 +27,7 @@ void init_glow_pins()
     for (int i = 0; i < sizeof(sensorGlowPins) / sizeof(int); i++)
     {
 
-        gpio_config_t io_conf;
+        gpio_config_t io_conf = {0};
         io_conf.pin_bit_mask = 1ULL << sensorGlowPins[i]; // select pin
         io_conf.mode = GPIO_MODE_OUTPUT;                  // input mode
         io_conf.intr_type = GPIO_INTR_DISABLE;
@@ -40,8 +40,6 @@ void init_glow_pins()
 
 void Button_Task(void *params)
 {
-    buttonQueue = xQueueCreate(15, sizeof(glow_state_t));
-
     gpio_set_level(BUTTON_GLOW_GPIO_TYPE_ACTIVATE, 1);
     gpio_set_level(BUTTON_GLOW_GPIO_TYPE_RESET, 1);
     vTaskDelay(pdMS_TO_TICKS(400));

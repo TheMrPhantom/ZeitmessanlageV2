@@ -69,6 +69,26 @@ bool fault = false;
 uint32_t cpu_hz = 1;
 int64_t last_release_timestamp = 0;
 
+int64_t get_last_release_timestamp(void)
+{
+    taskENTER_CRITICAL(&timesync_spinlock);
+    int64_t timestamp = last_release_timestamp;
+    taskEXIT_CRITICAL(&timesync_spinlock);
+    return timestamp;
+}
+
+static int64_t pin_trigger_timestamp(const PinTrigger *trigger)
+{
+    timeval_t current_time;
+    gettimeofday(&current_time, NULL);
+    taskENTER_CRITICAL(&timesync_spinlock);
+    int64_t offset = time_offset_to_controller;
+    taskEXIT_CRITICAL(&timesync_spinlock);
+    esp_cpu_cycle_count_t diff_cycles = esp_cpu_get_cycle_count() - trigger->triggered_at;
+    uint32_t latency_us = (uint32_t)((uint64_t)diff_cycles * 1000000ULL / cpu_hz);
+    return TIME_US(current_time) + offset - (int64_t)latency_us;
+}
+
 static void IRAM_ATTR gpio_interrupt_handler(void *args)
 {
     esp_cpu_cycle_count_t triggered_at = esp_cpu_get_cycle_count();
@@ -114,18 +134,19 @@ void Sensor_Interrupt_Task(void *params)
 {
     ESP_LOGI(TAG, "Setting up Sensors");
 
+    // GPIO edges can arrive as soon as handlers are installed.
+    sensorStatusQueue = xQueueCreate(1, sizeof(int));
+    ESP_ERROR_CHECK(sensorStatusQueue != NULL ? ESP_OK : ESP_ERR_NO_MEM);
     init_Pins();
-
-    sensorStatusQueue = xQueueCreate(1, sizeof(char *));
 
     ESP_LOGI(TAG, "Waiting for time sync...");
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     ESP_LOGI(TAG, "Time synced!");
 
-    xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 2048 * 2, NULL, 1, NULL);
+    ESP_ERROR_CHECK(xTaskCreate(Sensor_Status_Task, "Sensor_Status_Task", 2048 * 2, NULL, 1, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
     // Wait for led
 
-    PinTrigger trigger;
+    PinTrigger trigger = {0};
     uint64_t lastTriggerTime = 0;
 
     while (true)
@@ -134,6 +155,13 @@ void Sensor_Interrupt_Task(void *params)
         if (xQueueReceive(sensorInterputQueue, &trigger, pdMS_TO_TICKS(500)))
         {
             ESP_LOGI(TAG, "Checking interrupt of Pin: %i", trigger.pin);
+            if (trigger.state != triggerLevel)
+            {
+                int64_t released_at = pin_trigger_timestamp(&trigger);
+                taskENTER_CRITICAL(&timesync_spinlock);
+                last_release_timestamp = released_at;
+                taskEXIT_CRITICAL(&timesync_spinlock);
+            }
 
             // vTaskDelay(pdMS_TO_TICKS(3));
 
@@ -167,23 +195,8 @@ void Sensor_Interrupt_Task(void *params)
 
                         lastTriggerTime = pdTICKS_TO_MS(xTaskGetTickCount());
 
-                        timeval_t current_time;
-                        gettimeofday(&current_time, NULL);
-
-                        int64_t offset;
-                        taskENTER_CRITICAL(&timesync_spinlock);
-                        offset = time_offset_to_controller;
-                        taskEXIT_CRITICAL(&timesync_spinlock);
-
-                        esp_cpu_cycle_count_t current_cpu_cycle = esp_cpu_get_cycle_count();
-                        esp_cpu_cycle_count_t diff_cycles = current_cpu_cycle - trigger.triggered_at;
-
-                        uint32_t latency_us = (uint32_t)((uint64_t)diff_cycles * 1000000ULL / cpu_hz);
-
-                        int64_t timestamp = TIME_US(current_time) + offset - (int64_t)latency_us;
-
-                        PacketTypeTrigger trigger;
-                        trigger.timestamp = timestamp;
+                        int64_t timestamp = pin_trigger_timestamp(&trigger);
+                        PacketTypeTrigger trigger = {.timestamp = timestamp};
 
                         PacketTypeSensorState sensors_state;
                         sensors_state.num_sensors = num_sensors;
@@ -225,25 +238,6 @@ void Sensor_Interrupt_Task(void *params)
                     }
                 }
             }
-        }
-        else
-        {
-            timeval_t current_time;
-            gettimeofday(&current_time, NULL);
-
-            int64_t offset;
-            taskENTER_CRITICAL(&timesync_spinlock);
-            offset = time_offset_to_controller;
-            taskEXIT_CRITICAL(&timesync_spinlock);
-
-            esp_cpu_cycle_count_t current_cpu_cycle = esp_cpu_get_cycle_count();
-            esp_cpu_cycle_count_t diff_cycles = current_cpu_cycle - trigger.triggered_at;
-
-            uint32_t latency_us = (uint32_t)((uint64_t)diff_cycles * 1000000ULL / cpu_hz);
-
-            last_release_timestamp = TIME_US(current_time) + offset - (int64_t)latency_us;
-
-            
         }
 
         // Check for faults only 4 seconds after startup

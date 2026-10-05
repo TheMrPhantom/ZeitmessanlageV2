@@ -25,6 +25,8 @@ $common = @'
 #define ESP_LOGI(...) ((void)0)
 #define pcTaskGetName(task) "test"
 #define pdTRUE 1
+#define pdPASS 1
+#define pdFAIL 0
 #define pdMS_TO_TICKS(ms) (ms)
 #define portMAX_DELAY UINT32_MAX
 typedef int QueueHandle_t;

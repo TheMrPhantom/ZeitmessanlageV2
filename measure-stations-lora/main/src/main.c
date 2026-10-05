@@ -52,7 +52,8 @@ int num_fake_sensors = 0;
 int num_sensors_required_for_trigger = 0;
 int num_sensors;
 int triggerLevel;
-int *sensorPins;
+static int sensor_pin_storage[10];
+int *sensorPins = sensor_pin_storage;
 
 static void measure_station_ota_status(dogdog_ota_event_t event, void *user_ctx)
 {
@@ -67,7 +68,7 @@ static void measure_station_ota_status(dogdog_ota_event_t event, void *user_ctx)
 void start_isr_service_tast(void *params)
 {
     TaskHandle_t mainTask = (TaskHandle_t)params;
-    gpio_install_isr_service(0);
+    ESP_ERROR_CHECK(gpio_install_isr_service(0));
     // Notify main task that isr service is installed
     xTaskNotifyGive(mainTask);
     vTaskDelete(NULL);
@@ -76,6 +77,12 @@ void start_isr_service_tast(void *params)
 void app_main(void)
 {
     const char *TAG = "MAIN";
+    esp_reset_reason_t reset_reason = esp_reset_reason();
+    if (reset_reason == ESP_RST_PANIC || reset_reason == ESP_RST_INT_WDT ||
+        reset_reason == ESP_RST_TASK_WDT || reset_reason == ESP_RST_WDT || reset_reason == ESP_RST_BROWNOUT)
+    {
+        ESP_LOGE(TAG, "Previous reset reason: %d", (int)reset_reason);
+    }
     if (dogdog_ota_update_pending())
     {
         const dogdog_ota_config_t pending_ota_config = {
@@ -145,9 +152,16 @@ void app_main(void)
 
     is_xrl = getValue("is_xrl");
     num_fake_sensors = getValue("num_fake_s");
+    if (is_xrl && (num_fake_sensors < 1 || num_fake_sensors > 64))
+    {
+        ESP_LOGW(TAG, "Invalid sensor count %d; limiting to the 64-bit state field", num_fake_sensors);
+        num_fake_sensors = num_fake_sensors < 1 ? 1 : 64;
+    }
     //-------
 
-    xTaskCreate(start_isr_service_tast, "StartISRServiceTask", 4048, xTaskGetCurrentTaskHandle(), 5, NULL);
+    // Cycle-count timestamps must be captured on the same core as the sensor task.
+    ESP_ERROR_CHECK(xTaskCreatePinnedToCore(start_isr_service_tast, "StartISRServiceTask", 4048,
+                                          xTaskGetCurrentTaskHandle(), 5, NULL, 0) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     // mainTask = xTaskGetCurrentTaskHandle();
     InitLoraHandlers(HandleReceivedPacket);
@@ -157,8 +171,9 @@ void app_main(void)
     buzzerQueue = xQueueCreate(5, sizeof(int));
     faultQueue = xQueueCreate(5, sizeof(int));
     sendQueue = xQueueCreate(50, sizeof(char *));
+    ESP_ERROR_CHECK(sensorInterputQueue && triggerQueue && buzzerQueue && faultQueue && sendQueue ? ESP_OK : ESP_ERR_NO_MEM);
 
-    xTaskCreate(Buzzer_Task, "Buzzer_Task", 8192, NULL, 12, NULL);
+    ESP_ERROR_CHECK(xTaskCreate(Buzzer_Task, "Buzzer_Task", 8192, NULL, 12, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
     const dogdog_ota_config_t ota_config = {
         .device_name = "measure-stations-lora",
@@ -175,14 +190,12 @@ void app_main(void)
     {
         triggerLevel = 1;
         num_sensors = 1;
-        sensorPins = malloc(sizeof(int) * num_sensors);
         sensorPins[0] = GPIO_NUM_47;
     }
     else
     {
         triggerLevel = 0;
         num_sensors = 10;
-        sensorPins = malloc(sizeof(int) * num_sensors);
         sensorPins[0] = GPIO_NUM_15;
         sensorPins[1] = GPIO_NUM_16;
         sensorPins[2] = GPIO_NUM_17;
@@ -199,10 +212,11 @@ void app_main(void)
     init_lora();
 
     set_all_leds(255, 0, 255); // Set all leds to purple while waiting for time sync
-    xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 24, NULL);
-    xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 12, NULL);
+    ESP_ERROR_CHECK(xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 24, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+    ESP_ERROR_CHECK(xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 12, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
-    xTaskCreatePinnedToCore(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 8192 * 2, NULL, 3, &sensorInterruptTaskHandle, 0);
+    ESP_ERROR_CHECK(xTaskCreatePinnedToCore(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 8192 * 2,
+                                          NULL, 3, &sensorInterruptTaskHandle, 0) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
     int buzzerType = BUZZER_STARTUP;
     xQueueSend(buzzerQueue, &buzzerType, 0);
