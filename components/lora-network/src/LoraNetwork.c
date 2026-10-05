@@ -568,6 +568,7 @@ void LoraReceiveTask(void *pvParameters)
         int64_t local_time_received;
         if (xQueueReceive(localReceiveTimestampQueue, &local_time_received, portMAX_DELAY))
         {
+            // DIO1 also signals CRC/header errors; LoRaReceive discards those and their timestamps.
             uint8_t rxLen = LoRaReceive(buf, sizeof(buf));
             if (rxLen > 0)
             {

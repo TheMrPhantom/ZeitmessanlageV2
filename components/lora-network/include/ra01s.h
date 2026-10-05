@@ -380,6 +380,7 @@ typedef struct timeval timeval_t;
 void     LoRaInit(void);
 int16_t  LoRaBegin(uint32_t frequencyInHz, int8_t txPowerInDbm, float tcxoVoltage, bool useRegulatorLDO);
 void     LoRaConfig(uint8_t spreadingFactor, uint8_t bandwidth, uint8_t codingRate, uint16_t preambleLength, uint8_t payloadLen, bool crcOn, bool invertIrq);
+// Returns the received payload length, or 0 for no packet or a CRC/header error.
 uint8_t  LoRaReceive(uint8_t *pData, int16_t len);
 bool     LoRaSend(uint8_t *pData, int16_t len, uint8_t mode);
 void     LoRaDebugPrint(bool enable);

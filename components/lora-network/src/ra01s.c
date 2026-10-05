@@ -13,6 +13,7 @@
 #include "ra01s.h"
 
 #define TAG "RA01S"
+#define LORA_RX_IRQ_MASK (SX126X_IRQ_RX_DONE | SX126X_IRQ_CRC_ERR | SX126X_IRQ_HEADER_ERR)
 
 static spi_device_handle_t SpiHandle;
 static SemaphoreHandle_t spi_mutex = NULL;
@@ -318,9 +319,9 @@ void LoRaConfig(uint8_t spreadingFactor, uint8_t bandwidth, uint8_t codingRate, 
 
 	WriteCommand(SX126X_CMD_SET_PACKET_PARAMS, PacketParams, 6); // 0x8C
 
-	// Do not use DIO interruptst
+	// DIO1 timestamps completed packets and also wakes the receiver for CRC errors.
 	SetDioIrqParams(SX126X_IRQ_ALL,		// all interrupts enabled
-					SX126X_IRQ_RX_DONE, // interrupts on DIO1
+					LORA_RX_IRQ_MASK, // interrupts on DIO1
 					SX126X_IRQ_NONE,	// interrupts on DIO2
 					SX126X_IRQ_NONE		// interrupts on DIO3
 	);
@@ -336,18 +337,26 @@ void LoRaDebugPrint(bool enable)
 
 uint8_t LoRaReceive(uint8_t *pData, int16_t len)
 {
-	uint8_t rxLen = 0;
 	uint16_t irqRegs = GetIrqStatus();
-	// uint8_t status = GetStatus();
+	uint16_t rxIrqs = irqRegs & LORA_RX_IRQ_MASK;
 
-	if (irqRegs & SX126X_IRQ_RX_DONE)
+	if (rxIrqs == SX126X_IRQ_NONE)
 	{
-		// ClearIrqStatus(SX126X_IRQ_RX_DONE);
-		ClearIrqStatus(SX126X_IRQ_ALL);
-		rxLen = ReadBuffer(pData, len);
+		return 0;
 	}
 
-	return rxLen;
+	// Release DIO1 even for errors without RX_DONE; leave TX status for the sender.
+	// Continuous RX remains active, so no mode change is needed after a bad packet.
+	ClearIrqStatus(rxIrqs);
+
+	// RX_DONE also occurs for corrupted payloads. Never expose them to packet handlers.
+	if (rxIrqs & (SX126X_IRQ_CRC_ERR | SX126X_IRQ_HEADER_ERR))
+	{
+		ESP_LOGD(TAG, "Discarding packet with CRC/header error (IRQ=0x%04x)", irqRegs);
+		return 0;
+	}
+
+	return ReadBuffer(pData, len);
 }
 
 bool LoRaSend(uint8_t *pData, int16_t len, uint8_t mode)
