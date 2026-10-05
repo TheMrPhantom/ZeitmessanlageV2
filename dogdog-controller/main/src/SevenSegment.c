@@ -43,7 +43,6 @@ static lv_obj_t *pc_programm_screen = NULL;
 static lv_obj_t *parcours_intro_screen = NULL;
 static lv_obj_t *parcours_intro_label = NULL;
 static lv_obj_t *parcours_progress_fill = NULL;
-static lv_obj_t *parcours_whoosh_band = NULL;
 static lv_obj_t *top_label = NULL;
 static lv_obj_t *bottom_label = NULL;
 static lv_obj_t *reset_button = NULL;
@@ -182,12 +181,6 @@ static void setup_parcours_intro_screen(void)
     lv_obj_set_style_bg_opa(parcours_progress_fill, LV_OPA_COVER, 0);
     lv_obj_set_style_border_width(parcours_progress_fill, 0, 0);
 
-    parcours_whoosh_band = lv_obj_create(parcours_intro_screen);
-    lv_obj_set_size(parcours_whoosh_band, 120, LCD_V_RES);
-    lv_obj_set_style_bg_color(parcours_whoosh_band, lv_color_hex(0x1064ff), 0);
-    lv_obj_set_style_bg_opa(parcours_whoosh_band, LV_OPA_40, 0);
-    lv_obj_set_style_border_width(parcours_whoosh_band, 0, 0);
-    lv_obj_add_flag(parcours_whoosh_band, LV_OBJ_FLAG_HIDDEN);
 }
 
 static void render_parcours_intro_frame(int elapsed_ms, int duration_ms)
@@ -205,31 +198,7 @@ static void render_parcours_intro_frame(int elapsed_ms, int duration_ms)
     {
         lv_scr_load(parcours_intro_screen);
     }
-    lv_obj_add_flag(parcours_whoosh_band, LV_OBJ_FLAG_HIDDEN);
     lv_obj_set_width(parcours_progress_fill, progress_width > 360 ? 360 : progress_width);
-    lv_refr_now(NULL);
-    lvgl_port_unlock();
-}
-
-static void render_parcours_start_whoosh_frame(int elapsed_ms, int duration_ms)
-{
-    if (duration_ms <= 0)
-    {
-        duration_ms = 1;
-    }
-
-    const int band_width = 120;
-    const int x = -band_width + ((LCD_H_RES + band_width * 2) * elapsed_ms) / duration_ms;
-
-    lvgl_port_lock(-1);
-    setup_parcours_intro_screen();
-    if (lv_scr_act() != parcours_intro_screen)
-    {
-        lv_scr_load(parcours_intro_screen);
-    }
-    lv_obj_set_width(parcours_progress_fill, 360);
-    lv_obj_clear_flag(parcours_whoosh_band, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_set_pos(parcours_whoosh_band, x, 0);
     lv_refr_now(NULL);
     lvgl_port_unlock();
 }
@@ -284,7 +253,6 @@ static bool handle_countdown_aux_message(SevenSegmentDisplay *message,
 static bool run_parcours_controller_intro(int *countdown_duration_ms)
 {
     static const int INTRO_MS = 5000;
-    static const int START_WHOOSH_MS = 1000;
     const int intro_started_ms = (int)pdTICKS_TO_MS(xTaskGetTickCount());
 
     while ((int)pdTICKS_TO_MS(xTaskGetTickCount()) - intro_started_ms < INTRO_MS)
@@ -295,23 +263,6 @@ static bool run_parcours_controller_intro(int *countdown_duration_ms)
 
         SevenSegmentDisplay queued;
         if (xQueueReceive(sevenSegmentQueue, &queued, pdMS_TO_TICKS(50)))
-        {
-            if (!handle_countdown_aux_message(&queued, countdown_duration_ms, NULL))
-            {
-                return false;
-            }
-        }
-    }
-
-    const int whoosh_started_ms = (int)pdTICKS_TO_MS(xTaskGetTickCount());
-    while ((int)pdTICKS_TO_MS(xTaskGetTickCount()) - whoosh_started_ms < START_WHOOSH_MS)
-    {
-        const int elapsed_ms =
-            (int)pdTICKS_TO_MS(xTaskGetTickCount()) - whoosh_started_ms;
-        render_parcours_start_whoosh_frame(elapsed_ms, START_WHOOSH_MS);
-
-        SevenSegmentDisplay queued;
-        if (xQueueReceive(sevenSegmentQueue, &queued, pdMS_TO_TICKS(35)))
         {
             if (!handle_countdown_aux_message(&queued, countdown_duration_ms, NULL))
             {
