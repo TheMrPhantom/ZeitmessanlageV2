@@ -4,6 +4,11 @@
 # CMakeLists in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.16)
 
+# The update check evaluates LVGL 9 dependencies even with LVGL 8 locked,
+# triggering missing-Kconfig retries in ESP-IDF 5.5.1. Build the locked versions;
+# dependency upgrades remain available through idf.py update-dependencies.
+set(ENV{IDF_COMPONENT_CHECK_NEW_VERSION} "0")
+
 set(EXTRA_COMPONENT_DIRS
     "../components/lora-network"
     "../components/dd-ota"
