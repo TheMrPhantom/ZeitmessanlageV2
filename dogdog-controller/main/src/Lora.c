@@ -2,6 +2,7 @@
 #include "SevenSegment.h"
 #include "Timer.h"
 #include "NetworkFault.h"
+#include "esp_err.h"
 
 extern QueueHandle_t loraSendQueue;
 extern QueueHandle_t localReceiveTimestampQueue;
@@ -30,9 +31,75 @@ extern int start_id;
 extern int stop_id;
 extern int station_id;
 
+typedef struct OutgoingAck
+{
+    PacketTypeAck ack;
+    TickType_t queued_at;
+} OutgoingAck;
+
+static QueueHandle_t outgoingAckQueue;
+
+static void LoraAckSendTask(void *pvParameters)
+{
+    const TickType_t ack_delay = pdMS_TO_TICKS(1000);
+    OutgoingAck outgoing_ack;
+
+    while (true)
+    {
+        if (xQueueReceive(outgoingAckQueue, &outgoing_ack, portMAX_DELAY) != pdTRUE)
+        {
+            continue;
+        }
+
+        // Measure the delay from enqueue time so queued ACKs do not each add a second.
+        TickType_t elapsed = xTaskGetTickCount() - outgoing_ack.queued_at;
+        if (elapsed < ack_delay)
+        {
+            vTaskDelay(ack_delay - elapsed);
+        }
+
+        DogDogPacket *ack_packet = create_dogdog_packet_from_ack_information(&outgoing_ack.ack);
+        if (!ack_packet)
+        {
+            ESP_LOGE(pcTaskGetName(NULL), "Failed to allocate DogDogPacket for ACK");
+            continue;
+        }
+
+        if (xQueueSend(loraSendQueue, &ack_packet, portMAX_DELAY) != pdTRUE)
+        {
+            ESP_LOGW(pcTaskGetName(NULL), "Failed to queue outgoing ACK");
+            free(ack_packet->payload);
+            free(ack_packet);
+        }
+    }
+}
+
+static void queue_ack_for_packet(const DogDogPacket *packet)
+{
+    OutgoingAck outgoing_ack = {
+        .ack = {
+            .station_id = packet->station_id,
+            .packet_id = packet->packet_id,
+        },
+        .queued_at = xTaskGetTickCount(),
+    };
+
+    // Copy the ACK details; the receive task frees the original packet on return.
+    if (xQueueSend(outgoingAckQueue, &outgoing_ack, 0) != pdTRUE)
+    {
+        ESP_LOGW(pcTaskGetName(NULL), "Outgoing ACK queue full for station: %d packet: %d",
+                 packet->station_id, packet->packet_id);
+    }
+}
+
 void LoraStartupTask(void *pvParameters)
 {
     init_lora();
+
+    outgoingAckQueue = xQueueCreate(40, sizeof(OutgoingAck));
+    ESP_ERROR_CHECK(outgoingAckQueue != NULL ? ESP_OK : ESP_ERR_NO_MEM);
+    BaseType_t ack_task_created = xTaskCreate(LoraAckSendTask, "LoraAckSendTask", 4048, NULL, 23, NULL);
+    ESP_ERROR_CHECK(ack_task_created == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
     xTaskCreate(LoraSendTask, "LoraSendTask", 4048, NULL, 23, NULL);
     xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 23, NULL);
@@ -122,20 +189,7 @@ void HandleReceivedPacket(DogDogPacket *packet)
         toSend.sensorStatus = sensorStatus;
         xQueueSend(sevenSegmentQueue, &toSend, 0);
 
-        // Send ack
-        PacketTypeAck ack;
-        ack.station_id = packet->station_id;
-        ack.packet_id = packet->packet_id;
-
-        DogDogPacket *ack_packet = create_dogdog_packet_from_ack_information(&ack);
-        if (!ack_packet)
-        {
-            ESP_LOGE(pcTaskGetName(NULL), "Failed to allocate DogDogPacket for ACK");
-            free(trigger);
-            break;
-        }
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        xQueueSend(loraSendQueue, &ack_packet, portMAX_DELAY);
+        queue_ack_for_packet(packet);
 
         // Process trigger information
         free(trigger);
@@ -182,19 +236,7 @@ void HandleReceivedPacket(DogDogPacket *packet)
         }
 
         free(trigger);
-        // Send ack
-        PacketTypeAck ack;
-        ack.station_id = packet->station_id;
-        ack.packet_id = packet->packet_id;
-
-        DogDogPacket *ack_packet = create_dogdog_packet_from_ack_information(&ack);
-        if (!ack_packet)
-        {
-            ESP_LOGE(pcTaskGetName(NULL), "Failed to allocate DogDogPacket for ACK");
-            break;
-        }
-        vTaskDelay(pdMS_TO_TICKS(1000));
-        xQueueSend(loraSendQueue, &ack_packet, portMAX_DELAY);
+        queue_ack_for_packet(packet);
 
         break;
     }
