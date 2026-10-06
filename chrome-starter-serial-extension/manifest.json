@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "DogDog Starter Serial Bridge",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Reads the current webmelden starter and sends the starter and dog to the DogDog controller over serial.",
   "icons": {
     "16": "icons/dogdog-16.png",
@@ -11,9 +11,14 @@
   },
   "permissions": [
     "storage",
+    "downloads",
     "tabs"
   ],
   "host_permissions": [
+    "https://webmelden.de/*",
+    "http://webmelden.de/*",
+    "https://beta.webmelden.de/*",
+    "http://beta.webmelden.de/*",
     "https://www.webmelden.de/*",
     "http://www.webmelden.de/*",
     "file:///*"
@@ -33,6 +38,10 @@
   "content_scripts": [
     {
       "matches": [
+        "https://webmelden.de/*",
+        "http://webmelden.de/*",
+        "https://beta.webmelden.de/*",
+        "http://beta.webmelden.de/*",
         "https://www.webmelden.de/*",
         "http://www.webmelden.de/*",
         "file:///*"

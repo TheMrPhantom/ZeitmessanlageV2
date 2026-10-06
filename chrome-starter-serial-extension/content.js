@@ -46,6 +46,18 @@ function findCurrentStarterMarker() {
 }
 
 function findCurrentStarterRow() {
+  // The live entry page also repeats tr.akt in the pending starters table.
+  // Its dedicated current form is authoritative, including when it is empty.
+  const currentForm = document.querySelector("form.wm-live-results-current");
+  if (currentForm) {
+    return currentForm.querySelector("tr.akt") ??
+      currentForm.querySelector("tr:not(.header) td")?.closest("tr") ?? null;
+  }
+
+  if (document.querySelector(".wm-live-entry-page, .wm-live-entry-body")) {
+    return null;
+  }
+
   const marker = findCurrentStarterMarker();
 
   if (marker) {
@@ -142,5 +154,7 @@ window.setInterval(sendCurrentStarter, SCAN_INTERVAL_MS);
 new MutationObserver(scheduleScan).observe(document.documentElement, {
   childList: true,
   subtree: true,
-  characterData: true
+  characterData: true,
+  attributes: true,
+  attributeFilter: ["class"]
 });
