@@ -122,14 +122,20 @@ static void controller_ota_status(dogdog_ota_event_t event, void *user_ctx)
         return;
     }
 
-    if (sevenSegmentQueue != NULL) {
+    if (sevenSegmentQueue != NULL)
+    {
         xQueueSend(sevenSegmentQueue, &ota_display, pdMS_TO_TICKS(100));
-    } else {
+    }
+    else
+    {
         if (event == DOGDOG_OTA_EVENT_WIFI_FOUND ||
             event == DOGDOG_OTA_EVENT_CHECKING ||
-            event == DOGDOG_OTA_EVENT_CONNECTING) {
+            event == DOGDOG_OTA_EVENT_CONNECTING)
+        {
             show_firmware_check_screen();
-        } else {
+        }
+        else
+        {
             static const dogdog_ota_progress_t initial_progress = {
                 .progress_percent = 0,
                 .bytes_received = 0,
@@ -141,12 +147,14 @@ static void controller_ota_status(dogdog_ota_event_t event, void *user_ctx)
 }
 
 static void controller_ota_progress(const dogdog_ota_progress_t *progress,
-                                   void *user_ctx)
+                                    void *user_ctx)
 {
     (void)user_ctx;
 
-    if (progress == NULL || sevenSegmentQueue == NULL) {
-        if (progress != NULL) {
+    if (progress == NULL || sevenSegmentQueue == NULL)
+    {
+        if (progress != NULL)
+        {
             show_firmware_upgrade_screen(progress);
         }
         return;
@@ -269,6 +277,7 @@ static void start_timepanel_test_timer_sequence(void)
 
 void app_main(void)
 {
+    init_glow_pins();
     esp_reset_reason_t reset_reason = esp_reset_reason();
     if (reset_reason == ESP_RST_PANIC || reset_reason == ESP_RST_INT_WDT ||
         reset_reason == ESP_RST_TASK_WDT || reset_reason == ESP_RST_WDT || reset_reason == ESP_RST_BROWNOUT)
@@ -322,7 +331,9 @@ void app_main(void)
     buzzerQueue = xQueueCreate(10, sizeof(int));
     triggerAndResetQueue = xQueueCreateSet(2);
     ESP_ERROR_CHECK(sensorInterruptQueue && buttonInterruptQueue && buttonQueue && resetQueue && triggerQueue &&
-                    networkFaultQueue && sevenSegmentQueue && timeQueue && sendQueue && buzzerQueue && triggerAndResetQueue ? ESP_OK : ESP_ERR_NO_MEM);
+                            networkFaultQueue && sevenSegmentQueue && timeQueue && sendQueue && buzzerQueue && triggerAndResetQueue
+                        ? ESP_OK
+                        : ESP_ERR_NO_MEM);
     ESP_ERROR_CHECK(xQueueAddToSet(triggerQueue, triggerAndResetQueue) == pdPASS ? ESP_OK : ESP_FAIL);
     ESP_ERROR_CHECK(xQueueAddToSet(resetQueue, triggerAndResetQueue) == pdPASS ? ESP_OK : ESP_FAIL);
 
@@ -383,21 +394,24 @@ void app_main(void)
     ESP_ERROR_CHECK_WITHOUT_ABORT(init_horn_timer_broadcast());
     ESP_ERROR_CHECK_WITHOUT_ABORT(init_timepanel_client());
     init_keyboard();
-    init_glow_pins();
 
     ESP_ERROR_CHECK(xTaskCreate(Button_Task, "Button_Task", 8192, NULL, 3, &buttonTask) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
     ESP_ERROR_CHECK(xTaskCreate(Timer_Task, "Timer_Task", 4048, NULL, 12, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
     ESP_ERROR_CHECK(xTaskCreate(Network_Fault_Task, "Network_Fault_Task", 4048, NULL, 9, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
     ESP_ERROR_CHECK(xTaskCreatePinnedToCore(Seven_Segment_Task, "Seven_Segment_Task", 16096,
-                                          NULL, 8, &sevenSegmentTask, 1) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+                                            NULL, 8, &sevenSegmentTask, 1) == pdPASS
+                        ? ESP_OK
+                        : ESP_ERR_NO_MEM);
     ESP_ERROR_CHECK(xTaskCreate(Buzzer_Task, "Buzzer_Task", 4048, NULL, 7, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
     ESP_ERROR_CHECK(xTaskCreate(Pc_Serial_Task, "Pc_Serial_Task", 4096, NULL, 6, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
     if (!config_is_lora_controller)
     {
         ESP_ERROR_CHECK(xTaskCreatePinnedToCore(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 4048,
-                                              NULL, 23, NULL, 0) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+                                                NULL, 23, NULL, 0) == pdPASS
+                            ? ESP_OK
+                            : ESP_ERR_NO_MEM);
     }
     else
     {
