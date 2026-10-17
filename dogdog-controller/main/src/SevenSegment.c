@@ -714,6 +714,8 @@ void setupSevenSegment()
     xQueueSend(buzzerQueue, &(int){BUZZER_STARTUP}, 0);
 
     lv_scr_load_anim(timing_screen, LV_SCR_LOAD_ANIM_MOVE_TOP, 500, 0, false);
+    // Firmware checks are complete; accept normal timing and penalty updates.
+    g_ota_ui_override_active = false;
     lvgl_port_unlock();
 }
 
