@@ -114,8 +114,7 @@ void init_Pins()
         ESP_LOGI(TAG, "Configuring IO Pin %i", sensorPins[i]);
         esp_rom_gpio_pad_select_gpio(sensorPins[i]);
         gpio_set_direction(sensorPins[i], GPIO_MODE_INPUT);
-        gpio_pulldown_en(sensorPins[i]);
-        gpio_pullup_dis(sensorPins[i]);
+        ESP_ERROR_CHECK(gpio_set_pull_mode(sensorPins[i], is_xrl ? GPIO_PULLDOWN_ONLY : GPIO_FLOATING));
         gpio_set_intr_type(sensorPins[i], GPIO_INTR_ANYEDGE);
     }
 

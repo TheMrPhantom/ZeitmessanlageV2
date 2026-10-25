@@ -197,15 +197,15 @@ void app_main(void)
     {
         triggerLevel = 0;
         num_sensors = 10;
-        sensorPins[0] = GPIO_NUM_16;
-        sensorPins[1] = GPIO_NUM_17;
-        sensorPins[2] = GPIO_NUM_18;
-        sensorPins[3] = GPIO_NUM_8;
+        sensorPins[0] = GPIO_NUM_15;
+        sensorPins[1] = GPIO_NUM_16;
+        sensorPins[2] = GPIO_NUM_17;
+        sensorPins[3] = GPIO_NUM_18;
         sensorPins[4] = GPIO_NUM_8;
         sensorPins[5] = GPIO_NUM_2;
         sensorPins[6] = GPIO_NUM_1;
-        sensorPins[7] = GPIO_NUM_38;
-        sensorPins[8] = GPIO_NUM_39;
+        sensorPins[7] = GPIO_NUM_39;
+        sensorPins[8] = GPIO_NUM_38;
         sensorPins[9] = GPIO_NUM_40;
     }
 
