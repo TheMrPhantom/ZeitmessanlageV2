@@ -114,8 +114,7 @@ void init_Pins()
         ESP_LOGI(TAG, "Configuring IO Pin %i", sensorPins[i]);
         esp_rom_gpio_pad_select_gpio(sensorPins[i]);
         gpio_set_direction(sensorPins[i], GPIO_MODE_INPUT);
-        gpio_pulldown_en(sensorPins[i]);
-        gpio_pullup_dis(sensorPins[i]);
+        ESP_ERROR_CHECK(gpio_set_pull_mode(sensorPins[i], is_xrl ? GPIO_PULLDOWN_ONLY : GPIO_FLOATING));
         gpio_set_intr_type(sensorPins[i], GPIO_INTR_ANYEDGE);
     }
 
@@ -280,7 +279,9 @@ void Sensor_Interrupt_Task(void *params)
                     xQueueSend(faultQueue, &cause, 0);
 
                     ESP_LOGI(TAG, "Sensor connection is lost");
-                }else{
+                }
+                else
+                {
                     ESP_LOGI(TAG, "Warning state timeout not reached yet");
                 }
             }
@@ -356,7 +357,7 @@ void Sensor_Status_Task(void *params)
 
             if (level == 0)
             {
-                if (TIME_US(current_time) - TIME_US(last_time_clean[i]) > (is_xrl ? 300000000 : 8000000))
+                if (TIME_US(current_time) - TIME_US(last_time_clean[i]) > (is_xrl ? 300000000 : 60000000))
                 {
                     set_led(i, 0, 0, 0); // Turn off LED
                 }

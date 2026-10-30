@@ -102,7 +102,6 @@ void app_main(void)
 
     controller_id = getValue("controller_id");
 
-    
     if (controller_id == 0)
     {
         controller_id = CONFIG_LORA_CONTROLLER_ID;
@@ -161,7 +160,9 @@ void app_main(void)
 
     // Cycle-count timestamps must be captured on the same core as the sensor task.
     ESP_ERROR_CHECK(xTaskCreatePinnedToCore(start_isr_service_tast, "StartISRServiceTask", 4048,
-                                          xTaskGetCurrentTaskHandle(), 5, NULL, 0) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+                                            xTaskGetCurrentTaskHandle(), 5, NULL, 0) == pdPASS
+                        ? ESP_OK
+                        : ESP_ERR_NO_MEM);
     ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
     // mainTask = xTaskGetCurrentTaskHandle();
     InitLoraHandlers(HandleReceivedPacket);
@@ -201,11 +202,11 @@ void app_main(void)
         sensorPins[2] = GPIO_NUM_17;
         sensorPins[3] = GPIO_NUM_18;
         sensorPins[4] = GPIO_NUM_8;
-        sensorPins[5] = GPIO_NUM_19;
-        sensorPins[6] = GPIO_NUM_20;
+        sensorPins[5] = GPIO_NUM_2;
+        sensorPins[6] = GPIO_NUM_1;
         sensorPins[7] = GPIO_NUM_39;
         sensorPins[8] = GPIO_NUM_38;
-        sensorPins[9] = GPIO_NUM_37;
+        sensorPins[9] = GPIO_NUM_40;
     }
 
     init_led(num_sensors); // Pass the number of sensors as argument
@@ -216,7 +217,9 @@ void app_main(void)
     ESP_ERROR_CHECK(xTaskCreate(LoraReceiveTask, "LoraReceiveTask", 4048, NULL, 12, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
 
     ESP_ERROR_CHECK(xTaskCreatePinnedToCore(Sensor_Interrupt_Task, "Sensor_Interrupt_Task", 8192 * 2,
-                                          NULL, 3, &sensorInterruptTaskHandle, 0) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM);
+                                            NULL, 3, &sensorInterruptTaskHandle, 0) == pdPASS
+                        ? ESP_OK
+                        : ESP_ERR_NO_MEM);
 
     int buzzerType = BUZZER_STARTUP;
     xQueueSend(buzzerQueue, &buzzerType, 0);
