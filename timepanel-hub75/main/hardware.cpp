@@ -1,4 +1,5 @@
 #include "timepanel_common.h"
+#include "panel_brightness.h"
 #include "driver/usb_serial_jtag.h"
 
 namespace {
@@ -29,8 +30,9 @@ constexpr int FHT40_READ_RETRY_DELAY_MS = 5;
 constexpr int FHT40_READ_ATTEMPTS = 3;
 constexpr int FHT40_I2C_TIMEOUT_MS = 50;
 constexpr int USB_CONNECTION_SETTLE_MS = 25;
-constexpr uint8_t FULL_PANEL_BRIGHTNESS = 255;
+constexpr uint8_t FULL_PANEL_BRIGHTNESS = panel_brightness::FULL_BRIGHTNESS;
 int s_hub75_brightness = CONFIG_TIMEPANEL_PANEL_BRIGHTNESS;
+bool s_hub75_adaptive_brightness = false;
 
 #ifdef CONFIG_TIMEPANEL_HUB75_DOUBLE_BUFFER
 constexpr bool HUB75_DOUBLE_BUFFER_ENABLED = true;
@@ -75,6 +77,7 @@ uint8_t choose_hub75_brightness()
     vTaskDelay(pdMS_TO_TICKS(USB_CONNECTION_SETTLE_MS));
 
     const bool usb_host_connected = usb_serial_jtag_is_connected();
+    s_hub75_adaptive_brightness = !usb_host_connected;
     const uint8_t brightness = usb_host_connected
                                    ? CONFIG_TIMEPANEL_PANEL_BRIGHTNESS
                                    : FULL_PANEL_BRIGHTNESS;
@@ -95,6 +98,20 @@ void hub75_flush_callback(lv_display_t *display,
     const auto width = static_cast<uint16_t>(area->x2 - area->x1 + 1);
     const auto height = static_cast<uint16_t>(area->y2 - area->y1 + 1);
 
+    // Full render mode supplies the finished frame, including labels and effects.
+    const uint8_t brightness = s_hub75_adaptive_brightness
+                                  ? panel_brightness::brightness_for_frame(
+                                        pixel_map,
+                                        width,
+                                        height,
+                                        lv_draw_buf_width_to_stride(
+                                            width, LV_COLOR_FORMAT_RGB565))
+                                  : s_hub75_brightness;
+    // Dim before drawing: brightness updates affect both DMA buffers.
+    if (brightness < g_hub75->get_brightness()) {
+        g_hub75->set_brightness(brightness);
+    }
+
     g_hub75->draw_pixels(static_cast<uint16_t>(area->x1),
                          static_cast<uint16_t>(area->y1),
                          width,
@@ -106,6 +123,11 @@ void hub75_flush_callback(lv_display_t *display,
 
     if (HUB75_DOUBLE_BUFFER_ENABLED && lv_display_flush_is_last(display)) {
         g_hub75->flip_buffer();
+    }
+
+    // Request the lighter frame before restoring brightness.
+    if (brightness > g_hub75->get_brightness()) {
+        g_hub75->set_brightness(brightness);
     }
 
     lv_display_flush_ready(display);
@@ -125,7 +147,8 @@ void initialize_hub75()
     config.layout = Hub75PanelLayout::HORIZONTAL;
     config.rotation = Hub75Rotation::ROTATE_0;
     config.pins = HUB75_PINS;
-    config.output_clock_speed = Hub75ClockSpeed::HZ_20M;
+    // Give the far end of the chain more settling time (17.78 MHz on ESP32-S3).
+    config.output_clock_speed = Hub75ClockSpeed::HZ_18M;
     config.min_refresh_rate = 80;
     config.double_buffer = HUB75_DOUBLE_BUFFER_ENABLED;
     config.brightness = s_hub75_brightness;
@@ -143,6 +166,7 @@ void initialize_hub75()
 
 int hub75_brightness()
 {
+    // Keep the power-mode status icon independent of content-based dimming.
     return s_hub75_brightness;
 }
 

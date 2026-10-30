@@ -1,4 +1,5 @@
 #include "timepanel_common.h"
+#include "fonts/timepanel_fonts.h"
 
 constexpr std::array<const char *, SPLASH_LOGO_HEIGHT> DOGDOG_LOGO_BITMAP{{
     "                        wW  w",
@@ -229,9 +230,9 @@ void draw_canvas_label(lv_layer_t *layer, int x, int y, const char *text,
 const lv_font_t *font_16()
 {
 #if LV_FONT_MONTSERRAT_16
-    return &lv_font_montserrat_16;
+    return font_with_german_glyphs<lv_font_montserrat_16, timepanel_font_german_16>();
 #elif LV_FONT_MONTSERRAT_14
-    return &lv_font_montserrat_14;
+    return font_with_german_glyphs<lv_font_montserrat_14, timepanel_font_german_14>();
 #else
     return LV_FONT_DEFAULT;
 #endif
@@ -240,7 +241,7 @@ const lv_font_t *font_16()
 const lv_font_t *font_18()
 {
 #if LV_FONT_MONTSERRAT_18
-    return &lv_font_montserrat_18;
+    return font_with_german_glyphs<lv_font_montserrat_18, timepanel_font_german_18>();
 #else
     return font_16();
 #endif
@@ -249,7 +250,7 @@ const lv_font_t *font_18()
 const lv_font_t *font_14()
 {
 #if LV_FONT_MONTSERRAT_14
-    return &lv_font_montserrat_14;
+    return font_with_german_glyphs<lv_font_montserrat_14, timepanel_font_german_14>();
 #else
     return LV_FONT_DEFAULT;
 #endif
@@ -258,9 +259,9 @@ const lv_font_t *font_14()
 const lv_font_t *font_12()
 {
 #if LV_FONT_MONTSERRAT_12
-    return &lv_font_montserrat_12;
+    return font_with_german_glyphs<lv_font_montserrat_12, timepanel_font_german_12>();
 #elif LV_FONT_MONTSERRAT_10
-    return &lv_font_montserrat_10;
+    return font_with_german_glyphs<lv_font_montserrat_10, timepanel_font_german_10>();
 #else
     return LV_FONT_DEFAULT;
 #endif
