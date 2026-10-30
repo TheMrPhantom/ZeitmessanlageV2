@@ -52,7 +52,7 @@ inline constexpr int INTRO_SECONDS = CONFIG_TIMEPANEL_PARCOURS_INTRO_SECONDS;
 #ifdef CONFIG_TIMEPANEL_IDLE_SPLASH_SECONDS
 inline constexpr int IDLE_SPLASH_SECONDS = CONFIG_TIMEPANEL_IDLE_SPLASH_SECONDS;
 #else
-inline constexpr int IDLE_SPLASH_SECONDS = 300;
+inline constexpr int IDLE_SPLASH_SECONDS = 60;
 #endif
 inline constexpr int START_WHOOSH_DURATION_MS = 1000;
 inline constexpr int WHOOSH_DURATION_MS = 1400;

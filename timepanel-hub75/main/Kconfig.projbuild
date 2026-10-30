@@ -55,7 +55,7 @@ config TIMEPANEL_PARCOURS_INTRO_SECONDS
 config TIMEPANEL_IDLE_SPLASH_SECONDS
     int "DogDog splash idle timeout in seconds"
     range 0 3600
-    default 300
+    default 60
     help
         Shows the DogDog splash screen after this many seconds without a
         button press or controller command. Set to 0 to disable.
