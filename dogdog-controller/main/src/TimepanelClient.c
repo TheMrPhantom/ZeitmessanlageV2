@@ -211,6 +211,9 @@ void timepanel_send_start(int64_t offset_ms)
         offset_ms = 0;
     }
 
+    s_faults = 0;
+    s_refusals = 0;
+
     TimepanelU32Payload payload = {
         .value = (uint32_t)offset_ms,
     };

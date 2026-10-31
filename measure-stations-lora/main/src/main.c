@@ -143,9 +143,9 @@ void app_main(void)
     {
         num_sensors_required_for_trigger = 2;
     }
-#ifdef NUM_SENSORS_REQUIRED_FOR_TRIGGER
+#ifdef CONFIG_NUM_SENSORS_REQUIRED_FOR_TRIGGER
     num_sensors_required_for_trigger = CONFIG_NUM_SENSORS_REQUIRED_FOR_TRIGGER;
-    storeValue("num_sensors_required_for_trigger", num_sensors_required_for_trigger);
+    storeValue("num_s_req", num_sensors_required_for_trigger);
 #endif
 #endif
 

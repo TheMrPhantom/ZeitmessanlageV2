@@ -353,11 +353,11 @@ void Sensor_Status_Task(void *params)
             }
 
             gettimeofday(&current_time, NULL);
-            // If no sensor is triggered, turn off the LED if it was previously on for 8 seconds
+            // Turn off the LED after 300 seconds without a trigger for XLR, or 8 seconds otherwise.
 
             if (level == 0)
             {
-                if (TIME_US(current_time) - TIME_US(last_time_clean[i]) > (is_xrl ? 300000000 : 60000000))
+                if (TIME_US(current_time) - TIME_US(last_time_clean[i]) > (is_xrl ? 300000000 : 8000000))
                 {
                     set_led(i, 0, 0, 0); // Turn off LED
                 }

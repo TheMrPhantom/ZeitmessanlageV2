@@ -420,3 +420,74 @@ int test_main(void) {
 }
 '@
 Run-Test 'receive-interrupt-during-startup' (@($common, $types, $pending, $initMock, $initCode, (Read-Function $network 'init_lora'), $initTests) -join "`n")
+
+$timepanelSource = Get-Content -Raw (Join-Path $repoRoot 'dogdog-controller/main/src/TimepanelClient.c')
+$timepanelProtocol = Get-Content -Raw (Join-Path $repoRoot 'components/timepanel-protocol/include/TimepanelProtocol.h')
+$timepanelMock = @'
+static uint16_t s_faults, s_refusals;
+static volatile bool s_parcours_timer_active;
+static unsigned mock_packet_count;
+static uint8_t mock_command;
+static uint32_t mock_value;
+static void timepanel_send_message(uint8_t command, const uint8_t *payload, size_t length) {
+    ++mock_packet_count;
+    mock_command = command;
+    mock_value = 0;
+    if (length == sizeof(TimepanelU16Payload)) {
+        TimepanelU16Payload value;
+        memcpy(&value, payload, sizeof(value));
+        mock_value = value.value;
+    } else if (length == sizeof(TimepanelU32Payload)) {
+        TimepanelU32Payload value;
+        memcpy(&value, payload, sizeof(value));
+        mock_value = value.value;
+    }
+}
+'@
+$timepanelCode = foreach ($name in @('timepanel_send_start', 'timepanel_send_stop', 'timepanel_send_fault', 'timepanel_send_refusal', 'timepanel_send_fault_increment', 'timepanel_send_refusal_increment')) {
+    Read-Function $timepanelSource $name
+}
+$timepanelTests = @'
+int test_main(void) {
+    timepanel_send_start(125);
+    if (mock_command != TIMEPANEL_COMMAND_START || mock_value != 125) return 1;
+    timepanel_send_fault_increment();
+    timepanel_send_fault_increment();
+    if (mock_command != TIMEPANEL_COMMAND_FAULT || mock_value != 2) return 2;
+    timepanel_send_refusal_increment();
+    timepanel_send_refusal_increment();
+    if (mock_command != TIMEPANEL_COMMAND_REFUSAL || mock_value != 2) return 3;
+    timepanel_send_stop(2345);
+    if (mock_command != TIMEPANEL_COMMAND_STOP || mock_value != 2345) return 4;
+    // Result corrections after stopping still belong to the completed run.
+    timepanel_send_fault_increment();
+    if (mock_value != 3) return 5;
+    timepanel_send_refusal_increment();
+    if (mock_value != 3) return 6;
+    // A new run without a manual reset starts counting from one again.
+    timepanel_send_start(250);
+    if (mock_command != TIMEPANEL_COMMAND_START || mock_value != 250) return 7;
+    timepanel_send_fault_increment();
+    if (mock_command != TIMEPANEL_COMMAND_FAULT || mock_value != 1) return 8;
+    timepanel_send_refusal_increment();
+    if (mock_command != TIMEPANEL_COMMAND_REFUSAL || mock_value != 1) return 9;
+    // Suppressed starts during a parcours timer must preserve existing scores.
+    s_parcours_timer_active = true;
+    unsigned packets = mock_packet_count;
+    timepanel_send_start(0);
+    if (mock_packet_count != packets) return 10;
+    s_parcours_timer_active = false;
+    timepanel_send_fault_increment();
+    if (mock_value != 2) return 11;
+    timepanel_send_refusal_increment();
+    if (mock_value != 2) return 12;
+    timepanel_send_start(-1);
+    if (mock_command != TIMEPANEL_COMMAND_START || mock_value != 0) return 13;
+    timepanel_send_fault_increment();
+    if (mock_value != 1) return 14;
+    timepanel_send_refusal_increment();
+    if (mock_value != 1) return 15;
+    return 0;
+}
+'@
+Run-Test 'timepanel-scores-reset-on-start' (@($common, $timepanelProtocol, $timepanelMock, ($timepanelCode -join "`n"), $timepanelTests) -join "`n")
