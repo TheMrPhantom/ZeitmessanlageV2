@@ -491,3 +491,111 @@ int test_main(void) {
 }
 '@
 Run-Test 'timepanel-scores-reset-on-start' (@($common, $timepanelProtocol, $timepanelMock, ($timepanelCode -join "`n"), $timepanelTests) -join "`n")
+
+# Feed the real serial task a burst while it is waiting for input. Without an
+# interrupt-backed RX buffer, only the first 128 UART FIFO bytes survive.
+$pcSerial = Get-Content -Raw (Join-Path $repoRoot 'dogdog-controller/main/src/PcSerial.c')
+$serialMock = @'
+#define CONFIG_ESP_CONSOLE_UART 1
+#define CONFIG_ESP_CONSOLE_UART_NUM 0
+#define PC_SERIAL_LINE_MAX 192
+#define PC_SERIAL_RX_BUFFER_SIZE 2048
+#define EOF (-1)
+#define _IONBF 2
+#define stdin ((void *)1)
+#define ESP_OK 0
+#define ESP_ERROR_CHECK(expr) do { if ((expr) != ESP_OK) { ++mock_errors; return; } } while (0)
+static char input_bytes[1024], received_line[192];
+static size_t input_size, input_position, available_bytes;
+static int rx_capacity, install_calls, mock_errors, received_lines;
+static bool mock_running, input_delivered, driver_installed, vfs_buffered, fail_read_once, stream_at_eof;
+static void deliver_input(void) {
+    input_delivered = true;
+    available_bytes = input_size < (size_t)rx_capacity ? input_size : (size_t)rx_capacity;
+}
+int getchar(void) {
+    if (fail_read_once) { fail_read_once = false; stream_at_eof = true; return EOF; }
+    if (stream_at_eof) { mock_running = false; return EOF; }
+    if (!input_delivered) {
+        if (!vfs_buffered) return EOF;
+        deliver_input(); // Blocking input wakes when the host sends its burst.
+    }
+    if (input_position < available_bytes) return (unsigned char)input_bytes[input_position++];
+    mock_running = false;
+    return EOF;
+}
+void clearerr(void *stream) { if (stream != stdin) ++mock_errors; stream_at_eof = false; }
+int setvbuf(void *stream, char *buffer, int mode, size_t size) {
+    (void)buffer; (void)size;
+    if (stream != stdin || mode != _IONBF) ++mock_errors;
+    return 0;
+}
+void vTaskDelay(TickType_t ticks) {
+    (void)ticks;
+    if (!input_delivered) deliver_input();
+    else mock_running = false;
+}
+bool uart_is_driver_installed(int port) { if (port != 0) ++mock_errors; return driver_installed; }
+int uart_driver_install(int port, int rx_size, int tx_size, int events, void *queue, int flags) {
+    if (port != 0 || rx_size <= 128 || tx_size || events || queue || flags) ++mock_errors;
+    ++install_calls; driver_installed = true; rx_capacity = rx_size;
+    return ESP_OK;
+}
+void uart_vfs_dev_use_driver(int port) {
+    if (port != 0 || !driver_installed) ++mock_errors;
+    vfs_buffered = true;
+}
+static void process_line(char *line) {
+    ++received_lines;
+    size_t n = 0;
+    while (line[n] && n + 1 < sizeof(received_line)) { received_line[n] = line[n]; ++n; }
+    received_line[n] = 0;
+}
+static void reset_serial(bool installed) {
+    input_size = input_position = available_bytes = 0;
+    rx_capacity = installed ? PC_SERIAL_RX_BUFFER_SIZE : 128;
+    install_calls = mock_errors = received_lines = 0;
+    driver_installed = installed; vfs_buffered = false;
+    mock_running = true; input_delivered = false;
+    fail_read_once = stream_at_eof = false;
+    memset(received_line, 0, sizeof(received_line));
+}
+static void append_input(const char *text) {
+    while (*text && input_size < sizeof(input_bytes)) input_bytes[input_size++] = *text++;
+}
+'@
+$serialTask = (Read-Function $pcSerial 'Pc_Serial_Task').Replace('while (true)', 'while (mock_running)')
+$serialChecks = @'
+int test_main(void) {
+    // A valid command longer than the hardware FIFO must not lose its newline.
+    reset_serial(false);
+    append_input("competitor|Test|Starter|");
+    while (input_size < 175) input_bytes[input_size++] = 'D';
+    append_input("\r\n");
+    Pc_Serial_Task(NULL);
+    if (received_lines != 1 || received_line[174] != 'D' || received_line[175]) return 1;
+    if (install_calls != 1 || !vfs_buffered || mock_errors) return 2;
+
+    // Back-to-back short lines also exceed the hardware FIFO as a burst.
+    reset_serial(true);
+    for (int i = 0; i < 12; ++i) append_input("competitor|Test|Starter|Dog\r\n");
+    Pc_Serial_Task(NULL);
+    if (received_lines != 12 || install_calls || mock_errors) return 3;
+
+    // Once a line is too long, never execute a command embedded in its tail.
+    reset_serial(false);
+    for (int i = 0; i < PC_SERIAL_LINE_MAX; ++i) input_bytes[input_size++] = 'x';
+    append_input("competitor|Bad|Tail|Dog\r\ncompetitor|Good|Final|Dog\r\n");
+    Pc_Serial_Task(NULL);
+    if (received_lines != 1 || received_line[11] != 'G' || mock_errors) return 4;
+
+    // A transient EOF must not stop subsequent input for the lifetime of stdin.
+    reset_serial(false);
+    fail_read_once = true;
+    append_input("competitor|Test|Starter|Dog\r\n");
+    Pc_Serial_Task(NULL);
+    if (received_lines != 1 || mock_errors) return 5;
+    return 0;
+}
+'@
+Run-Test 'serial-uart-buffering-and-line-recovery' (@($common, $serialMock, $serialTask, $serialChecks) -join "`n")

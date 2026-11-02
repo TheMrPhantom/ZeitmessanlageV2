@@ -45,6 +45,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       chrome.action.setBadgeBackgroundColor({ color: "#0077ff" });
       chrome.runtime.sendMessage({ type: "STARTER_CHANGED", payload }).catch(() => {});
       sendResponse({ ok: true });
+    }).catch((error) => {
+      sendResponse({ ok: false, error: error.message });
     });
     return true;
   }

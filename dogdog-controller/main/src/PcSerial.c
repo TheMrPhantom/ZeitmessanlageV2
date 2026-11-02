@@ -1,14 +1,22 @@
 #include "PcSerial.h"
 #include "TimepanelClient.h"
 
+#include "sdkconfig.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#if CONFIG_ESP_CONSOLE_UART
+#include "driver/uart.h"
+#include "driver/uart_vfs.h"
+#endif
+
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
 #define PC_SERIAL_LINE_MAX 192
+#define PC_SERIAL_RX_BUFFER_SIZE 2048
 
 static const char *TAG = "PcSerial";
 
@@ -138,8 +146,24 @@ void Pc_Serial_Task(void *params)
 {
     (void)params;
 
+#if CONFIG_ESP_CONSOLE_UART
+    // The default console only polls the 128-byte hardware FIFO. At 115200
+    // baud it can overflow before the old 20 ms polling delay has elapsed.
+    // Interrupt-backed input keeps receiving while this task is descheduled.
+    if (!uart_is_driver_installed(CONFIG_ESP_CONSOLE_UART_NUM))
+    {
+        ESP_ERROR_CHECK(uart_driver_install(CONFIG_ESP_CONSOLE_UART_NUM,
+                                            PC_SERIAL_RX_BUFFER_SIZE,
+                                            0, 0, NULL, 0));
+    }
+    uart_vfs_dev_use_driver(CONFIG_ESP_CONSOLE_UART_NUM);
+#endif
+    setvbuf(stdin, NULL, _IONBF, 0);
+    clearerr(stdin);
+
     char line[PC_SERIAL_LINE_MAX] = {0};
     size_t line_len = 0;
+    bool discard_line = false;
 
     ESP_LOGI(TAG, "PC serial competitor receiver started");
 
@@ -149,6 +173,8 @@ void Pc_Serial_Task(void *params)
 
         if (value == EOF)
         {
+            // A transient console error must not leave stdio at EOF forever.
+            clearerr(stdin);
             vTaskDelay(pdMS_TO_TICKS(20));
             continue;
         }
@@ -156,12 +182,18 @@ void Pc_Serial_Task(void *params)
         char c = (char)value;
         if (c == '\r' || c == '\n')
         {
-            if (line_len > 0)
+            if (!discard_line && line_len > 0)
             {
                 line[line_len] = '\0';
                 process_line(line);
-                line_len = 0;
             }
+            line_len = 0;
+            discard_line = false;
+            continue;
+        }
+
+        if (discard_line)
+        {
             continue;
         }
 
@@ -171,8 +203,9 @@ void Pc_Serial_Task(void *params)
         }
         else
         {
-            ESP_LOGW(TAG, "Serial command too long, dropping line");
+            ESP_LOGE(TAG, "Serial command too long, dropping line until newline");
             line_len = 0;
+            discard_line = true;
         }
     }
 }

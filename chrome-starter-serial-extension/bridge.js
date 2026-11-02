@@ -1,11 +1,14 @@
 const BAUD_RATE = 115200;
+const WRITE_TIMEOUT_MS = 5000;
+const CLOSE_TIMEOUT_MS = 3000;
+const RECONNECT_DELAY_MS = 2000;
+const RECONNECT_ATTEMPTS = 5;
+const RECONNECT_STABLE_MS = 1000;
 
 let latestStarter = null;
-let port = null;
-let currentReader = null;
-let lastSentKey = "";
-let readAbortController = null;
-let readTask = null;
+let connection = null;
+let serialBusy = false;
+let reconnecting = null;
 let diagnosticSequence = 0;
 const diagnosticDownloads = new Map();
 
@@ -118,26 +121,54 @@ function updateStarterView() {
   dogName.textContent = latestStarter.dogName || "-";
   serialLine.textContent = buildSerialLine(latestStarter);
   pageStatus.textContent = latestStarter.pageTitle || latestStarter.pageUrl || "Starter detected";
-  sendButton.disabled = !port;
+  sendButton.disabled = !connection || connection.stopping;
 }
 
 function updateSerialView() {
-  const connected = Boolean(port);
-  serialStatus.textContent = connected ? "Serial connected" : "Serial disconnected";
+  const connected = Boolean(connection && !connection.stopping);
+  serialStatus.textContent = connected ? "Serial connected" : reconnecting ?
+    `Serial reconnecting (${reconnecting.attempt || 1}/${RECONNECT_ATTEMPTS})` : "Serial disconnected";
   serialStatus.classList.toggle("connected", connected);
   serialStatus.classList.toggle("disconnected", !connected);
-  connectButton.textContent = connected ? "Disconnect" : "Connect Serial";
+  connectButton.textContent = reconnecting ? "Cancel Reconnect" :
+    connection ? (connection.stopping ? "Retry Disconnect" : "Disconnect") : "Connect Serial";
+  connectButton.disabled = serialBusy || Boolean(connection?.closeTask && !reconnecting);
   sendButton.disabled = !connected || !latestStarter;
 }
 
-async function writeLine(line) {
-  if (!port?.writable) {
+async function waitForSerial(operation, timeout, message, signal) {
+  let timer;
+  let onAbort;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise((resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), timeout);
+        onAbort = () => reject(new Error("Serial connection closed."));
+        if (signal?.aborted) onAbort();
+        else signal?.addEventListener("abort", onAbort, { once: true });
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", onAbort);
+  }
+}
+
+async function writeLine(session, line) {
+  if (!session.port.writable || session.stopping) {
     throw new Error("Serial port is not connected.");
   }
 
-  const writer = port.writable.getWriter();
+  const writer = session.port.writable.getWriter();
   try {
-    await writer.write(new TextEncoder().encode(`${line}\r\n`));
+    await waitForSerial(writer.write(new TextEncoder().encode(`${line}\r\n`)),
+      WRITE_TIMEOUT_MS, "Serial write timed out after 5 seconds. Reconnect the controller.",
+      session.abortController.signal);
+  } catch (error) {
+    // Abort the underlying serial write, but do not wait for a stalled driver.
+    writer.abort(error).catch(() => {});
+    throw error;
   } finally {
     writer.releaseLock();
   }
@@ -149,30 +180,53 @@ async function sendCurrentStarter(reason = "manual") {
     return;
   }
 
-  const line = buildSerialLine(latestStarter);
-  await writeLine(line);
-  lastSentKey = starterKey(latestStarter);
-  appendLog(`${reason === "auto" ? "Auto-sent" : "Sent"}: ${line}`);
+  const session = connection;
+  if (!session || session.stopping) throw new Error("Serial port is not connected.");
+
+  // Only one writer may own the stream. Read the latest starter when the queued
+  // send starts, so rapid changes replace obsolete pending auto-sends.
+  const sending = session.sendQueue.then(async () => {
+    if (connection !== session || session.stopping || !latestStarter) return;
+    const starter = latestStarter;
+    const key = starterKey(starter);
+    if (reason === "auto" && (!autoSend.checked || key === session.lastSentKey)) return;
+
+    const line = buildSerialLine(starter);
+    try {
+      session.activeWrite = writeLine(session, line);
+      await session.activeWrite;
+    } catch (error) {
+      if (session.stopping) return;
+      // Keep cleanup separate from the send queue: shutdown cancels queued sends.
+      recoverSerialConnection(session, `Serial send failed: ${error.message}`);
+      throw error;
+    } finally {
+      session.activeWrite = null;
+    }
+    if (connection !== session || session.stopping) return;
+    // Record the snapshot actually written, never a starter that arrived mid-write.
+    session.lastSentKey = key;
+    appendLog(`${reason === "auto" ? "Auto-sent" : "Sent"}: ${line}`);
+  });
+  session.sendQueue = sending.catch(() => {});
+  await sending;
 }
 
 async function maybeAutoSend() {
-  if (!autoSend.checked || !port || !latestStarter) {
-    return;
-  }
-
-  const key = starterKey(latestStarter);
-  if (key === lastSentKey) {
+  if (!autoSend.checked || !connection || connection.stopping || !latestStarter) {
     return;
   }
 
   await sendCurrentStarter("auto");
 }
 
-async function readSerialOutput(serialPort, signal, diagnostics) {
+async function readSerialOutput(session, diagnostics) {
+  const serialPort = session.port;
+  const signal = session.abortController.signal;
   try {
     while (serialPort.readable && !signal.aborted) {
       const reader = serialPort.readable.getReader();
-      currentReader = reader;
+      session.reader = reader;
       try {
         while (!signal.aborted) {
           const { value, done } = await reader.read();
@@ -188,30 +242,65 @@ async function readSerialOutput(serialPort, signal, diagnostics) {
           appendLog(`Serial read stopped: ${error.message}`);
         }
       } finally {
-        currentReader = null;
+        session.reader = null;
         reader.releaseLock();
       }
     }
   } finally {
-    diagnostics.close(signal.aborted ? "serial disconnected by user" : "serial connection ended");
-    if (!signal.aborted && port === serialPort) {
-      port = null;
-      updateSerialView();
-      appendLog("Serial connection ended.");
-      await serialPort.close().catch(() => {});
-    }
+    diagnostics.close(session.endReason || "serial connection ended");
   }
 }
 
-async function connectSerial() {
-  if (!("serial" in navigator)) {
-    appendLog("Web Serial is not available in this Chrome profile.");
-    return;
-  }
+function closeSerialConnection(session, reason) {
+  if (session.closeTask) return session.closeTask;
+  session.stopping = true;
+  session.endReason = reason;
+  session.abortController.abort();
+  appendLog(reason);
+  session.closeTask = (async () => {
+    try {
+      // Cancellation wakes both read() and our pending write waiter. Their
+      // finally blocks release stream locks before port.close() is attempted.
+      const cancelling = session.reader?.cancel();
+      await waitForSerial(Promise.allSettled([cancelling, session.readTask, session.activeWrite]),
+        CLOSE_TIMEOUT_MS, "Serial stream cleanup timed out.");
+    } catch (error) {
+      appendLog(error.message);
+    }
+    try {
+      // Keep a pending close promise so Retry Disconnect never races close().
+      session.portCloseTask ??= session.port.close().catch((error) => {
+        session.portCloseTask = null;
+        throw error;
+      });
+      await waitForSerial(session.portCloseTask, CLOSE_TIMEOUT_MS, "Serial port close timed out.");
+      if (connection === session) connection = null;
+    } catch (error) {
+      // Losing this handle would strand an open port and make reconnect fail.
+      appendLog(`Could not close serial port: ${error.message} Use Retry Disconnect; if the port is missing, check USB and chrome://device-log.`);
+    } finally {
+      session.closeTask = null;
+      updateSerialView();
+    }
+  })();
+  updateSerialView();
+  return session.closeTask;
+}
 
-  const selectedPort = await navigator.serial.requestPort();
+async function openSerialConnection(selectedPort, retry = null) {
   await selectedPort.open({ baudRate: BAUD_RATE });
-  port = selectedPort;
+  const session = {
+    port: selectedPort, reader: null, activeWrite: null,
+    abortController: new AbortController(), sendQueue: Promise.resolve(), lastSentKey: "",
+    readTask: null, closeTask: null, portCloseTask: null, stopping: false
+  };
+  connection = session;
+  // open() cannot be aborted. A cancelled attempt must close its port as soon
+  // as it finishes, before starting reads or sending a starter.
+  if (retry?.cancelled) {
+    await closeSerialConnection(session, "Disconnected.");
+    return session;
+  }
   const portInfo = selectedPort.getInfo();
   const diagnostics = new ControllerDiagnostics({
     onLine: (line) => appendLog(`Controller: ${line}`),
@@ -220,40 +309,119 @@ async function connectSerial() {
     },
     onReport: (report) => { saveDiagnosticReport(report, portInfo); }
   });
-  readAbortController = new AbortController();
-  readTask = readSerialOutput(selectedPort, readAbortController.signal, diagnostics)
-    .catch((error) => appendLog(`Serial read failed: ${error.message}`));
+  session.readTask = readSerialOutput(session, diagnostics);
+  session.readTask.then(() => {
+    if (!session.stopping) recoverSerialConnection(session, "Serial connection ended.");
+  }, (error) => {
+    if (!session.stopping) recoverSerialConnection(session, `Serial read failed: ${error.message}`);
+  });
   updateSerialView();
   appendLog(`Connected at ${BAUD_RATE} baud.`);
   await maybeAutoSend();
+  return session;
+}
+
+function recoverSerialConnection(session, reason) {
+  if (connection !== session || session.stopping) return;
+  // Read, write, and USB errors may arrive together. An existing retry loop
+  // also owns failures during its new session, so its attempt limit persists.
+  if (reconnecting) {
+    closeSerialConnection(session, reason);
+    return;
+  }
+  const retry = { port: session.port, attempt: 0, cancelled: false, timer: null, wake: null, task: null };
+  reconnecting = retry;
+  const closing = closeSerialConnection(session, reason);
+  appendLog(`Will try to reconnect to the same serial port ${RECONNECT_ATTEMPTS} times, ${RECONNECT_DELAY_MS / 1000} seconds apart.`);
+  retry.task = reconnectSerial(retry, closing);
+}
+
+async function waitForReconnect(retry, delay, session = null) {
+  try {
+    const waiting = new Promise((resolve) => {
+      retry.wake = resolve;
+      retry.timer = setTimeout(() => resolve(true), delay);
+    });
+    return await Promise.race(session ? [waiting, session.readTask.then(() => false, () => false)] : [waiting]);
+  } finally {
+    clearTimeout(retry.timer);
+    retry.timer = retry.wake = null;
+  }
+}
+
+async function reconnectSerial(retry, closing) {
+  try {
+    await closing;
+    for (retry.attempt = 1; retry.attempt <= RECONNECT_ATTEMPTS; retry.attempt++) {
+      if (retry.cancelled) return;
+      updateSerialView();
+      await waitForReconnect(retry, RECONNECT_DELAY_MS);
+      if (retry.cancelled) return;
+      appendLog(`Serial reconnect attempt ${retry.attempt}/${RECONNECT_ATTEMPTS}.`);
+      try {
+        // Retry incomplete cleanup without overlapping close() or open().
+        if (connection) await closeSerialConnection(connection, "Closing serial port before reconnecting.");
+        if (retry.cancelled) return;
+        if (connection) throw new Error("The previous serial connection could not be closed.");
+        const session = await openSerialConnection(retry.port, retry);
+        if (retry.cancelled) return;
+        // A driver can open successfully and immediately lose its read stream.
+        // Keep the attempt budget until the new session has stayed up briefly.
+        const stable = !session.stopping && await waitForReconnect(retry, RECONNECT_STABLE_MS, session);
+        if (retry.cancelled) return;
+        if (!stable || connection !== session || session.stopping) throw new Error("Serial connection ended during reconnect.");
+        appendLog(`Serial reconnected on attempt ${retry.attempt}/${RECONNECT_ATTEMPTS}.`);
+        return;
+      } catch (error) {
+        if (!retry.cancelled) appendLog(`Serial reconnect attempt ${retry.attempt} failed: ${error.message}`);
+      }
+    }
+    const nextStep = connection ? "Use Retry Disconnect to finish closing the port." : "Use Connect Serial to try again.";
+    appendLog(`Automatic reconnect stopped after ${RECONNECT_ATTEMPTS} attempts. Check USB. ${nextStep}`);
+  } finally {
+    if (reconnecting === retry) reconnecting = null;
+    updateSerialView();
+  }
+}
+
+async function connectSerial() {
+  if (!("serial" in navigator)) {
+    appendLog("Web Serial is not available in this Chrome profile.");
+    return;
+  }
+  if (reconnecting) await disconnectSerial();
+  const selectedPort = await navigator.serial.requestPort();
+  await openSerialConnection(selectedPort);
 }
 
 async function disconnectSerial() {
-  readAbortController?.abort();
-  readAbortController = null;
-  await currentReader?.cancel().catch(() => {});
-  await readTask;
-  readTask = null;
-
-  if (port) {
-    await port.close();
-    port = null;
+  const retry = reconnecting;
+  if (retry) {
+    retry.cancelled = true;
+    clearTimeout(retry.timer);
+    retry.wake?.();
+    appendLog("Automatic reconnect cancelled.");
   }
-
-  updateSerialView();
-  appendLog("Disconnected.");
+  if (connection) await closeSerialConnection(connection, "Disconnected.");
+  await retry?.task;
 }
 
 async function toggleSerial() {
+  if (serialBusy || (connection?.closeTask && !reconnecting)) return;
+  serialBusy = true;
+  updateSerialView();
   try {
-    if (port) {
+    if (connection || reconnecting) {
       await disconnectSerial();
     } else {
       await connectSerial();
     }
   } catch (error) {
-    appendLog(`Serial error: ${error.message}`);
-    port = null;
+    const hint = error.name === "NotFoundError" ?
+      " If the port list is empty, check USB/Device Manager and chrome://device-log." : "";
+    appendLog(`Serial error: ${error.message}${hint}`);
+  } finally {
+    serialBusy = false;
     updateSerialView();
   }
 }
@@ -265,8 +433,18 @@ function applyStarter(starter) {
 }
 
 connectButton.addEventListener("click", toggleSerial);
+autoSend.addEventListener("change", () => {
+  maybeAutoSend().catch((error) => appendLog(`Auto-send failed: ${error.message}`));
+});
 sendButton.addEventListener("click", () => {
   sendCurrentStarter().catch((error) => appendLog(`Send failed: ${error.message}`));
+});
+
+navigator.serial?.addEventListener("disconnect", (event) => {
+  const disconnectedPort = event.port || event.target;
+  if (connection?.port === disconnectedPort) {
+    recoverSerialConnection(connection, "USB serial device disconnected.");
+  }
 });
 
 chrome.runtime.onMessage.addListener((message) => {

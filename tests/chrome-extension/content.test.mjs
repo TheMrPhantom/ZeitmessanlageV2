@@ -25,7 +25,7 @@ function checkScraper(html) {
   let poll;
   window.chrome = { runtime: { sendMessage(message) {
     messages.push(message);
-    return Promise.resolve();
+    return Promise.resolve({ ok: true });
   } } };
   window.setInterval = (callback) => { poll = callback; };
   window.setTimeout = (callback) => { timeouts.push(callback); };

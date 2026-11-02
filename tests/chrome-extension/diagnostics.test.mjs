@@ -167,7 +167,7 @@ function bridge({ downloadError, downloadState = "complete" } = {}) {
   const context = vm.createContext({
     TextDecoder, TextEncoder, AbortController,
     setTimeout: time.setTimer, clearTimeout: time.clearTimer,
-    navigator: { serial: { requestPort: async () => serialPort } },
+    navigator: { serial: { requestPort: async () => serialPort, addEventListener() {} } },
     document: { getElementById(id) {
       if (!elements.has(id)) elements.set(id, {
         textContent: "", checked: true, classList: { toggle() {} }, addEventListener() {}
@@ -234,6 +234,10 @@ test("manual disconnect, unplug and stream EOF flush pending diagnostics and rel
     await setImmediate();
     assert.equal(downloads.length, 1, `${end}: ${elements.get("log").textContent}`);
     assert.match(reportText(downloads[0]), /Backtrace: 0x40081234/);
+    if (end !== "disconnect") {
+      assert.equal(elements.get("serialStatus").textContent, "Serial reconnecting (1/5)");
+      await api.disconnectSerial();
+    }
     assert.equal(elements.get("serialStatus").textContent, "Serial disconnected");
     assert.equal(time.timers.size, 0);
   }

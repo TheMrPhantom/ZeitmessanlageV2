@@ -136,7 +136,18 @@ function sendCurrentStarter() {
   }
 
   lastSentKey = key;
-  chrome.runtime.sendMessage({ type: "STARTER_UPDATE", payload: starter }).catch(() => {});
+  const retry = (error) => {
+    if (lastSentKey === key) lastSentKey = "";
+    console.warn("DogDog starter update failed; the next scan will retry. If the extension was reloaded, refresh this page.", error);
+  };
+  try {
+    chrome.runtime.sendMessage({ type: "STARTER_UPDATE", payload: starter }).then((response) => {
+      if (!response?.ok) retry(new Error(response?.error || "Starter update was not acknowledged."));
+    }, retry);
+  } catch (error) {
+    // Reloading an extension invalidates existing content scripts synchronously.
+    retry(error);
+  }
 }
 
 function scheduleScan() {
