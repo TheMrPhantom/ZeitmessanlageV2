@@ -59,9 +59,17 @@ static void measure_station_ota_status(dogdog_ota_event_t event, void *user_ctx)
 {
     (void)user_ctx;
 
-    if (event == DOGDOG_OTA_EVENT_WIFI_FOUND)
+    if (event == DOGDOG_OTA_EVENT_WIFI_FOUND && buzzerQueue != NULL)
     {
         xQueueSend(buzzerQueue, &(int){Buzzer_INDICATE_OTA}, 0);
+    }
+    else if (event == DOGDOG_OTA_EVENT_UPDATING)
+    {
+        start_ota_led_pulse();
+    }
+    else if (event == DOGDOG_OTA_EVENT_NO_UPDATE || event == DOGDOG_OTA_EVENT_FAILED)
+    {
+        stop_ota_led_pulse();
     }
 }
 
@@ -83,18 +91,6 @@ void app_main(void)
     {
         ESP_LOGE(TAG, "Previous reset reason: %d", (int)reset_reason);
     }
-    if (dogdog_ota_update_pending())
-    {
-        const dogdog_ota_config_t pending_ota_config = {
-            .device_name = "measure-stations-lora",
-            .status_cb = NULL,
-            .user_ctx = NULL,
-            .restart_before_update = false,
-            .restart_delay_ms = 0,
-        };
-        ESP_ERROR_CHECK_WITHOUT_ABORT(dogdog_ota_check_and_update_in_task(&pending_ota_config, 0));
-    }
-
     ESP_LOGI(TAG, "Starting...");
     nvs_flash_init();
 
@@ -156,7 +152,22 @@ void app_main(void)
         ESP_LOGW(TAG, "Invalid sensor count %d; limiting to the 64-bit state field", num_fake_sensors);
         num_fake_sensors = num_fake_sensors < 1 ? 1 : 64;
     }
-    //-------
+    // Initialize LEDs before either OTA path, including the OTA-only reboot.
+    num_sensors = is_xrl ? 1 : 10;
+    init_led(num_sensors);
+
+    if (dogdog_ota_update_pending())
+    {
+        const dogdog_ota_config_t pending_ota_config = {
+            .device_name = "measure-stations-lora",
+            .status_cb = measure_station_ota_status,
+            .user_ctx = NULL,
+            .restart_before_update = false,
+            .restart_delay_ms = 0,
+        };
+        ESP_ERROR_CHECK_WITHOUT_ABORT(dogdog_ota_check_and_update_in_task(&pending_ota_config, 0));
+        stop_ota_led_pulse();
+    }
 
     // Cycle-count timestamps must be captured on the same core as the sensor task.
     ESP_ERROR_CHECK(xTaskCreatePinnedToCore(start_isr_service_tast, "StartISRServiceTask", 4048,
@@ -184,13 +195,13 @@ void app_main(void)
         .restart_delay_ms = 1200,
     };
     ESP_ERROR_CHECK_WITHOUT_ABORT(dogdog_ota_check_and_update_in_task(&ota_config, 0));
+    stop_ota_led_pulse();
 
     // gpio_install_isr_service(0);
 
     if (is_xrl)
     {
         triggerLevel = 1;
-        num_sensors = 1;
         int sensor_pin = getValue("sensor_pin");
         if (sensor_pin == 0)
         {
@@ -202,7 +213,6 @@ void app_main(void)
     else
     {
         triggerLevel = 0;
-        num_sensors = 10;
         sensorPins[0] = GPIO_NUM_15;
         sensorPins[1] = GPIO_NUM_16;
         sensorPins[2] = GPIO_NUM_17;
@@ -215,7 +225,6 @@ void app_main(void)
         sensorPins[9] = GPIO_NUM_40;
     }
 
-    init_led(num_sensors); // Pass the number of sensors as argument
     init_lora();
 
     set_all_leds(255, 0, 255); // Set all leds to purple while waiting for time sync

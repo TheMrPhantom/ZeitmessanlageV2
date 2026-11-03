@@ -7,5 +7,7 @@ void LED_Task(void *params);
 void init_led(int num_leds);
 void set_led(uint8_t led, uint8_t r, uint8_t g, uint8_t b);
 void set_all_leds(uint8_t r, uint8_t g, uint8_t b);
+void start_ota_led_pulse(void);
+void stop_ota_led_pulse(void);
 
 #endif // __MAIN_H

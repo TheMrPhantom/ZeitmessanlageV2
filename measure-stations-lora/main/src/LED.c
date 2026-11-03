@@ -20,12 +20,15 @@ int number_of_leds = 0;
 float brightness = 1;
 bool is_initialized = false;
 static SemaphoreHandle_t led_mutex;
+static TaskHandle_t ota_pulse_task_handle;
+static SemaphoreHandle_t ota_pulse_stopped;
 
 void init_led(int num_leds)
 {
     ESP_LOGI(TAG, "Initializing LED strip");
     led_mutex = xSemaphoreCreateMutex();
-    ESP_ERROR_CHECK(led_mutex != NULL ? ESP_OK : ESP_ERR_NO_MEM);
+    ota_pulse_stopped = xSemaphoreCreateBinary();
+    ESP_ERROR_CHECK(led_mutex != NULL && ota_pulse_stopped != NULL ? ESP_OK : ESP_ERR_NO_MEM);
     number_of_leds = num_leds;
     // LED strip general initialization, according to your led board design
     led_strip_config_t strip_config = {
@@ -52,6 +55,7 @@ void init_led(int num_leds)
     ESP_LOGI(TAG, "Created LED strip object with RMT backend");
     led_handle = led_strip;
     is_initialized = true;
+    set_all_leds(0, 0, 0);
 }
 
 void set_led(uint8_t led, uint8_t r, uint8_t g, uint8_t b)
@@ -87,4 +91,58 @@ void set_all_leds(uint8_t r, uint8_t g, uint8_t b)
     /* Refresh the strip to send data */
     ESP_ERROR_CHECK_WITHOUT_ABORT(led_strip_refresh(led_handle));
     xSemaphoreGive(led_mutex);
+}
+
+static void ota_led_pulse_task(void *params)
+{
+    (void)params;
+    int level = 16;
+    int step = 6;
+
+    do
+    {
+        // Fade turquoise (64, 224, 208) up and down over about 1.6 seconds.
+        set_all_leds(64 * level / 255, 224 * level / 255, 208 * level / 255);
+        level += step;
+        if (level >= 255)
+        {
+            level = 255;
+            step = -6;
+        }
+        else if (level <= 16)
+        {
+            level = 16;
+            step = 6;
+        }
+    } while (ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(20)) == 0);
+
+    set_all_leds(0, 0, 0);
+    xSemaphoreGive(ota_pulse_stopped);
+    vTaskDelete(NULL);
+}
+
+void start_ota_led_pulse(void)
+{
+    if (!is_initialized || ota_pulse_task_handle != NULL)
+    {
+        return;
+    }
+
+    ESP_ERROR_CHECK_WITHOUT_ABORT(xTaskCreate(ota_led_pulse_task, "OTA_LED", 3072,
+                                            NULL, 2, &ota_pulse_task_handle) == pdPASS
+                                     ? ESP_OK
+                                     : ESP_ERR_NO_MEM);
+}
+
+void stop_ota_led_pulse(void)
+{
+    if (ota_pulse_task_handle == NULL)
+    {
+        return;
+    }
+
+    xTaskNotifyGive(ota_pulse_task_handle);
+    // Wait for the last LED write before normal sensor colors can take over.
+    xSemaphoreTake(ota_pulse_stopped, portMAX_DELAY);
+    ota_pulse_task_handle = NULL;
 }
