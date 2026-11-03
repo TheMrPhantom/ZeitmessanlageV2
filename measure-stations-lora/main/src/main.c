@@ -191,7 +191,13 @@ void app_main(void)
     {
         triggerLevel = 1;
         num_sensors = 1;
-        sensorPins[0] = GPIO_NUM_47;
+        int sensor_pin = getValue("sensor_pin");
+        if (sensor_pin == 0)
+        {
+            sensor_pin = GPIO_NUM_47;
+            storeValue("sensor_pin", sensor_pin);
+        }
+        sensorPins[0] = sensor_pin;
     }
     else
     {
