@@ -1,3 +1,4 @@
+#define LOG_LOCAL_LEVEL ESP_LOG_INFO
 #include <stdio.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -5,6 +6,7 @@
 #include "led_strip.h"
 #include "esp_log.h"
 #include "esp_err.h"
+#include "soc/soc_caps.h"
 #include "LED.h"
 
 // GPIO assignment
@@ -13,6 +15,7 @@
 #define LED_STRIP_RMT_RES_HZ (10 * 1000 * 1000)
 
 static const char *TAG = "LED";
+static const char *OTA_TAG = "OTA_LED";
 led_strip_handle_t led_handle;
 bool led_on_off = false;
 
@@ -44,10 +47,15 @@ void init_led(int num_leds)
     led_strip_rmt_config_t rmt_config = {
         .clk_src = RMT_CLK_SRC_DEFAULT,        // different clock source can lead to different power consumption
         .resolution_hz = LED_STRIP_RMT_RES_HZ, // RMT counter clock frequency
-        .mem_block_symbols = 64,               // the memory size of each RMT channel, in words (4 bytes)
-        .flags = {
-            .with_dma = false, // DMA feature is available on chips like ESP32-S3/P4
-        }};
+#if SOC_RMT_SUPPORT_DMA
+        // Buffer the whole ten-LED frame so Wi-Fi cannot delay a mid-frame refill.
+        .mem_block_symbols = 256,
+        .flags.with_dma = true,
+#else
+        .mem_block_symbols = 64,
+        .flags.with_dma = false,
+#endif
+    };
 
     // LED Strip object handle
     led_strip_handle_t led_strip;
@@ -96,8 +104,8 @@ void set_all_leds(uint8_t r, uint8_t g, uint8_t b)
 static void ota_led_pulse_task(void *params)
 {
     (void)params;
-    int level = 16;
-    int step = 6;
+    int level = 255;
+    int step = -6;
 
     do
     {
@@ -123,15 +131,27 @@ static void ota_led_pulse_task(void *params)
 
 void start_ota_led_pulse(void)
 {
-    if (!is_initialized || ota_pulse_task_handle != NULL)
+    if (!is_initialized)
+    {
+        ESP_LOGE(OTA_TAG, "Cannot start OTA pulse before LED initialization");
+        return;
+    }
+    if (ota_pulse_task_handle != NULL)
     {
         return;
     }
 
-    ESP_ERROR_CHECK_WITHOUT_ABORT(xTaskCreate(ota_led_pulse_task, "OTA_LED", 3072,
-                                            NULL, 2, &ota_pulse_task_handle) == pdPASS
+    esp_log_level_set(OTA_TAG, ESP_LOG_INFO);
+    set_all_leds(64, 224, 208);
+    // Run above the OTA worker (priority 6), even while its download stays busy.
+    ESP_ERROR_CHECK_WITHOUT_ABORT(xTaskCreate(ota_led_pulse_task, "OTA_LED", 4096,
+                                            NULL, 7, &ota_pulse_task_handle) == pdPASS
                                      ? ESP_OK
                                      : ESP_ERR_NO_MEM);
+    if (ota_pulse_task_handle != NULL)
+    {
+        ESP_LOGI(OTA_TAG, "Turquoise pulse started on %d LEDs", number_of_leds);
+    }
 }
 
 void stop_ota_led_pulse(void)
@@ -145,4 +165,5 @@ void stop_ota_led_pulse(void)
     // Wait for the last LED write before normal sensor colors can take over.
     xSemaphoreTake(ota_pulse_stopped, portMAX_DELAY);
     ota_pulse_task_handle = NULL;
+    ESP_LOGI(OTA_TAG, "Turquoise pulse stopped");
 }

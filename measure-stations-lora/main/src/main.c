@@ -59,17 +59,26 @@ static void measure_station_ota_status(dogdog_ota_event_t event, void *user_ctx)
 {
     (void)user_ctx;
 
-    if (event == DOGDOG_OTA_EVENT_WIFI_FOUND && buzzerQueue != NULL)
+    switch (event)
     {
-        xQueueSend(buzzerQueue, &(int){Buzzer_INDICATE_OTA}, 0);
-    }
-    else if (event == DOGDOG_OTA_EVENT_UPDATING)
-    {
+    case DOGDOG_OTA_EVENT_WIFI_FOUND:
+        if (buzzerQueue != NULL)
+        {
+            xQueueSend(buzzerQueue, &(int){Buzzer_INDICATE_OTA}, 0);
+        }
         start_ota_led_pulse();
-    }
-    else if (event == DOGDOG_OTA_EVENT_NO_UPDATE || event == DOGDOG_OTA_EVENT_FAILED)
-    {
+        break;
+    case DOGDOG_OTA_EVENT_CONNECTING:
+    case DOGDOG_OTA_EVENT_UPDATING:
+    case DOGDOG_OTA_EVENT_RESTARTING_FOR_UPDATE:
+        start_ota_led_pulse();
+        break;
+    case DOGDOG_OTA_EVENT_NO_UPDATE:
+    case DOGDOG_OTA_EVENT_FAILED:
         stop_ota_led_pulse();
+        break;
+    default:
+        break;
     }
 }
 
