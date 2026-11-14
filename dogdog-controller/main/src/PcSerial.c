@@ -1,11 +1,9 @@
 #include "PcSerial.h"
-#include "SevenSegment.h"
 #include "TimepanelClient.h"
 
 #include "sdkconfig.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
 #include "freertos/task.h"
 
 #if CONFIG_ESP_CONSOLE_UART
@@ -21,7 +19,6 @@
 #define PC_SERIAL_RX_BUFFER_SIZE 2048
 
 static const char *TAG = "PcSerial";
-extern QueueHandle_t sevenSegmentQueue;
 
 static char *trim_field(char *value)
 {
@@ -131,20 +128,6 @@ static void handle_competitor_line(char *line)
              last_name,
              dog_name);
     timepanel_set_competitor(first_name, last_name, dog_name);
-
-    SevenSegmentDisplay display = {
-        .type = SEVEN_SEGMENT_COMPETITOR,
-    };
-    snprintf(display.competitor.first_name, sizeof(display.competitor.first_name),
-             "%.*s", (int)sizeof(display.competitor.first_name) - 1, first_name);
-    snprintf(display.competitor.last_name, sizeof(display.competitor.last_name),
-             "%.*s", (int)sizeof(display.competitor.last_name) - 1, last_name);
-    snprintf(display.competitor.dog_name, sizeof(display.competitor.dog_name),
-             "%.*s", (int)sizeof(display.competitor.dog_name) - 1, dog_name);
-    if (xQueueSend(sevenSegmentQueue, &display, pdMS_TO_TICKS(500)) != pdTRUE)
-    {
-        ESP_LOGW(TAG, "Could not queue competitor for the timing screen");
-    }
 }
 
 static void process_line(char *line)
