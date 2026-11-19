@@ -1,7 +1,37 @@
 | Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-C5 | ESP32-C6 | ESP32-H2 | ESP32-P4 | ESP32-S2 | ESP32-S3 |
 | ----------------- | ----- | -------- | -------- | -------- | -------- | -------- | -------- | -------- | -------- |
 
-# _Sample project_
+# Dogdog controller
+
+## USB keyboard delivery
+
+Keyboard output is serialized across tasks. A key is confirmed internally only
+after TinyUSB completes both its key-down and key-release USB transfers. Reports
+wait for the endpoint to become ready and use bounded retries for rejected or
+failed transfers. Disconnects and missing completion callbacks return failure
+within bounded waits.
+Webmelden's Tab, time text, and Enter are sent as one sequence that stops at the
+first unconfirmed key.
+
+Retries resend the same held-key or released-key state, without inserting a
+release between repeated key-down reports. A complete press is never replayed,
+because the PC may already have received it. Recovery sends only key-release
+reports to avoid a stuck key. Failures are recorded in firmware logs; no delivery
+status is shown on the controller display. This confirms USB delivery to the PC
+and does not require PC software or check the destination text field.
+
+Host regression checks (PowerShell with LLVM/Clang):
+
+```powershell
+./tests/keyboard-regressions/run.ps1
+./tests/firmware-crash-regressions/run.ps1
+```
+
+Build the firmware from this directory with ESP-IDF 5.5.1 and `idf.py build`.
+USB timing, unplug/replug recovery, and keyboard behavior still require board
+testing with a PC.
+
+## Original project template
 
 (See the README.md file in the upper level 'examples' directory for more information about examples.)
 

@@ -907,6 +907,8 @@ void add_to_history()
     char *time_text = lv_label_get_text(top_label);
     int64_t timepanel_time_ms = displayed_time_text_to_ms(time_text);
     bool send_timepanel_stop = !isDis;
+    bool send_keyboard_time = false;
+    char keyboard_time_text[32];
     // get faults and refusal from their labels
     char *fault_text = lv_label_get_text(faults);
     char *refusal_text = lv_label_get_text(refusals);
@@ -934,20 +936,9 @@ void add_to_history()
         }
         else if (strcmp(pc_programm, "webmelden") == 0)
         {
-            // the programm is webmelden
-            // send time text to keyboard
-            if (!isDis)
-            {
-                sendKey(HID_KEY_TAB);
-                sendText(time_text);
-                sendKey(HID_KEY_ENTER);
-            }
-            else
-            {
-                sendKey(HID_KEY_TAB);
-                // sendText("15.00");
-                sendKey(HID_KEY_ENTER);
-            }
+            // Snapshot LVGL's text before releasing its lock for USB waits.
+            snprintf(keyboard_time_text, sizeof(keyboard_time_text), "%s", isDis ? "" : time_text);
+            send_keyboard_time = true;
         }
     }
     else if (IS_THS_MODE)
@@ -1006,6 +997,12 @@ void add_to_history()
     }
 
     lvgl_port_unlock();
+
+    if (send_keyboard_time)
+    {
+        // Keep the complete entry together and stop after an unconfirmed report.
+        sendTextWithKeys(HID_KEY_TAB, keyboard_time_text, HID_KEY_ENTER);
+    }
 
     if (send_timepanel_stop)
     {

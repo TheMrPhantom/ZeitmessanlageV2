@@ -223,6 +223,7 @@ QueueHandle_t xQueueCreate(unsigned count, size_t size) { (void)count; sizes[++q
 QueueSetHandle_t xQueueCreateSet(unsigned count) { (void)count; return 99; }
 BaseType_t xQueueAddToSet(QueueHandle_t queue, QueueSetHandle_t set) { return queue && set ? pdPASS : pdFAIL; }
 int gpio_get_level(int pin) { (void)pin; return level; }
+TickType_t xTaskGetTickCountFromISR(void) { return 123; }
 BaseType_t xQueueSendFromISR(QueueHandle_t queue, const void *item, void *wake) {
     (void)wake; if (queue != buttonInterruptQueue) { ++errors; return pdFAIL; }
     memcpy(&delivered, item, sizes[queue]); return pdTRUE;
@@ -235,7 +236,7 @@ int test_main(void) {
     for (int i = 0; i < 1000; ++i) {
         level = i & 1; delivered = (sensor_interrupt_t){0};
         gpio_interrupt_handler((void *)(intptr_t)47);
-        if (delivered.pinNumber != 47 || delivered.edge != (level ? GPIO_INTR_POSEDGE : GPIO_INTR_NEGEDGE)) return 2;
+        if (delivered.pinNumber != 47 || delivered.edge != (level ? GPIO_INTR_POSEDGE : GPIO_INTR_NEGEDGE) || delivered.captured_at != 123) return 2;
     }
     return errors ? 3 : 0;
 }
@@ -243,3 +244,161 @@ int test_main(void) {
 # ESP32 pointers and int are both 32 bits; widen this cast for the 64-bit host.
 $buttonIsr = (Read-Function $buttonSource 'gpio_interrupt_handler').Replace('(int)args', '(int)(intptr_t)args')
 Run-Test 'controller-button-queue-keeps-both-edge-fields' (@($common, $types, $displayType, $buttonType, $buttonMock, "void initialize_queues(void) {`n$mainQueues}`n", $buttonIsr, $buttonChecks) -join "`n")
+
+$buttonState = [regex]::Match($buttonSource, '(?s)typedef struct\s*\{\s*bool pressed;.*?} button_input_state_t;').Value
+$buttonDefines = [regex]::Matches($displayHeader, '(?m)^#define SEVEN_SEGMENT_[^\r\n]+') | ForEach-Object { $_.Value }
+$buttonTaskMock = @'
+#undef ESP_LOGI
+#define ESP_LOGI(tag, ...) mock_log(__VA_ARGS__)
+static void mock_log(const char *format, ...) { (void)format; }
+#define pdFALSE 0
+#define IS_THS_MODE 0
+#define IS_SIMPLE_AGILITY_MODE 0
+#define GPIO_INTR_NEGEDGE 2
+#define GPIO_INTR_POSEDGE 1
+#define BUTTON_INPUT_GPIO_TYPE_ACTIVATE 15
+#define BUTTON_INPUT_GPIO_TYPE_DIS 18
+#define BUTTON_INPUT_GPIO_TYPE_FAULT 16
+#define BUTTON_INPUT_GPIO_TYPE_REFUSAL 8
+#define BUTTON_INPUT_GPIO_TYPE_RESET 17
+#define BUTTON_GLOW_GPIO_TYPE_ACTIVATE 46
+#define BUTTON_GLOW_GPIO_TYPE_DIS 45
+#define BUTTON_GLOW_GPIO_TYPE_FAULT 37
+#define BUTTON_GLOW_GPIO_TYPE_REFUSAL 48
+#define BUTTON_GLOW_GPIO_TYPE_RESET 41
+#define BUZZER_BUTTON_PRESS 6
+#define TIMER_RESTART_LAST_TRIGGER 1
+#define HID_KEY_D 7
+#define HID_KEY_N 17
+#define HID_KEY_S 22
+#define HID_KEY_F 9
+#define HID_KEY_V 25
+#define HID_KEY_R 21
+static const int sensorButtonPins[] = {15, 18, 16, 8, 17};
+#define BUTTON_COUNT (sizeof(sensorButtonPins) / sizeof(sensorButtonPins[0]))
+typedef struct { int state, pinNumber; } glow_state_t;
+static QueueHandle_t buttonInterruptQueue = 1, buttonQueue = 2, resetQueue = 3;
+static QueueHandle_t sevenSegmentQueue = 4, buzzerQueue = 5;
+static TaskHandle_t sevenSegmentTask = 6;
+static char *pc_programm;
+static bool sensors_active = true, mock_running;
+static int mock_mode, mock_idle, mock_index, mock_count, mock_keys[32];
+static int mock_resets, mock_restarts, mock_countdowns;
+static int mock_levels[50];
+static TickType_t mock_tick;
+static sensor_interrupt_t mock_events[8];
+TickType_t xTaskGetTickCount(void) { return mock_tick; }
+int gpio_get_level(int pin) { return mock_levels[pin]; }
+void init_button_pins(void) {}
+void vTaskDelay(TickType_t ticks) { (void)ticks; }
+BaseType_t xTaskNotifyGive(TaskHandle_t task) { (void)task; return pdTRUE; }
+BaseType_t sendKey(uint8_t key) { ++mock_keys[key]; return pdTRUE; }
+void timepanel_send_dis(void) {}
+void timepanel_send_fault_increment(void) {}
+void timepanel_send_refusal_increment(void) {}
+void timepanel_send_parcours_timer(uint32_t time) { (void)time; }
+DogDogPacket *create_dogdog_packet_from_request_final_time_information(int id) { (void)id; return NULL; }
+BaseType_t send_dogdog_packet(DogDogPacket *packet) { (void)packet; return pdTRUE; }
+int printf(const char *format, ...) { (void)format; return 0; }
+int strcmp(const char *left, const char *right) {
+    while (*left && *left == *right) { ++left; ++right; }
+    return (unsigned char)*left - (unsigned char)*right;
+}
+BaseType_t xQueueSend(QueueHandle_t queue, const void *item, TickType_t wait) {
+    (void)wait;
+    if (queue == resetQueue) {
+        if (*(const int *)item == TIMER_RESTART_LAST_TRIGGER) ++mock_restarts;
+        else ++mock_resets;
+    }
+    if (queue == sevenSegmentQueue && ((const SevenSegmentDisplay *)item)->type == SEVEN_SEGMENT_COUNTDOWN) ++mock_countdowns;
+    return pdTRUE;
+}
+BaseType_t xQueueReceive(QueueHandle_t queue, void *item, TickType_t wait) {
+    (void)queue;
+    if (wait == portMAX_DELAY) {
+        *(sensor_interrupt_t *)item = (sensor_interrupt_t){15, GPIO_INTR_POSEDGE, 1000};
+        return pdTRUE;
+    }
+    if (mock_index < mock_count) {
+        if (!mock_index) {
+            mock_tick = mock_mode == 2 ? 3500 : (mock_mode == 0 || mock_mode == 5 ? 4000 : 2300);
+            if (mock_mode == 2) mock_levels[17] = 0;
+            if (mock_mode == 4 || mock_mode == 5) mock_levels[18] = 0;
+        }
+        *(sensor_interrupt_t *)item = mock_events[mock_index++];
+        return pdTRUE;
+    }
+    if (!wait) return pdFALSE;
+    if (mock_mode == 2 && mock_idle++ == 0) {
+        mock_levels[17] = 1; mock_tick = 3600; return pdFALSE;
+    }
+    if (mock_mode == 2 && mock_idle == 2) {
+        mock_tick = 4100;
+        *(sensor_interrupt_t *)item = (sensor_interrupt_t){17, GPIO_INTR_NEGEDGE, 4000};
+        return pdTRUE;
+    }
+    if ((mock_mode == 4 || mock_mode == 5) && mock_idle++ == 0) {
+        mock_levels[18] = 1; mock_tick = mock_mode == 5 ? 4100 : 2400; return pdFALSE;
+    }
+    mock_running = false;
+    return pdFALSE;
+}
+static void reset_buttons(int mode) {
+    mock_mode = mode; mock_tick = 1000; mock_idle = mock_index = 0;
+    mock_running = true; sensors_active = true;
+    mock_resets = mock_restarts = mock_countdowns = 0;
+    memset(mock_keys, 0, sizeof(mock_keys));
+    for (int i = 0; i < 50; ++i) mock_levels[i] = 1;
+    mock_count = 1;
+    mock_events[0] = (sensor_interrupt_t){18, GPIO_INTR_NEGEDGE, 2000};
+    if (mode == 0) {
+        mock_count = 2; mock_events[1] = (sensor_interrupt_t){18, GPIO_INTR_POSEDGE, 2050};
+    }
+    if (mode == 2) mock_events[0].pinNumber = 17;
+    if (mode == 3) {
+        mock_count = 2; mock_events[0].pinNumber = 16;
+        mock_events[1] = (sensor_interrupt_t){8, GPIO_INTR_NEGEDGE, 2000};
+    }
+    if (mode == 4) {
+        mock_count = 2; mock_events[1] = (sensor_interrupt_t){18, GPIO_INTR_NEGEDGE, 2300};
+    }
+    if (mode == 5) {
+        mock_count = 3;
+        mock_events[1] = (sensor_interrupt_t){18, GPIO_INTR_POSEDGE, 2001};
+        mock_events[2] = (sensor_interrupt_t){18, GPIO_INTR_NEGEDGE, 2002};
+    }
+}
+'@
+$buttonTaskCode = foreach ($name in @('accept_button_transition', 'show_dis_press_feedback', 'confirm_dis_press_feedback', 'revert_dis_press_feedback', 'send_dis_key_to_pc', 'Button_Input_Task')) {
+    (Read-Function $buttonSource $name).Replace('while (true)', 'while (mock_running)')
+}
+$buttonRecoveryChecks = @'
+int test_main(void) {
+    // Both edges captured during a slow USB send still produce one short DIS.
+    reset_buttons(0); Button_Input_Task(NULL);
+    if (mock_keys[HID_KEY_D] != 1 || mock_restarts) return 1;
+    // A dropped release IRQ is recovered by GPIO reconciliation.
+    reset_buttons(1); Button_Input_Task(NULL);
+    if (mock_keys[HID_KEY_D] != 1 || mock_restarts) return 2;
+    // A missed reset release must rearm the button after a countdown hold.
+    reset_buttons(2); Button_Input_Task(NULL);
+    if (mock_resets != 2 || mock_countdowns != 1) return 3;
+    // Simultaneous independent buttons must not suppress one another.
+    reset_buttons(3); Button_Input_Task(NULL);
+    if (mock_keys[HID_KEY_F] != 1 || mock_keys[HID_KEY_R] != 1) return 4;
+    // Repeated held-button edges cannot repeat the action.
+    reset_buttons(4); Button_Input_Task(NULL);
+    if (mock_keys[HID_KEY_D] != 1 || mock_restarts) return 5;
+    // Captured contact bounce at the start of a hold cannot trigger short DIS.
+    reset_buttons(5); Button_Input_Task(NULL);
+    if (mock_keys[HID_KEY_D] || mock_restarts != 1) return 8;
+    // Capture-time ordering and debounce survive tick rollover.
+    button_input_state_t state = {.last_press = UINT32_MAX - 200, .observed_at = UINT32_MAX - 100};
+    sensor_interrupt_t event = {18, GPIO_INTR_NEGEDGE, 150};
+    if (!accept_button_transition(&state, &event)) return 6;
+    event = (sensor_interrupt_t){18, GPIO_INTR_POSEDGE, 100};
+    if (accept_button_transition(&state, &event) || !state.pressed) return 7;
+    return 0;
+}
+'@
+Run-Test 'controller-button-queued-presses-and-release-recovery' (@($common, $types, $displayType, $buttonType, $buttonState, ($buttonDefines -join "`n"), $buttonTaskMock, ($buttonTaskCode -join "`n"), $buttonRecoveryChecks) -join "`n")

@@ -320,7 +320,7 @@ void app_main(void)
     ESP_LOGI(TAG, "Starting...");
 
     sensorInterruptQueue = xQueueCreate(1, sizeof(int));
-    buttonInterruptQueue = xQueueCreate(1, sizeof(sensor_interrupt_t));
+    buttonInterruptQueue = xQueueCreate(5, sizeof(sensor_interrupt_t));
     buttonQueue = xQueueCreate(15, sizeof(glow_state_t));
     resetQueue = xQueueCreate(1, sizeof(int));
     triggerQueue = xQueueCreate(1, sizeof(TimerTrigger));

@@ -41,6 +41,51 @@ const int sensorButtonPins[] = {BUTTON_INPUT_GPIO_TYPE_ACTIVATE,
                                 BUTTON_INPUT_GPIO_TYPE_REFUSAL,
                                 BUTTON_INPUT_GPIO_TYPE_RESET};
 
+#define BUTTON_COUNT (sizeof(sensorButtonPins) / sizeof(sensorButtonPins[0]))
+
+typedef struct
+{
+    bool pressed;
+    TickType_t last_press;
+    TickType_t observed_at;
+} button_input_state_t;
+
+static bool accept_button_transition(button_input_state_t *state, const sensor_interrupt_t *event)
+{
+    // A GPIO reconciliation can already have observed a newer state by the
+    // time a delayed interrupt reaches the queue.
+    if ((int32_t)(event->captured_at - state->observed_at) < 0)
+    {
+        return false;
+    }
+    state->observed_at = event->captured_at;
+
+    bool pressed = event->edge == GPIO_INTR_NEGEDGE;
+    if (pressed == state->pressed)
+    {
+        return false;
+    }
+    if (!pressed && state->pressed &&
+        (TickType_t)(event->captured_at - state->last_press) < pdMS_TO_TICKS(3) &&
+        gpio_get_level(event->pinNumber) == 0)
+    {
+        // Do not turn contact bounce captured at the start of a held DIS
+        // button into an early short press when the task catches up later.
+        return false;
+    }
+    state->pressed = pressed;
+
+    if (pressed)
+    {
+        if ((TickType_t)(event->captured_at - state->last_press) < pdMS_TO_TICKS(300))
+        {
+            return false;
+        }
+        state->last_press = event->captured_at;
+    }
+    return true;
+}
+
 bool sensors_active = false;
 extern char *pc_programm;
 
@@ -94,6 +139,7 @@ static void IRAM_ATTR gpio_interrupt_handler(void *args)
     sensor_interrupt_t sensor_interrupt;
     sensor_interrupt.pinNumber = pinNumber;
     sensor_interrupt.edge = edge;
+    sensor_interrupt.captured_at = xTaskGetTickCountFromISR();
     xQueueSendFromISR(buttonInterruptQueue, &sensor_interrupt, NULL);
 }
 
@@ -130,12 +176,8 @@ void Button_Input_Task(void *params)
 
     sensor_interrupt_t sensor_interrupt;
 
-    timeval_t last_button_interrupt;
-    timeval_t reset_pressed;
-    timeval_t dis_pressed;
-    gettimeofday(&last_button_interrupt, NULL);
-    gettimeofday(&reset_pressed, NULL);
-    gettimeofday(&dis_pressed, NULL);
+    TickType_t reset_pressed = xTaskGetTickCount();
+    TickType_t dis_pressed = reset_pressed;
     int countdown_sent = 1;
     bool reset_ignore_until_release = false;
     bool dis_press_pending = false;
@@ -170,23 +212,60 @@ void Button_Input_Task(void *params)
 
     xTaskNotifyGive(sevenSegmentTask);
 
+    button_input_state_t button_state[BUTTON_COUNT];
+    for (size_t i = 0; i < BUTTON_COUNT; i++)
+    {
+        // The button used to choose the PC program must be released before it
+        // can perform its normal action.
+        TickType_t now = xTaskGetTickCount();
+        button_state[i].pressed = gpio_get_level(sensorButtonPins[i]) == 0;
+        button_state[i].last_press = now - pdMS_TO_TICKS(300);
+        button_state[i].observed_at = now;
+    }
+
     while (true)
     {
-        if (xQueueReceive(buttonInterruptQueue, &sensor_interrupt, pdMS_TO_TICKS(500)))
+        bool queued_event = xQueueReceive(buttonInterruptQueue, &sensor_interrupt, pdMS_TO_TICKS(20)) == pdTRUE;
+        if (queued_event)
         {
-            ESP_LOGI(TAG, "Checking interrupt of Pin: %i with state %i", sensor_interrupt.pinNumber, sensor_interrupt.edge);
-
             vTaskDelay(pdMS_TO_TICKS(3));
-            timeval_t now;
-            gettimeofday(&now, NULL);
+        }
 
-            if (gpio_get_level(sensor_interrupt.pinNumber) == 1 && sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_RESET && reset_ignore_until_release)
+        // Consume captured edges before sampling GPIOs, so a short press and
+        // release queued during a blocking USB transfer both remain visible.
+        size_t poll_index = 0;
+        while (queued_event || poll_index < BUTTON_COUNT)
+        {
+            sensor_interrupt_t event = sensor_interrupt;
+            if (!queued_event)
+            {
+                event.pinNumber = sensorButtonPins[poll_index++];
+                event.edge = gpio_get_level(event.pinNumber) == 0 ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE;
+                event.captured_at = xTaskGetTickCount();
+            }
+            else
+            {
+                queued_event = xQueueReceive(buttonInterruptQueue, &sensor_interrupt, 0) == pdTRUE;
+            }
+
+            size_t i = 0;
+            while (i < BUTTON_COUNT && sensorButtonPins[i] != event.pinNumber)
+            {
+                i++;
+            }
+            if (i == BUTTON_COUNT || !accept_button_transition(&button_state[i], &event))
+            {
+                continue;
+            }
+
+            ESP_LOGI(TAG, "Button transition on Pin: %i with state %i", event.pinNumber, event.edge);
+
+            if (event.edge == GPIO_INTR_POSEDGE && event.pinNumber == BUTTON_INPUT_GPIO_TYPE_RESET && reset_ignore_until_release)
             {
                 reset_ignore_until_release = false;
-                gettimeofday(&last_button_interrupt, NULL);
                 ESP_LOGI(TAG, "Reset release after countdown");
             }
-            else if (gpio_get_level(sensor_interrupt.pinNumber) == 1 && sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_DIS && dis_press_pending)
+            else if (event.edge == GPIO_INTR_POSEDGE && event.pinNumber == BUTTON_INPUT_GPIO_TYPE_DIS && dis_press_pending)
             {
                 if (!dis_long_press_sent)
                 {
@@ -199,13 +278,11 @@ void Button_Input_Task(void *params)
                 dis_press_pending = false;
                 dis_feedback_shown = false;
             }
-            else if (gpio_get_level(sensor_interrupt.pinNumber) == 0 && (TIME_US(now) - TIME_US(last_button_interrupt) > 300000))
+            else if (event.edge == GPIO_INTR_NEGEDGE)
             {
-                gettimeofday(&last_button_interrupt, NULL);
+                ESP_LOGI(TAG, "Confirmed interrupt of Pin: %i", event.pinNumber);
 
-                ESP_LOGI(TAG, "Confirmed interrupt of Pin: %i", sensor_interrupt.pinNumber);
-
-                if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_ACTIVATE)
+                if (event.pinNumber == BUTTON_INPUT_GPIO_TYPE_ACTIVATE)
                 {
                     if (IS_THS_MODE && sensors_active)
                     {
@@ -255,7 +332,7 @@ void Button_Input_Task(void *params)
                     glow_state.pinNumber = BUTTON_GLOW_GPIO_TYPE_DIS;
                     xQueueSend(buttonQueue, &glow_state, pdMS_TO_TICKS(50));
                 }
-                else if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_RESET)
+                else if (event.pinNumber == BUTTON_INPUT_GPIO_TYPE_RESET)
                 {
                     if (reset_ignore_until_release)
                     {
@@ -267,7 +344,7 @@ void Button_Input_Task(void *params)
                     glow_state.state = 0;
                     glow_state.pinNumber = BUTTON_GLOW_GPIO_TYPE_RESET;
 
-                    gettimeofday(&reset_pressed, NULL);
+                    reset_pressed = event.captured_at;
                     countdown_sent = 0;
 
                     xQueueSend(buttonQueue, &glow_state, pdMS_TO_TICKS(50));
@@ -294,7 +371,7 @@ void Button_Input_Task(void *params)
                 {
                     if (sensors_active)
                     {
-                        if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_FAULT)
+                        if (event.pinNumber == BUTTON_INPUT_GPIO_TYPE_FAULT)
                         {
                             BaseType_t result = sendKey(HID_KEY_F);
                             timepanel_send_fault_increment();
@@ -304,7 +381,7 @@ void Button_Input_Task(void *params)
                             xQueueSend(buzzerQueue, &(int){BUZZER_BUTTON_PRESS}, 0);
                             ESP_LOGI(TAG, "Result of sending key: %i", result);
                         }
-                        else if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_REFUSAL)
+                        else if (event.pinNumber == BUTTON_INPUT_GPIO_TYPE_REFUSAL)
                         {
                             BaseType_t result = pdFALSE;
                             if (IS_SIMPLE_AGILITY_MODE || IS_THS_MODE)
@@ -323,9 +400,9 @@ void Button_Input_Task(void *params)
                             xQueueSend(buzzerQueue, &(int){BUZZER_BUTTON_PRESS}, 0);
                             ESP_LOGI(TAG, "Result of sending key: %i", result);
                         }
-                        else if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_DIS)
+                        else if (event.pinNumber == BUTTON_INPUT_GPIO_TYPE_DIS)
                         {
-                            gettimeofday(&dis_pressed, NULL);
+                            dis_pressed = event.captured_at;
                             dis_press_pending = true;
                             dis_long_press_sent = false;
                             show_dis_press_feedback();
@@ -334,9 +411,9 @@ void Button_Input_Task(void *params)
                     }
                     else
                     {
-                        if (sensor_interrupt.pinNumber == BUTTON_INPUT_GPIO_TYPE_DIS)
+                        if (event.pinNumber == BUTTON_INPUT_GPIO_TYPE_DIS)
                         {
-                            gettimeofday(&dis_pressed, NULL);
+                            dis_pressed = event.captured_at;
                             dis_press_pending = true;
                             dis_long_press_sent = false;
                             dis_feedback_shown = false;
@@ -350,10 +427,9 @@ void Button_Input_Task(void *params)
             }
         }
 
-        timeval_t now;
-        gettimeofday(&now, NULL);
+        TickType_t now = xTaskGetTickCount();
 
-        if (gpio_get_level(BUTTON_INPUT_GPIO_TYPE_RESET) == 0 && (TIME_US(now) - TIME_US(reset_pressed) > 1000000) && countdown_sent == 0)
+        if (gpio_get_level(BUTTON_INPUT_GPIO_TYPE_RESET) == 0 && (TickType_t)(now - reset_pressed) > pdMS_TO_TICKS(1000) && countdown_sent == 0)
         {
             countdown_sent = 1;
             reset_ignore_until_release = true;
@@ -362,11 +438,11 @@ void Button_Input_Task(void *params)
             toSend.time = 60 * 7 * 1000;
             xQueueSend(sevenSegmentQueue, &toSend, 0);
             timepanel_send_parcours_timer(60 * 7 * 1000);
-            gettimeofday(&reset_pressed, NULL);
+            reset_pressed = now;
             ESP_LOGI(TAG, "Countdown started");
         }
 
-        if (gpio_get_level(BUTTON_INPUT_GPIO_TYPE_DIS) == 0 && dis_press_pending && !dis_long_press_sent && (TIME_US(now) - TIME_US(dis_pressed) > 1500000))
+        if (gpio_get_level(BUTTON_INPUT_GPIO_TYPE_DIS) == 0 && dis_press_pending && !dis_long_press_sent && (TickType_t)(now - dis_pressed) > pdMS_TO_TICKS(1500))
         {
             dis_long_press_sent = true;
             if (dis_feedback_shown)
