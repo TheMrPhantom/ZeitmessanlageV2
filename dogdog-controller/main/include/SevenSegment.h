@@ -16,6 +16,7 @@
 #include "soc/soc.h"
 #include "LoraNetwork.h"
 #include "OTA.h"
+#include "TimepanelProtocol.h"
 
 #define IS_THS_MODE (strcmp(pc_programm, "ths") == 0)
 #define IS_SIMPLE_AGILITY_MODE (strcmp(pc_programm, "simple-agility") == 0)
@@ -31,6 +32,7 @@ typedef struct SevenSegmentDisplay
     size_t bytes_received;
     size_t total_size;
     bool ota_ui_override;
+    TimepanelCompetitorPayload competitor;
 } SevenSegmentDisplay;
 
 typedef struct HistoryEntry
@@ -95,6 +97,7 @@ void reset_btn_event_cb(lv_event_t *e);
 #define SEVEN_SEGMENT_DIS_PREVIEW_REVERT 12
 #define SEVEN_SEGMENT_DIS_PREVIEW_CONFIRM 13
 #define SEVEN_SEGMENT_OTA_STATUS 14
+#define SEVEN_SEGMENT_COMPETITOR 15
 
 /* LCD size */
 #define LCD_H_RES (480)

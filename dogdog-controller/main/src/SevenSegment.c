@@ -55,11 +55,42 @@ static lv_obj_t *end_label = NULL;
 static lv_obj_t *sensor_left = NULL;
 static lv_obj_t *sensor_right = NULL;
 static lv_obj_t *vorlaeufig = NULL;
+static lv_obj_t *competitor_info = NULL;
+static lv_obj_t *competitor_name = NULL;
+static lv_obj_t *competitor_dog = NULL;
 
 /* Font and image declarations */
 LV_FONT_DECLARE(monospace);
 LV_IMG_DECLARE(fist);
 LV_IMG_DECLARE(hand);
+
+/* Small alpha masks avoid relying on unsupported person/dog font glyphs. */
+static const uint8_t person_icon_map[] = {
+    0x00, 0x00, 0x07, 0xe0, 0x0f, 0xf0, 0x0f, 0xf0,
+    0x0f, 0xf0, 0x0f, 0xf0, 0x07, 0xe0, 0x00, 0x00,
+    0x03, 0xc0, 0x0f, 0xf0, 0x1f, 0xf8, 0x3f, 0xfc,
+    0x3f, 0xfc, 0x3f, 0xfc, 0x1f, 0xf8, 0x00, 0x00,
+};
+static const uint8_t dog_icon_map[] = {
+    0x00, 0x00, 0x00, 0x20, 0x00, 0x60, 0x00, 0xf8,
+    0x00, 0xfe, 0x40, 0xfe, 0x60, 0xf0, 0x3f, 0xf0,
+    0x1f, 0xf0, 0x1f, 0xf0, 0x1f, 0xf0, 0x1f, 0xe0,
+    0x18, 0x60, 0x18, 0x60, 0x18, 0x60, 0x00, 0x00,
+};
+static const lv_img_dsc_t person_icon = {
+    .header.cf = LV_IMG_CF_ALPHA_1BIT,
+    .header.w = 16,
+    .header.h = 16,
+    .data_size = sizeof(person_icon_map),
+    .data = person_icon_map,
+};
+static const lv_img_dsc_t dog_icon = {
+    .header.cf = LV_IMG_CF_ALPHA_1BIT,
+    .header.w = 16,
+    .header.h = 16,
+    .data_size = sizeof(dog_icon_map),
+    .data = dog_icon_map,
+};
 
 HistoryEntry history[4];
 int history_index = 0;
@@ -213,6 +244,25 @@ static void show_timing_screen_now(void)
     lvgl_port_unlock();
 }
 
+static void display_competitor(const TimepanelCompetitorPayload *competitor)
+{
+    lvgl_port_lock(-1);
+    lv_label_set_text_fmt(competitor_name, "%s%s%s",
+                          competitor->first_name,
+                          competitor->first_name[0] && competitor->last_name[0] ? " " : "",
+                          competitor->last_name);
+    lv_label_set_text(competitor_dog, competitor->dog_name);
+    if (competitor->first_name[0] || competitor->last_name[0] || competitor->dog_name[0])
+    {
+        lv_obj_clear_flag(competitor_info, LV_OBJ_FLAG_HIDDEN);
+    }
+    else
+    {
+        lv_obj_add_flag(competitor_info, LV_OBJ_FLAG_HIDDEN);
+    }
+    lvgl_port_unlock();
+}
+
 static bool handle_countdown_aux_message(SevenSegmentDisplay *message,
                                          int *countdown_duration_ms,
                                          int *end_time_ms)
@@ -244,6 +294,9 @@ static bool handle_countdown_aux_message(SevenSegmentDisplay *message,
         return true;
     case SEVEN_SEGMENT_NETWORK_FAULT:
         displayFault(message->startFault, message->stopFault);
+        return true;
+    case SEVEN_SEGMENT_COMPETITOR:
+        display_competitor(&message->competitor);
         return true;
     default:
         return true;
@@ -303,6 +356,10 @@ void Seven_Segment_Task(void *params)
 
             case SEVEN_SEGMENT_COUNTDOWN:
                 handleCountdown(toDisplay);
+                break;
+
+            case SEVEN_SEGMENT_COMPETITOR:
+                display_competitor(&toDisplay.competitor);
                 break;
 
             case SEVEN_SEGMENT_SET_TIME:
@@ -794,6 +851,37 @@ void setup_timing_screen()
     // set to 0
     lv_label_set_text(faults, "0");
 
+    // Keep competitor details in the lower part of the central timing column.
+    competitor_info = lv_obj_create(timing_screen);
+    lv_obj_remove_style_all(competitor_info);
+    lv_obj_set_size(competitor_info, 230, 44);
+    lv_obj_align(competitor_info, LV_ALIGN_BOTTOM_MID, 0, -20);
+    lv_obj_clear_flag(competitor_info, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_text_font(competitor_info, &lv_font_montserrat_16, 0);
+    lv_obj_set_style_text_color(competitor_info, lv_color_hex(0x000000), 0);
+    lv_obj_set_style_text_align(competitor_info, LV_TEXT_ALIGN_LEFT, 0);
+    lv_obj_add_flag(competitor_info, LV_OBJ_FLAG_HIDDEN);
+
+    lv_obj_t *person_image = lv_img_create(competitor_info);
+    lv_img_set_src(person_image, &person_icon);
+    lv_obj_set_pos(person_image, 0, 2);
+
+    competitor_name = lv_label_create(competitor_info);
+    lv_label_set_text(competitor_name, "");
+    lv_label_set_long_mode(competitor_name, LV_LABEL_LONG_DOT);
+    lv_obj_set_size(competitor_name, 206, 20);
+    lv_obj_set_pos(competitor_name, 24, 0);
+
+    lv_obj_t *dog_image = lv_img_create(competitor_info);
+    lv_img_set_src(dog_image, &dog_icon);
+    lv_obj_set_pos(dog_image, 0, 26);
+
+    competitor_dog = lv_label_create(competitor_info);
+    lv_label_set_text(competitor_dog, "");
+    lv_label_set_long_mode(competitor_dog, LV_LABEL_LONG_DOT);
+    lv_obj_set_size(competitor_dog, 206, 20);
+    lv_obj_set_pos(competitor_dog, 24, 24);
+
     // add_reset_button();
 
     const int NUM_SENSORS_LEFT = 10, NUM_SENSORS_RIGHT = 10;
@@ -1121,6 +1209,10 @@ void handleCountdown(SevenSegmentDisplay toDisplay)
             else if (toDisplay.type == SEVEN_SEGMENT_NETWORK_FAULT)
             {
                 displayFault(toDisplay.startFault, toDisplay.stopFault);
+            }
+            else if (toDisplay.type == SEVEN_SEGMENT_COMPETITOR)
+            {
+                display_competitor(&toDisplay.competitor);
             }
         }
     }

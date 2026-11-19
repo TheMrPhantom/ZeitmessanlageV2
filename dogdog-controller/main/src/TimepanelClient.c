@@ -1,4 +1,5 @@
 #include "TimepanelClient.h"
+#include "SevenSegment.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -10,6 +11,9 @@
 #include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_wifi.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/semphr.h"
 #include "sdkconfig.h"
 
 static const char *TAG = "TimepanelClient";
@@ -27,9 +31,25 @@ static uint8_t s_timepanel_mac[6] = {
 };
 
 static TimepanelCompetitorPayload s_competitor = {0};
+static SemaphoreHandle_t s_competitor_mutex = NULL;
 static uint16_t s_faults = 0;
 static uint16_t s_refusals = 0;
 static volatile bool s_parcours_timer_active = false;
+
+extern QueueHandle_t sevenSegmentQueue;
+
+/* Called with s_competitor_mutex held, just like the corresponding radio command. */
+static void queue_competitor_display(void)
+{
+    SevenSegmentDisplay display = {
+        .type = SEVEN_SEGMENT_COMPETITOR,
+        .competitor = s_competitor,
+    };
+    if (xQueueSend(sevenSegmentQueue, &display, pdMS_TO_TICKS(500)) != pdTRUE)
+    {
+        ESP_LOGW(TAG, "Could not queue competitor for the timing screen");
+    }
+}
 
 static void copy_field(char *target, size_t target_len, const char *source)
 {
@@ -101,6 +121,12 @@ static void timepanel_send_message(uint8_t command,
 
 esp_err_t init_timepanel_client(void)
 {
+    if (s_competitor_mutex == NULL)
+    {
+        s_competitor_mutex = xSemaphoreCreateMutex();
+        ESP_ERROR_CHECK(s_competitor_mutex != NULL ? ESP_OK : ESP_ERR_NO_MEM);
+    }
+
 #ifndef CONFIG_TIMEPANEL_ENABLED
     ESP_LOGI(TAG, "Timepanel wireless client disabled");
     return ESP_OK;
@@ -169,6 +195,7 @@ void timepanel_set_competitor(const char *first_name,
                               const char *last_name,
                               const char *dog_name)
 {
+    xSemaphoreTake(s_competitor_mutex, portMAX_DELAY);
     copy_field(s_competitor.first_name,
                sizeof(s_competitor.first_name),
                first_name);
@@ -178,24 +205,33 @@ void timepanel_set_competitor(const char *first_name,
     copy_field(s_competitor.dog_name,
                sizeof(s_competitor.dog_name),
                dog_name);
-    timepanel_send_competitor();
+    // The timepanel keeps this competitor pending until a start or reset.
+    timepanel_send_message(TIMEPANEL_COMMAND_COMPETITOR,
+                           (const uint8_t *)&s_competitor,
+                           sizeof(s_competitor));
+    xSemaphoreGive(s_competitor_mutex);
 }
 
 void timepanel_send_competitor(void)
 {
+    xSemaphoreTake(s_competitor_mutex, portMAX_DELAY);
     timepanel_send_message(TIMEPANEL_COMMAND_COMPETITOR,
                            (const uint8_t *)&s_competitor,
                            sizeof(s_competitor));
+    xSemaphoreGive(s_competitor_mutex);
 }
 
 void timepanel_send_reset(void)
 {
+    xSemaphoreTake(s_competitor_mutex, portMAX_DELAY);
     s_faults = 0;
     s_refusals = 0;
     timepanel_set_parcours_timer_active(false);
     timepanel_send_message(TIMEPANEL_COMMAND_RESET,
                            (const uint8_t *)&s_competitor,
                            sizeof(s_competitor));
+    queue_competitor_display();
+    xSemaphoreGive(s_competitor_mutex);
 }
 
 void timepanel_send_start(int64_t offset_ms)
@@ -211,6 +247,7 @@ void timepanel_send_start(int64_t offset_ms)
         offset_ms = 0;
     }
 
+    xSemaphoreTake(s_competitor_mutex, portMAX_DELAY);
     s_faults = 0;
     s_refusals = 0;
 
@@ -220,6 +257,8 @@ void timepanel_send_start(int64_t offset_ms)
     timepanel_send_message(TIMEPANEL_COMMAND_START,
                            (const uint8_t *)&payload,
                            sizeof(payload));
+    queue_competitor_display();
+    xSemaphoreGive(s_competitor_mutex);
 }
 
 void timepanel_send_stop(int64_t elapsed_ms)
