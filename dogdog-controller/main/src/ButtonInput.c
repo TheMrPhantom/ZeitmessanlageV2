@@ -47,6 +47,7 @@ typedef struct
 {
     bool pressed;
     TickType_t last_press;
+    TickType_t last_release;
     TickType_t observed_at;
 } button_input_state_t;
 
@@ -77,11 +78,23 @@ static bool accept_button_transition(button_input_state_t *state, const sensor_i
 
     if (pressed)
     {
+        // After a long hold, the press cooldown has already expired. Debounce
+        // reset against its release too, so release bounce cannot cancel the
+        // parcours timer that the same hold just started.
+        if (event->pinNumber == BUTTON_INPUT_GPIO_TYPE_RESET &&
+            (TickType_t)(event->captured_at - state->last_release) < pdMS_TO_TICKS(300))
+        {
+            return false;
+        }
         if ((TickType_t)(event->captured_at - state->last_press) < pdMS_TO_TICKS(300))
         {
             return false;
         }
         state->last_press = event->captured_at;
+    }
+    else
+    {
+        state->last_release = event->captured_at;
     }
     return true;
 }
@@ -220,6 +233,7 @@ void Button_Input_Task(void *params)
         TickType_t now = xTaskGetTickCount();
         button_state[i].pressed = gpio_get_level(sensorButtonPins[i]) == 0;
         button_state[i].last_press = now - pdMS_TO_TICKS(300);
+        button_state[i].last_release = now - pdMS_TO_TICKS(300);
         button_state[i].observed_at = now;
     }
 
@@ -260,10 +274,14 @@ void Button_Input_Task(void *params)
 
             ESP_LOGI(TAG, "Button transition on Pin: %i with state %i", event.pinNumber, event.edge);
 
-            if (event.edge == GPIO_INTR_POSEDGE && event.pinNumber == BUTTON_INPUT_GPIO_TYPE_RESET && reset_ignore_until_release)
+            if (event.edge == GPIO_INTR_POSEDGE && event.pinNumber == BUTTON_INPUT_GPIO_TYPE_RESET)
             {
-                reset_ignore_until_release = false;
-                ESP_LOGI(TAG, "Reset release after countdown");
+                countdown_sent = 1;
+                if (reset_ignore_until_release)
+                {
+                    reset_ignore_until_release = false;
+                    ESP_LOGI(TAG, "Reset release after countdown");
+                }
             }
             else if (event.edge == GPIO_INTR_POSEDGE && event.pinNumber == BUTTON_INPUT_GPIO_TYPE_DIS && dis_press_pending)
             {
